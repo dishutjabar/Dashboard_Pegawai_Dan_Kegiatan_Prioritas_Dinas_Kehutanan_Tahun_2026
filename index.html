@@ -50,10 +50,14 @@
     </div>
   </div>
   <div class="topbar-center">
-    <button class="cmd-btn" onclick="openCmdModal()">
-      <span>&#128269; <span class="d-none-mobile">Cari atau lompat ke...</span></span>
-      <kbd>Ctrl K</kbd>
-    </button>
+    <div class="global-search-container">
+      <div class="global-search-box">
+        <span class="search-icon">&#128269;</span>
+        <input type="text" id="global-search-input" placeholder="Cari lokasi (Gedung Sate), koordinat, atau nama data..." autocomplete="off">
+        <button id="global-search-clear" class="search-clear">&times;</button>
+      </div>
+      <div class="global-search-results" id="global-search-results"></div>
+    </div>
   </div>
   <div class="topbar-right">
     <div id="clock">00:00:00</div>
@@ -181,13 +185,6 @@
 </aside>
 
 <!-- Modals -->
-<!-- 1. Command Palette Modal -->
-<div id="cmd-modal" class="modal-overlay" onclick="if(event.target==this) closeCmdModal()">
-  <div class="modal-content">
-    <input type="text" id="cmd-input" placeholder="Cari nama, lokasi, unit kerja (Ketik lalu Enter)..." autocomplete="off">
-    <div class="cmd-results" id="cmd-results"></div>
-  </div>
-</div>
 
 <!-- 2. Data Table Modal -->
 <div id="table-modal" class="modal-overlay" onclick="if(event.target==this) closeTableModal()">
