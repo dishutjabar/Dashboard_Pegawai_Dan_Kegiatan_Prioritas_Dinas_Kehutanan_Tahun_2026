@@ -537,7 +537,7 @@ function doRender() {
             var ket = r['Keterangan'] || '-';
             var desa = r['Desa/Kelurahan'] || r['Desa/ Kelurahan'] || r['Desa'] || r['DESA'] || '-';
             hoverHTML = '<div style="text-align:left; line-height:1.4;">' +
-                        '<b>Keterangan:</b> ' + ket + '<br>' +
+                        ket + '<br>' +
                         '<b>Desa/Kelurahan:</b> ' + desa + '</div>';
           } else if (type === 'per') {
             var kec = r['Kecamatan'] || '-';
