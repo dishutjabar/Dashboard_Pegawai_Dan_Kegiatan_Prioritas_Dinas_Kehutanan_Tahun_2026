@@ -532,11 +532,38 @@ function doRender() {
           openDrawer(type, r);
         });
         if (name && name !== 'Data tidak tersedia') {
-          mk.bindTooltip(name, { className: 'marker-tooltip', direction: 'top', offset: [0, -8], opacity: 0.95 });
+          var hoverHTML = name;
+          if (type === 'jum') {
+            var ket = r['Keterangan'] || '-';
+            var desa = r['Desa/Kelurahan'] || r['Desa/ Kelurahan'] || r['Desa'] || r['DESA'] || '-';
+            hoverHTML = '<div style="text-align:left; line-height:1.4;">' +
+                        '<b>Keterangan:</b> ' + ket + '<br>' +
+                        '<b>Desa/Kelurahan:</b> ' + desa + '</div>';
+          } else if (type === 'per') {
+            var kec = r['Kecamatan'] || '-';
+            var desa = r['Desa/ Kelurahan'] || r['Desa/Kelurahan'] || r['Desa'] || '-';
+            var blok = r['Blok'] || '-';
+            var namaPersonil = r['Nama Personil Jaga leuweung'] || r['Nama Personil Jaga Leuweung'] || r['Nama'] || '-';
+            var statusPer = r['Status Persemaian'] || '-';
+            var tahapan = r['Tahapan Kegiatan'] || r['Tahapan'] || '-';
+            hoverHTML = '<div style="text-align:left; line-height:1.4;">' +
+                        '<b>Kecamatan:</b> ' + kec + '<br>' +
+                        '<b>Desa/Kelurahan:</b> ' + desa + '<br>' +
+                        '<b>Blok:</b> ' + blok + '<br>' +
+                        '<b>Nama Personil Jaga Leuweung:</b> ' + namaPersonil + '<br>' +
+                        '<b>Status Persemaian:</b> ' + statusPer + '<br>' +
+                        '<b>Tahapan Kegiatan:</b> ' + tahapan + '</div>';
+          }
+          mk.bindTooltip(hoverHTML, { className: 'marker-tooltip', direction: 'top', offset: [0, -8], opacity: 0.95 });
         }
         mk.addTo(LAYERS[type]);
         
-        if (type === 'peg') { pegJumPoints.push(turf.point([r._lng, r._lat])); pegNames.push(name); }
+        if (type === 'peg') { 
+          var jabat = String(r['Nama Jabatan'] || r['Jabatan'] || r['JABATAN'] || '').trim();
+          var dispName = name + (jabat ? ' (' + jabat + ')' : '');
+          pegJumPoints.push(turf.point([r._lng, r._lat])); 
+          pegNames.push(dispName); 
+        }
         if (type === 'jum') { pegJumPoints.push(turf.point([r._lng, r._lat])); jumNames.push(name); }
       } catch(e) {}
     });
@@ -844,11 +871,14 @@ function showAnalysisModal(inPoly) {
     var name = safe(r['Nama Petugas'] || r['Nama Persemaian'] || r['Nama'] || r['Lokasi'] || '');
     var unit = safe(r['Unit Kerja'] || r['UNIT KERJA']);
     var kab = safe(r._kab);
-    html += '<tr><td>'+POP_LABEL[item.t]+'</td><td>'+name+'</td><td>'+unit+'</td><td>'+kab+'</td></tr>';
+    var jabat = '-';
+    if (item.t === 'peg') jabat = safe(r['Nama Jabatan'] || r['Jabatan'] || r['JABATAN']);
+    if (item.t === 'pjl') jabat = 'Pendamping PJL';
+    html += '<tr><td>'+POP_LABEL[item.t]+'</td><td>'+name+'</td><td>'+jabat+'</td><td>'+unit+'</td><td>'+kab+'</td></tr>';
   }
   
   if (allFound.length === 0) {
-    html = '<tr><td colspan="4" style="text-align:center;padding:20px;">Tidak ada data dalam area ini</td></tr>';
+    html = '<tr><td colspan="5" style="text-align:center;padding:20px;">Tidak ada data dalam area ini</td></tr>';
   }
   
   tbody.innerHTML = html;
