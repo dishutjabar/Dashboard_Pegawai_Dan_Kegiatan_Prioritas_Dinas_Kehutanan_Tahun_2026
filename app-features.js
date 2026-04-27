@@ -987,3 +987,7 @@ function clearDrawnPolygons() {
   }
   closeAnalysisModal();
 }
+function openTableModal() {
+  document.getElementById('table-modal').classList.add('open');
+  renderTable();
+}
