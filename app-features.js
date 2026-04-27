@@ -105,13 +105,11 @@ function importLocalFile() {
     showToast('Format file tidak didukung! Gunakan .csv, .kml, atau .kmz');
   }
 }
-function openTableModal() { document.getElementById('table-modal').classList.add('open'); renderTable(); }
 function closeTableModal() { document.getElementById('table-modal').classList.remove('open'); }
 function openSourceModal() { document.getElementById('source-modal').classList.add('open'); renderSourceList(); }
 function closeSourceModal() { document.getElementById('source-modal').classList.remove('open'); }
-function openCmdModal() { document.getElementById('cmd-modal').classList.add('open'); document.getElementById('cmd-input').focus(); }
-function closeCmdModal() { document.getElementById('cmd-modal').classList.remove('open'); }
-
+function closeGlobalSearch() { document.getElementById('global-search-results').classList.remove('open'); }
+function focusGlobalSearch() { var el = document.getElementById('global-search-input'); if(el) el.focus(); }
 function coordText(y, x) { return y && x ? y + ', ' + x : 'Data tidak tersedia'; }
 function mapsLink(lat, lng) { return '<a href="https://www.google.com/maps?q='+lat+','+lng+'" target="_blank" class="btn-icon" style="justify-content:center; padding:8px;">Buka di Google Maps</a>'; }
 
@@ -275,18 +273,87 @@ function highlightMarker(lat, lng, type) {
 
 /* Keyboard Shortcuts */
 document.addEventListener('keydown', function(e) {
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); openCmdModal(); }
-  if (e.key === 'Escape') { closeCmdModal(); closeTableModal(); closeSourceModal(); closeExportModal(); closeDrawer(); }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); focusGlobalSearch(); }
+  if (e.key === 'Escape') { closeGlobalSearch(); closeTableModal(); closeSourceModal(); closeExportModal(); closeDrawer(); }
 });
 
-/* Command Palette Search */
-document.getElementById('cmd-input').addEventListener('input', function(e) {
-  var q = e.target.value.toLowerCase().trim();
-  var results = document.getElementById('cmd-results');
-  results.innerHTML = '';
-  if (!q) return;
+/* Global Search (Local + Nominatim) */
+var searchTimeout;
+document.getElementById('global-search-input').addEventListener('input', function(e) {
+  var q = e.target.value.trim();
+  var results = document.getElementById('global-search-results');
+  var clearBtn = document.getElementById('global-search-clear');
+  
+  if (q.length > 0) clearBtn.classList.add('visible');
+  else clearBtn.classList.remove('visible');
+  
+  if (!q) { results.classList.remove('open'); return; }
+  
+  clearTimeout(searchTimeout);
+  searchTimeout = setTimeout(function() { performGlobalSearch(q, results); }, 400);
+});
 
-  var count = 0;
+document.getElementById('global-search-input').addEventListener('focus', function(e) {
+  if (e.target.value.trim().length > 0) document.getElementById('global-search-results').classList.add('open');
+});
+
+document.addEventListener('click', function(e) {
+  var container = document.querySelector('.global-search-container');
+  if (container && !container.contains(e.target)) closeGlobalSearch();
+});
+
+document.getElementById('global-search-clear').addEventListener('click', function() {
+  var input = document.getElementById('global-search-input');
+  input.value = '';
+  this.classList.remove('visible');
+  closeGlobalSearch();
+  input.focus();
+});
+
+function parseCoordinate(q) {
+  var parts = q.split(/[,;\s]+/);
+  if (parts.length >= 2) {
+    var lat = parseFloat(parts[0]); var lng = parseFloat(parts[1]);
+    if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) return [lat, lng];
+  }
+  return null;
+}
+
+var TEMP_SEARCH_MARKER = null;
+function flyToLocation(lat, lng, name) {
+  closeGlobalSearch();
+  mapObj.setView([lat, lng], 16);
+  if (TEMP_SEARCH_MARKER) mapObj.removeLayer(TEMP_SEARCH_MARKER);
+  TEMP_SEARCH_MARKER = L.marker([lat, lng]).addTo(mapObj);
+  TEMP_SEARCH_MARKER.bindPopup('<div style="font-family:Inter;font-size:12px;"><b>Lokasi Pencarian</b><br>' + name + '</div>').openPopup();
+}
+
+function flyToLocalItem(t, idx) {
+  var allData = [].concat(
+    DATA.pjl.map(r=>({t:'pjl',r:r})), DATA.persemaian.map(r=>({t:'per',r:r})),
+    DATA.pegawai.map(r=>({t:'peg',r:r})), DATA.jumat.map(r=>({t:'jum',r:r}))
+  );
+  var item = allData[idx];
+  if (item && item.r) {
+    closeGlobalSearch();
+    mapObj.setView([item.r._lat, item.r._lng], 16);
+    highlightMarker(item.r._lat, item.r._lng, item.t);
+    openDrawer(item.t, item.r);
+  }
+}
+
+function performGlobalSearch(q, resultsContainer) {
+  var html = ''; var count = 0;
+  var coord = parseCoordinate(q);
+  if (coord) {
+    count++;
+    html += '<div class="search-res-item" onclick="flyToLocation('+coord[0]+', '+coord[1]+', \'Koordinat: '+coord[0]+', '+coord[1]+'\')">' +
+            '<div class="search-res-title">Lompat ke Koordinat</div>' +
+            '<div class="search-res-sub">'+coord[0]+', '+coord[1]+'</div>' +
+            '<div class="search-res-source" style="background:#546e7a">Koordinat</div></div>';
+  }
+  
+  var qLower = q.toLowerCase();
   var allData = [].concat(
     DATA.pjl.map(r=>({t:'pjl',r:r})), DATA.persemaian.map(r=>({t:'per',r:r})),
     DATA.pegawai.map(r=>({t:'peg',r:r})), DATA.jumat.map(r=>({t:'jum',r:r}))
@@ -299,21 +366,45 @@ document.getElementById('cmd-input').addEventListener('input', function(e) {
     var unit = safe(r['Unit Kerja'] || r['UNIT KERJA']);
     var textSearch = (name + ' ' + unit + ' ' + (r._kab||'')).toLowerCase();
     
-    if (textSearch.indexOf(q) > -1) {
+    if (textSearch.indexOf(qLower) > -1) {
       count++;
-      var div = document.createElement('div'); div.className = 'cmd-res-item';
-      div.innerHTML = '<div class="cmd-res-title">'+name+'</div><div class="cmd-res-sub">'+unit+'</div>';
-      div.onclick = function() {
-        closeCmdModal();
-        mapObj.setView([r._lat, r._lng], 16);
-        highlightMarker(r._lat, r._lng, item.t);
-        openDrawer(item.t, r);
-      };
-      results.appendChild(div);
+      html += '<div class="search-res-item" onclick="flyToLocalItem(\''+item.t+'\', '+i+')">' +
+              '<div class="search-res-title">'+name+'</div>' +
+              '<div class="search-res-sub">'+unit+'</div>' +
+              '<div class="search-res-source" style="background:'+POP_COLOR[item.t]+'">'+POP_LABEL[item.t]+'</div></div>';
+      if (count >= 5) break; 
     }
   }
-  if(count === 0) results.innerHTML = '<div style="padding:15px;color:#888;">Tidak ada hasil ditemukan.</div>';
-});
+  
+  resultsContainer.innerHTML = html;
+  resultsContainer.classList.add('open');
+  
+  if (count === 0) resultsContainer.innerHTML = '<div id="nom-loader" style="padding:15px;color:#888;text-align:center;font-size:12px;">Mencari lokasi di peta...</div>';
+  else resultsContainer.innerHTML += '<div id="nom-loader" style="padding:10px;text-align:center;font-size:11px;color:#aaa;border-top:1px solid #eee;">Mencari lokasi luar...</div>';
+  
+  fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(q) + '&countrycodes=id&limit=5')
+    .then(res => res.json())
+    .then(data => {
+      var loader = document.getElementById('nom-loader'); if (loader) loader.remove();
+      if (data && data.length > 0) {
+        var nomHtml = '';
+        data.forEach(function(place) {
+          nomHtml += '<div class="search-res-item" onclick="flyToLocation('+place.lat+', '+place.lon+', \''+place.display_name.replace(/'/g, "\\'")+'\')">' +
+                     '<div class="search-res-title">'+place.name+'</div>' +
+                     '<div class="search-res-sub">'+place.display_name+'</div>' +
+                     '<div class="search-res-source nominatim">Peta Publik</div></div>';
+        });
+        if (count === 0) resultsContainer.innerHTML = nomHtml;
+        else resultsContainer.innerHTML += nomHtml;
+      } else if (count === 0) {
+        resultsContainer.innerHTML = '<div style="padding:15px;color:#888;text-align:center;font-size:12px;">Tidak ada hasil ditemukan.</div>';
+      }
+    })
+    .catch(e => {
+      var loader = document.getElementById('nom-loader'); if (loader) loader.remove();
+      if (count === 0) resultsContainer.innerHTML = '<div style="padding:15px;color:#888;text-align:center;font-size:12px;">Tidak ada hasil ditemukan.</div>';
+    });
+}
 
 /* Filter */
 function applyFilter() {
