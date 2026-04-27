@@ -113,6 +113,7 @@ function getKab(lat, lng) {
   } catch (e) {}
   return '';
 }
+
 fetch('Jawa Barattt.geojson')
   .then(res => res.json())
   .then(data => {
