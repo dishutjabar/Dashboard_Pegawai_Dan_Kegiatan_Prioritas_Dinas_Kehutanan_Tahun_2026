@@ -34,7 +34,12 @@ try {
 /* 2. Icons */
 var SVG_PJL = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="20" viewBox="0 0 20 24"><path d="M10,0 L20,4 L20,12 C20,18 10,24 10,24 C10,24 0,18 0,12 L0,4 Z" fill="#43a047" stroke="#fff" stroke-width="1.2"/><polygon points="10,6 15,14 11,14 11,18 9,18 9,14 5,14" fill="#fff"/></svg>';
 var SVG_PER = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="20" viewBox="0 0 20 24"><path d="M10,24 L10,12 M10,16 C10,16 6,10 2,12 C4,16 8,16 10,16 M10,14 C10,14 15,8 18,10 C16,14 12,14 10,14" fill="#1e88e5" stroke="#fff" stroke-width="1"/><path d="M10,24 L10,12 M10,16 C10,16 6,10 2,12 C4,16 8,16 10,16 M10,14 C10,14 15,8 18,10 C16,14 12,14 10,14" fill="#1e88e5" stroke="#1565c0" stroke-width="1.5" stroke-linejoin="round"/></svg>';
-var SVG_PEG = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="20" viewBox="0 0 20 24"><circle cx="10" cy="6" r="4" fill="#fb8c00" stroke="#fff" stroke-width="1.2"/><path d="M2,24 C2,16 18,16 18,24" fill="#fb8c00" stroke="#fff" stroke-width="1.2" stroke-linejoin="round"/></svg>';
+var SVG_PEG = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="22" viewBox="0 0 24 28">' +
+              '  <circle cx="12" cy="8.5" r="4.8" fill="#fb8c00" stroke="#fff" stroke-width="1.4"/>' +
+              '  <path d="M6.5 14.5 C6.5 19 4.8 23.5 4.8 24.5 L19.2 24.5 C19.2 23.5 17.5 19 17.5 14.5 C17.5 12 15.2 10.5 12 10.5 C8.8 10.5 6.5 12 6.5 14.5 Z" ' +
+              '        fill="#fb8c00" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/>' +
+              '  <path d="M9 14 L12 16 L15 14" fill="none" stroke="#fff" stroke-width="1" stroke-linejoin="round"/>' +
+              '</svg>';
 var SVG_JUM_TEMPLATE = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="20" viewBox="0 0 20 24"><polygon points="10,2 18,14 14,14 16,20 4,20 6,14 2,14" fill="{COLOR}" stroke="#fff" stroke-width="1.2" stroke-linejoin="round"/><rect x="8" y="20" width="4" height="4" rx="1" fill="#5d4037"/></svg>';
 
 function makeIcon(svg) {
