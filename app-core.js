@@ -17,7 +17,7 @@ var POP_LABEL = {
   pjl: 'Petugas Jaga Leuweung',
   per: 'Lokasi Persemaian Jaga Leuweung',
   peg: 'Pegawai Dinas Kehutanan',
-  jum: 'Lokasi Unggulan Jum\'at Menanam'
+  jum: 'Lokasi Permanen Jum\'at Menanam'
 };
 
 /* 1. Map Init */
@@ -54,7 +54,7 @@ var ICONS = {
   peg: makeIcon(SVG_PEG), 
   jum_unggulan: makeJumIcon('#8e24aa'), 
   jum_biasa: makeJumIcon('#1e88e5'), 
-  jum_permanen: makeJumIcon('#8d6e63') 
+  jum_permanen: makeJumIcon('#8e24aa') 
 };
 
 /* 3. Helpers */
