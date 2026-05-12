@@ -707,7 +707,7 @@ function updateCharts(cnt) {
   cnt = cnt || { pjl: 0, per: 0, peg: 0, jum: 0 };
   Chart.defaults.color = '#7f8c8d'; Chart.defaults.font.family = 'Inter';
   
-  mkChart('c-layer', { type: 'bar', data: { labels: ['Petugas Jaga Leuweung','Lokasi Persemaian Jaga Leuweung','Pegawai Dinas Kehutanan','Lokasi Unggulan Jum\'at Menanam'], datasets: [{ data: [cnt.pjl, cnt.per, cnt.peg, cnt.jum], backgroundColor: ['#43a047','#1e88e5','#fb8c00','#8e24aa'], borderRadius: 4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: {display:false}, ticks: { font: { size: 9 }, maxRotation: 45, minRotation: 45 } }, y: { beginAtZero: true, grid: {color:'rgba(0,0,0,0.05)'}, ticks: { font: { size: 10 } } } } } });
+  mkChart('c-layer', { type: 'bar', data: { labels: ['Petugas Jaga Leuweung','Lokasi Persemaian Jaga Leuweung','Pegawai Dinas Kehutanan','Lokasi Permanen Jum\'at Menanam'], datasets: [{ data: [cnt.pjl, cnt.per, cnt.peg, cnt.jum], backgroundColor: ['#43a047','#1e88e5','#fb8c00','#8e24aa'], borderRadius: 4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: {display:false}, ticks: { font: { size: 9 }, maxRotation: 45, minRotation: 45 } }, y: { beginAtZero: true, grid: {color:'rgba(0,0,0,0.05)'}, ticks: { font: { size: 10 } } } } } });
 
   var sc = {};
   DATA.persemaian.forEach(function(r) { if (!r || !passFilter(r, 'persemaian')) return; var s = String(r['Status Persemaian'] || 'Tidak Diketahui').trim() || 'Tidak Diketahui'; sc[s] = (sc[s] || 0) + 1; });
@@ -804,7 +804,7 @@ function exportCSV(type) {
   if (type === 'pjl') { dataToExport = DATA.pjl; filename = 'Petugas_Jaga_Leuweung.csv'; lbl = 'Petugas Jaga Leuweung'; }
   else if (type === 'per') { dataToExport = DATA.persemaian; filename = 'Lokasi_Persemaian_Jaga_Leuweung.csv'; lbl = 'Lokasi Persemaian Jaga Leuweung'; }
   else if (type === 'peg') { dataToExport = DATA.pegawai; filename = 'Pegawai_Dinas_Kehutanan.csv'; lbl = 'Pegawai Dinas Kehutanan'; }
-  else if (type === 'jum') { dataToExport = DATA.jumat; filename = 'Lokasi_Unggulan_Jumat_Menanam.csv'; lbl = 'Lokasi Unggulan Jum\'at Menanam'; }
+  else if (type === 'jum') { dataToExport = DATA.jumat; filename = 'Lokasi_Unggulan_Jumat_Menanam.csv'; lbl = 'Lokasi Permanen Jum\'at Menanam'; }
   else return;
 
   var rows = [['Kategori','Nama','Unit Kerja','Kab/Kota','Kecamatan','Desa','Lat','Lng']];
@@ -829,7 +829,7 @@ function exportAllFiltered() {
     { k: 'pjl', label: 'Petugas Jaga Leuweung', data: DATA.pjl, filterType: 'pjl' },
     { k: 'per', label: 'Persemaian Jaga Leuweung', data: DATA.persemaian, filterType: 'persemaian' },
     { k: 'peg', label: 'Pegawai Dinas Kehutanan', data: DATA.pegawai, filterType: 'pegawai' },
-    { k: 'jum', label: 'Lokasi Unggulan Jumat Menanam', data: DATA.jumat, filterType: 'jumat' }
+    { k: 'jum', label: 'Lokasi Permanen Jumat Menanam', data: DATA.jumat, filterType: 'jumat' }
   ];
   
   types.forEach(function(t) {
