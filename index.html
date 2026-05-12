@@ -119,7 +119,7 @@
       <div class="stat-icon">&#128100;</div>
     </div>
     <div class="stat-card">
-      <div class="stat-info"><div class="stat-lbl" style="font-size:10px;">Lokasi Unggulan Jum'at Menanam</div><div class="stat-val cp" id="cnt-jum">0</div></div>
+      <div class="stat-info"><div class="stat-lbl" style="font-size:10px;">Lokasi Permanen Jum'at Menanam</div><div class="stat-val cp" id="cnt-jum">0</div></div>
       <div class="stat-icon">&#127793;</div>
     </div>
     
@@ -141,24 +141,42 @@
         <span class="leg-text" style="font-weight:bold;">Lokasi Jum'at Menanam</span>
       </div>
       <div style="display:flex; flex-direction:column; gap:8px; margin-top: 8px; margin-left: 6px;">
-        <div style="display:flex; align-items:center; gap:10px;">
+       <!-- <div style="display:flex; align-items:center; gap:10px;">
           <svg width="16" height="20" viewBox="0 0 20 24"><polygon points="10,2 18,14 14,14 16,20 4,20 6,14 2,14" fill="#8e24aa" stroke="#fff" stroke-width="1.2" stroke-linejoin="round"/><rect x="8" y="20" width="4" height="4" rx="1" fill="#5d4037"/></svg>
           <span style="font-size:11px;">Lokasi Juna Unggulan</span>
         </div>
         <div style="display:flex; align-items:center; gap:10px;">
           <svg width="16" height="20" viewBox="0 0 20 24"><polygon points="10,2 18,14 14,14 16,20 4,20 6,14 2,14" fill="#1e88e5" stroke="#fff" stroke-width="1.2" stroke-linejoin="round"/><rect x="8" y="20" width="4" height="4" rx="1" fill="#5d4037"/></svg>
           <span style="font-size:11px;">Lokasi Juna Biasa</span>
-        </div>
+        </div>-->
         <div style="display:flex; align-items:center; gap:10px;">
           <svg width="16" height="20" viewBox="0 0 20 24"><polygon points="10,2 18,14 14,14 16,20 4,20 6,14 2,14" fill="#8d6e63" stroke="#fff" stroke-width="1.2" stroke-linejoin="round"/><rect x="8" y="20" width="4" height="4" rx="1" fill="#5d4037"/></svg>
           <span style="font-size:11px;">Lokasi Juna Permanen</span>
         </div>
       </div>
     </div>
-    <div class="leg-item" id="leg-peg" onclick="toggleLayer('peg')">
-      <svg class="leg-icon-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 24"><circle cx="10" cy="6" r="4" fill="#fb8c00" stroke="#fff" stroke-width="1.2"/><path d="M2,24 C2,16 18,16 18,24" fill="#fb8c00" stroke="#fff" stroke-width="1.2" stroke-linejoin="round"/></svg>
-      <span class="leg-text">Pegawai Dinas Kehutanan</span>
-    </div>
+     <div class="leg-item" id="leg-peg" onclick="toggleLayer('peg')">
+  <svg class="leg-icon-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 28" width="24" height="28">
+    <!-- Kepala -->
+    <circle cx="12" cy="8" r="5" fill="#fb8c00" stroke="#fff" stroke-width="1.5"/>
+    
+    <!-- Badan + Pakaian (lebih menyatu) -->
+    <path d="M7 13 
+             Q7 18 5 23 
+             L19 23 
+             Q18 18 17 13 
+             Q17 11 12 10 
+             Q8 11 7 13 Z" 
+          fill="#fb8c00" 
+          stroke="#fff" 
+          stroke-width="1.5" 
+          stroke-linejoin="round"/>
+    
+    <!-- Detail kerah / baju (opsional, biar lebih profesional) -->
+    <path d="M9 13 L12 15 L15 13" fill="none" stroke="#fff" stroke-width="1" stroke-linejoin="round"/>
+  </svg>
+  <span class="leg-text">Pegawai Dinas Kehutanan</span>
+</div>
     <div class="leg-item" id="leg-autopoly" onclick="toggleAutoPoly()">
       <svg class="leg-icon-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><polygon points="12,2 22,12 12,22 2,12" fill="rgba(0,172,193,0.2)" stroke="#00acc1" stroke-width="2" stroke-dasharray="4,4"/></svg>
       <span class="leg-text">Poligon Auto (Area Filter)</span>
@@ -200,7 +218,7 @@
           <option value="pjl">Petugas Jaga Leuweung</option>
           <option value="persemaian">Lokasi Persemaian Jaga Leuweung</option>
           <option value="pegawai">Pegawai Dinas Kehutanan</option>
-          <option value="jumat">Lokasi Unggulan Jum'at Menanam</option>
+          <option value="jumat">Lokasi Permanen Jum'at Menanam</option>
         </select>
         <input type="text" id="table-search" placeholder="Cari dalam tabel..." onkeyup="filterTable()">
       </div>
@@ -229,7 +247,7 @@
       <div class="add-source-form">
         <select id="new-source-type">
           <option value="pjl">Petugas Jaga Leuweung</option>
-          <option value="jum">Lokasi Unggulan Jum'at Menanam</option>
+          <option value="jum">Lokasi Permanen Jum'at Menanam</option>
           <option value="peg">Pegawai Dinas Kehutanan</option>
           <option value="per">Lokasi Persemaian Jaga Leuweung</option>
         </select>
