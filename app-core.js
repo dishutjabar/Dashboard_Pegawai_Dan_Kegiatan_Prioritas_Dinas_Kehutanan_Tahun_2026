@@ -90,6 +90,56 @@ function mapsLink(lat, lng) {
   return '<a class="pop-link" href="https://www.google.com/maps?q=' + lat + ',' + lng + '" target="_blank">&#128205; Buka Google Maps</a>';
 }
 
+/**
+ * Normalizes any Google Drive or other image URL into a directly embeddable format.
+ * Handles: /file/d/ID/view, /uc?id=..., /open?id=..., thumbnail links.
+ */
+function normalizeImageUrl(url) {
+  if (!url) return '';
+  url = String(url).trim();
+
+  // Normalize Google Drive file URLs to a direct embeddable thumbnail URL.
+  var match = null;
+  match = url.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
+  if (match) return 'https://drive.google.com/thumbnail?id=' + match[1] + '&sz=w1200';
+  match = url.match(/drive\.google\.com\/uc[^?]*\?.*?id=([a-zA-Z0-9_-]+)/);
+  if (match) return 'https://drive.google.com/thumbnail?id=' + match[1] + '&sz=w1200';
+  match = url.match(/drive\.google\.com\/open\?id=([a-zA-Z0-9_-]+)/);
+  if (match) return 'https://drive.google.com/thumbnail?id=' + match[1] + '&sz=w1200';
+  match = url.match(/drive\.google\.com\/thumbnail\?id=([a-zA-Z0-9_-]+)/);
+  if (match) return 'https://drive.google.com/thumbnail?id=' + match[1] + '&sz=w1200';
+
+  return url;
+}
+
+/**
+ * Fallback handler for Drive image URLs that fail to load.
+ * Tries the alternate Drive embed format once before giving up.
+ */
+function handleDriveImageError(img) {
+  if (!img || img.dataset.driveFallback === '1') return;
+  var src = String(img.src || '');
+  var driveId = null;
+  var m = src.match(/drive\.google\.com\/(?:uc\?export=view|thumbnail\?id=)(?:.*?id=)?([a-zA-Z0-9_-]+)/);
+  if (m) driveId = m[1];
+  if (!driveId) {
+    m = src.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
+    if (m) driveId = m[1];
+  }
+  if (!driveId) {
+    m = src.match(/drive\.google\.com\/open\?id=([a-zA-Z0-9_-]+)/);
+    if (m) driveId = m[1];
+  }
+  if (!driveId) return;
+
+  img.dataset.driveFallback = '1';
+  if (src.indexOf('thumbnail?id=') !== -1) {
+    img.src = 'https://drive.google.com/uc?export=view&id=' + driveId;
+  } else {
+    img.src = 'https://drive.google.com/thumbnail?id=' + driveId + '&sz=w1200';
+  }
+}
+
 function getCoord(r) {
   if (!r || typeof r !== 'object') return null;
   var LK = ['latitude','Latitude','lat','Lat','Titik Koordinat (Y)','Titik Koordinat Penanaman (Y)','Titik Koordinat Persemaian (Y)','Koordinat Y','LATITUDE','LAT','y','Y'];

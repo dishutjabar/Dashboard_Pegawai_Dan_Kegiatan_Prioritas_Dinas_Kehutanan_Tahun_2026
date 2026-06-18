@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="referrer" content="no-referrer">
 <title>GeoHutan Jabar – Peta Sebaran Data Kehutanan</title>
 <meta name="description" content="Dashboard WebGIS Dinas Kehutanan Provinsi Jawa Barat">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
@@ -24,6 +25,7 @@
 <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 <script src="https://unpkg.com/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="https://unpkg.com/leaflet-kmz@1.0.9/dist/leaflet-kmz.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/exif-js"></script>
 <link rel="stylesheet" href="styles.css"/>
 </head>
 <body>
@@ -304,8 +306,70 @@
   </div>
 </div>
 
+<!-- 7. Upload Photo Modal -->
+<div id="upload-modal" class="modal-overlay" onclick="if(event.target==this) closeUploadModal()">
+  <div class="modal-content" style="max-width: 500px;">
+    <div class="modal-head">
+      <h2>Upload Foto Dokumentasi</h2>
+      <button class="close-modal" onclick="closeUploadModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div id="upload-loc-info" style="font-size: 13px; font-weight: 600; margin-bottom: 15px; color: var(--primary);"></div>
+      
+      <div class="filter-group">
+        <label>Pilih Tahun Linimasa:</label>
+        <div class="year-timeline" id="upload-year-pills" style="margin-top:5px; margin-bottom:15px; justify-content: flex-start;">
+          <!-- Diisi JS dari PHOTO_YEARS -->
+        </div>
+        <input type="hidden" id="upload-year" value="2026">
+      </div>
+
+      <div class="filter-group">
+        <label>Pilih File Foto (Bisa lebih dari 1 & bisa dari Kamera HP):</label>
+        <input type="file" id="upload-files" accept="image/*" multiple style="font-size:12px; flex:1; width: 100%; border: 1px solid #ddd; padding: 10px; border-radius: 6px; background: #fafafa;">
+        <div style="font-size:10px; color:#666; margin-top:4px;">* Tanggal foto akan diekstrak secara otomatis dari metadata (EXIF) foto yang Anda pilih.</div>
+      </div>
+
+      <div style="margin-top: 20px; display: flex; justify-content: flex-end; gap: 10px;">
+        <button class="btn-reset" onclick="closeUploadModal()">Batal</button>
+        <button class="btn-apply" onclick="saveLocalPhoto()">Simpan & Upload Foto</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Toast Container -->
 <div id="toast-container"></div>
+
+<!-- 6. Photo Lightbox Modal -->
+<div id="photo-lightbox" class="lightbox-overlay" onclick="handleLightboxBackdropClick(event)">
+  <div class="lightbox-container">
+    <div class="lightbox-header">
+      <div class="lightbox-meta">
+        <span class="lightbox-badge" id="lightbox-year-badge">2026</span>
+        <span class="lightbox-counter" id="lightbox-counter">1 / 1</span>
+        <span class="lightbox-timestamp" id="lightbox-timestamp"></span>
+      </div>
+      <div>
+        <button class="lightbox-close" onclick="toggleLightboxFullscreen()" style="margin-right:8px;" title="Layar Penuh">&#9974;</button>
+        <button class="lightbox-close" onclick="closePhotoLightbox()" title="Tutup">&#10005;</button>
+      </div>
+    </div>
+    <div class="lightbox-img-wrap">
+      <button class="lightbox-nav lb-prev" onclick="lightboxNav(-1)">&#8249;</button>
+      <div class="lightbox-img-container">
+        <img id="lightbox-img" src="" alt="Foto Lokasi" />
+        <div class="lightbox-loading" id="lightbox-loading">
+          <div class="lb-spinner"></div>
+          <span>Memuat foto...</span>
+        </div>
+      </div>
+      <button class="lightbox-nav lb-next" onclick="lightboxNav(1)">&#8250;</button>
+    </div>
+    <div class="lightbox-dots" id="lightbox-dots"></div>
+    <div class="lightbox-loc-info" id="lightbox-loc-info"></div>
+  </div>
+</div>
 
 <script src="app-core.js" defer></script>
 <script src="app-features.js" defer></script>
