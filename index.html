@@ -95,13 +95,17 @@
     <div class="map-controls">
       <label>Basemap: 
         <select id="map-style" onchange="changeBasemap(this.value)">
-          <option value="satellite">Esri Satellite</option>
+          <option value="satellite">Esri World Imagery</option>
+          <option value="gHybrid">Google Hybrid (Satelit + Label)</option>
+          <option value="gLight">Google Maps (Mode Terang)</option>
+          <option value="gDark">Google Maps (Mode Gelap)</option>
           <option value="street">OSM Street</option>
           <option value="topo">OpenTopoMap</option>
         </select>
       </label>
       <label><input type="checkbox" id="toggle-cluster" checked onchange="toggleClustering()"> Aktifkan Clustering</label>
       <label><input type="checkbox" id="toggle-heatmap" onchange="toggleHeatmap()"> Tampilkan Heatmap</label>
+      <label><input type="checkbox" id="toggle-pjl-polygon" onchange="togglePjlPolygons()"> Tampilkan Area Tanam 2 Ha (Petugas Jaga Leuweung)</label>
       <label><input type="checkbox" id="toggle-buffer" onchange="toggleBuffer()"> Buffer Zone Saat Diklik (10/20/30km)</label>
       <button class="btn-icon" style="margin-top:10px; width:100%; justify-content:center; background:var(--secondary); color:white;" onclick="downloadMap()">&#128247; Unduh Tampilan Peta (.png)</button>
     </div>

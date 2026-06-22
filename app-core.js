@@ -10,6 +10,12 @@ var LAYERS = {}; // Will hold either LayerGroup or MarkerClusterGroup
 var BASEMAPS = {};
 var CURRENT_BASEMAP = 'satellite';
 var CLUSTER_ENABLED = true;
+var HEATMAP_ENABLED = false;
+var BUFFER_ENABLED = false;
+var PJL_POLYGON_ENABLED = false;
+var PJL_POLYGON_LAYER = null;
+var HEATMAP_LAYER = null;
+var BUFFER_LAYERS = null;
 var DYNAMIC_SOURCES = [];
 
 var POP_COLOR = { pjl: '#43a047', per: '#1e88e5', peg: '#fb8c00', jum: '#8e24aa' };
@@ -24,6 +30,9 @@ var POP_LABEL = {
 try {
   BASEMAPS = {
     satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: '&copy; Esri', maxZoom: 19 }),
+    gHybrid: L.tileLayer('http://mt0.google.com/vt/lyrs=y&hl=id&x={x}&y={y}&z={z}', { attribution: '&copy; Google', maxZoom: 20 }),
+    gLight: L.tileLayer('http://mt0.google.com/vt/lyrs=m&hl=id&x={x}&y={y}&z={z}', { attribution: '&copy; Google', maxZoom: 20 }),
+    gDark: L.tileLayer('http://mt0.google.com/vt/lyrs=m&hl=id&x={x}&y={y}&z={z}', { attribution: '&copy; Google', maxZoom: 20, className: 'dark-map-filter' }),
     street: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OSM', maxZoom: 19 }),
     topo: L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenTopoMap', maxZoom: 17 })
   };

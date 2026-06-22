@@ -72,6 +72,55 @@ function toggleHeatmap() {
   showToast('Heatmap ' + (HEATMAP_ENABLED ? 'diaktifkan' : 'dinonaktifkan'));
 }
 
+function togglePjlPolygons() {
+  PJL_POLYGON_ENABLED = document.getElementById('toggle-pjl-polygon').checked;
+  if (PJL_POLYGON_ENABLED) {
+    if (PJL_POLYGON_LAYER && mapObj) PJL_POLYGON_LAYER.addTo(mapObj);
+  } else {
+    if (PJL_POLYGON_LAYER && mapObj) mapObj.removeLayer(PJL_POLYGON_LAYER);
+  }
+  showToast('Area Tanam 2 Ha (Jaga Leuweung) ' + (PJL_POLYGON_ENABLED ? 'ditampilkan' : 'disembunyikan'));
+}
+
+/**
+ * Generator Poligon Organik 2 Ha
+ * Luas 2 Ha = 20.000 meter persegi.
+ * Jari-jari lingkaran ekuivalen = ~79.8 meter.
+ */
+function generateOrganicPolygon(lat, lng, areaHa) {
+  var areaSqm = (areaHa || 2) * 10000;
+  var baseRadiusM = Math.sqrt(areaSqm / Math.PI); // ~79.8m
+  var points = 8; // Octagon
+  var latlngs = [];
+  
+  // Konversi meter ke derajat
+  var rEarth = 6378137; // radius bumi
+  
+  for (var i = 0; i < points; i++) {
+    var angle = (i * 360 / points) * (Math.PI / 180);
+    // Tambahkan variasi acak agar terlihat tidak beraturan (-15% sampai +15%)
+    var randomRadius = baseRadiusM * (0.85 + Math.random() * 0.3);
+    
+    var dLat = randomRadius * Math.cos(angle) / rEarth;
+    var dLng = randomRadius * Math.sin(angle) / (rEarth * Math.cos(lat * Math.PI / 180));
+    
+    latlngs.push([lat + (dLat * 180 / Math.PI), lng + (dLng * 180 / Math.PI)]);
+  }
+  return latlngs;
+}
+
+/** Placeholder Import Data GeoJSON Resmi PJL */
+var OFFICIAL_PJL_GEOJSON_URL = ''; // Isi dengan link GeoJSON/SHP asli nanti
+function loadOfficialPjlPolygons() {
+  if(!OFFICIAL_PJL_GEOJSON_URL) return;
+  fetch(OFFICIAL_PJL_GEOJSON_URL)
+    .then(res => res.json())
+    .then(data => {
+      // Ganti logika poligon fiktif dengan render GeoJSON asli
+      console.log('GeoJSON Resmi Dimuat', data);
+    }).catch(err => console.error('Gagal memuat GeoJSON Resmi:', err));
+}
+
 /* Modals & Drawer */
 function openExportModal() { document.getElementById('export-modal').classList.add('open'); }
 function closeExportModal() { document.getElementById('export-modal').classList.remove('open'); }
@@ -290,6 +339,17 @@ function highlightMarker(lat, lng, type) {
     BUFFER_LAYERS = L.layerGroup().addTo(mapObj);
   }
   BUFFER_LAYERS.clearLayers();
+
+  if (type === 'pjl') {
+    var coordKey = lat + ',' + lng;
+    var polyCoords = GLOBAL_POLY_COORDS[coordKey];
+    if (polyCoords && polyCoords.length > 0) {
+      var measureLine = L.polyline([[lat, lng], polyCoords[0]], {
+        color: '#ffb74d', weight: 2, dashArray: '4, 4'
+      }).bindTooltip('r ≈ 79.8m<br>Luas ±2 Ha', {permanent: true, direction: 'center', className: 'measure-tooltip'});
+      measureLine.addTo(BUFFER_LAYERS);
+    }
+  }
 
   if (BUFFER_ENABLED && (type === 'pjl' || type === 'per' || type === 'persemaian' || type === 'jum' || type === 'jumat')) {
     [10000, 20000, 30000].forEach(function(radius, i) {
@@ -621,6 +681,7 @@ function fillDropdown() {
   pop('f_penyuluh', S.penyuluh, 'Semua Penyuluh'); pop('f_kategori_lojuna', S.kategori_lojuna, 'Semua Kategori');
 }
 
+var GLOBAL_POLY_COORDS = {};
 /* Render Engine */
 function schedRender() { clearTimeout(RTIMER); RTIMER = setTimeout(doRender, 100); }
 function doRender() {
@@ -631,6 +692,7 @@ function doRender() {
   var pegJumPoints = [];
   var pegNames = [];
   var jumNames = [];
+  GLOBAL_POLY_COORDS = {};
   var isFilterActive = Object.values(FILTER).some(arr => arr.length > 0);
 
   ['pjl', 'per', 'peg', 'jum'].forEach(type => {
@@ -641,6 +703,9 @@ function doRender() {
       LAYERS[type] = L.layerGroup();
     }
   });
+  
+  if (PJL_POLYGON_LAYER) { mapObj.removeLayer(PJL_POLYGON_LAYER); PJL_POLYGON_LAYER = null; }
+  PJL_POLYGON_LAYER = L.layerGroup();
 
   function addMarkers(arr, type, defaultIcon) {
     if (!LAYER_VISIBLE[type]) return;
@@ -714,6 +779,44 @@ function doRender() {
         }
         mk.addTo(LAYERS[type]);
         
+        // Auto-generate 2 Ha Area for PJL
+        if (type === 'pjl' && typeof generateOrganicPolygon === 'function') {
+           var coordKey = r._lat + ',' + r._lng;
+           if (!GLOBAL_POLY_COORDS[coordKey]) {
+             var polyCoords = generateOrganicPolygon(r._lat, r._lng, 2);
+             GLOBAL_POLY_COORDS[coordKey] = polyCoords;
+             var poly = L.polygon(polyCoords, {
+               color: '#2E7D32',
+               weight: 2,
+               fillColor: '#81C784',
+               fillOpacity: 0.3,
+               dashArray: '40, 4'
+             });
+
+             var cPenanaman = r['Titik Koordinat Penanaman (Y)'] && r['Titik Koordinat Penanaman (X)'] ? 
+                              r['Titik Koordinat Penanaman (Y)'] + ', ' + r['Titik Koordinat Penanaman (X)'] : 'Data tidak tersedia';
+             var cPersemaian = r['Titik Koordinat Persemaian (Y)'] && r['Titik Koordinat Persemaian (X)'] ? 
+                               r['Titik Koordinat Persemaian (Y)'] + ', ' + r['Titik Koordinat Persemaian (X)'] : 'Data tidak tersedia';
+
+             var popHtml = '<div style="font-size:11px; font-family:Inter; max-height:250px; overflow-y:auto; padding-right:5px;">' +
+               '<b style="font-size:13px; color:#2E7D32; border-bottom:1px solid #ccc; display:block; padding-bottom:4px; margin-bottom:6px;">Area Tanam 2 Ha</b>' +
+               '<b>Petugas:</b> ' + name + '<br>' +
+               '<b>Nama Lengkap:</b> ' + (r['Nama Lengkap'] || r['Nama Petugas'] || r['Nama'] || '-') + '<br>' +
+               '<b>Alamat:</b> ' + (r['Alamat'] || '-') + '<br>' +
+               '<b>Kordinat Penanaman:</b> ' + cPenanaman + '<br>' +
+               '<b>Kordinat Persemaian:</b> ' + cPersemaian + '<br>' +
+               '<b>Kawasan:</b> ' + (r['Kawasan Leuweung/ Gunung'] || '-') + '<br>' +
+               '<b>Wil. Binaan Kuncen:</b> ' + (r['Wilayah Binaan Kuncen'] || '-') + '<br>' +
+               '<b>Wil. Binaan JL:</b> ' + (r['Wilayah Binaan Jaga Leuweung'] || '-') + '<br>' +
+               '<b>Penyuluh:</b> ' + (r['Penyuluh Kehutanan'] || '-') + '<br>' +
+               '<b>PEH:</b> ' + (r['PEH'] || '-') +
+               '</div>';
+
+             poly.bindPopup(popHtml);
+             poly.addTo(PJL_POLYGON_LAYER);
+           }
+        }
+        
         if (type === 'peg') { 
           var jabat = String(r['Nama Jabatan'] || r['Jabatan'] || r['JABATAN'] || '').trim();
           var dispName = name + (jabat ? ' (' + jabat + ')' : '');
@@ -724,6 +827,11 @@ function doRender() {
       } catch(e) {}
     });
     if(LAYER_VISIBLE[type]) LAYERS[type].addTo(mapObj);
+  }
+
+  // Adding polygon layer back if toggle is active
+  if (PJL_POLYGON_ENABLED && PJL_POLYGON_LAYER) {
+    PJL_POLYGON_LAYER.addTo(mapObj);
   }
 
   addMarkers(DATA.pjl, 'pjl', ICONS.pjl);

@@ -868,3 +868,9 @@ html, body { height: 100%; font-family: 'Inter', 'Segoe UI', Arial, sans-serif; 
 .lightbox-img-container:-webkit-full-screen { max-height: 100vh; max-width: 100vw; width: 100vw; height: 100vh; border-radius: 0; background: #000; display: flex; align-items: center; justify-content: center; }
 .lightbox-img-container:fullscreen #lightbox-img { max-height: 100vh; width: 100%; height: 100%; border-radius: 0; }
 .lightbox-img-container:-webkit-full-screen #lightbox-img { max-height: 100vh; width: 100%; height: 100%; border-radius: 0; }
+
+.measure-tooltip { background: rgba(0,0,0,0.65); border: none; box-shadow: none; font-size: 10px; font-weight: 500; color: #fff; border-radius: 4px; padding: 2px 6px; text-shadow: none; }
+.measure-tooltip { background: rgba(0,0,0,0.65); border: none; box-shadow: none; font-size: 10px; font-weight: 500; color: #fff; border-radius: 4px; padding: 2px 6px; text-shadow: none; }
+.measure-tooltip::before { display: none; }
+
+.dark-map-filter { filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%); }
