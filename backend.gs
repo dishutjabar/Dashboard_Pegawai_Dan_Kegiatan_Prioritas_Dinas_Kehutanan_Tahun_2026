@@ -5,8 +5,19 @@
 // ID ada di URL spreadsheet: https://docs.google.com/spreadsheets/d/ID_ADA_DISINI/edit
 // ==============================================================================
 
-var SPREADSHEET_ID = "1p7-7pSKtNCc58eC-tXJsXNKk3QSSswI68Gl6fNsZhSE";
+var SPREADSHEET_ID = "14jmMYMOY6vl2nIdbZdO-wahixn1yN3LTLqwI-19RNtY";
 var UPLOAD_FOLDER_NAME = "GeoHutan_Uploads";
+var SPATIAL_FOLDER_NAME = "IT_dokumentasi_spasial";
+var SPATIAL_SHEET_NAME = "Data_Spasial";
+
+/** Folder Google Drive PJL per tahun linimasa */
+var PJL_DRIVE_FOLDERS = {
+  "2026": "13hX-UoxyNB5BZWTNKQ9IbmMru0-7CZ2s",
+  "2027": "1B3aSMrmrEODaPNF6k4e5Rkz1WaIMGCa1",
+  "2028": "1qOgMrvOjEDypalpfFqigI5SQ7tjNULTB",
+  "2029": "1G0Gdau3ZFrlFwPBNPW3m0t1ERUjoVJwW",
+  "2030": "18r-LQyXOWlyfHwZJ3R9O31m1NQCNEqb8",
+};
 
 // ─── Helper: Ambil atau buat folder upload ───
 function getOrCreateFolder_(folderName) {
@@ -20,10 +31,12 @@ function getOrCreateFolder_(folderName) {
   return DriveApp.createFolder(folderName);
 }
 
-// ─── Helper: Cari sheet yang punya kolom Foto_2026 ───
+// ─── Helper: Cari sheet Juna (bukan tab CDK PJL) yang punya kolom Foto_2026 ───
 function findSheetWithColumns_(ss) {
   var sheets = ss.getSheets();
   for (var i = 0; i < sheets.length; i++) {
+    var sheetName = String(sheets[i].getName());
+    if (/^CDK\d+_FORMATSISTEM$/i.test(sheetName)) continue;
     var lastCol = sheets[i].getLastColumn();
     if (lastCol === 0) continue;
     var head = sheets[i].getRange(1, 1, 1, lastCol).getValues()[0];
@@ -34,27 +47,91 @@ function findSheetWithColumns_(ss) {
   return null;
 }
 
+// ─── Helper: Indeks kolom koordinat (Juna / PJL) ───
+function findCoordColumnIndices_(headers) {
+  var yIdx = -1,
+    xIdx = -1;
+  for (var h = 0; h < headers.length; h++) {
+    var hdr = String(headers[h]).trim().toLowerCase();
+    if (
+      yIdx === -1 &&
+      hdr.indexOf("titik koordinat") !== -1 &&
+      (hdr.indexOf("(y)") !== -1 || hdr.indexOf(" y)") !== -1)
+    )
+      yIdx = h;
+    if (
+      xIdx === -1 &&
+      hdr.indexOf("titik koordinat") !== -1 &&
+      (hdr.indexOf("(x)") !== -1 || hdr.indexOf(" x)") !== -1)
+    )
+      xIdx = h;
+  }
+  return { yIdx: yIdx, xIdx: xIdx };
+}
+
+function sheetHasPhotoColumns_(sheet) {
+  var lastCol = sheet.getLastColumn();
+  if (lastCol === 0) return false;
+  var head = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  for (var j = 0; j < head.length; j++) {
+    if (String(head[j]).trim() === "Foto_2026") return true;
+  }
+  return false;
+}
+
+/** Cari tab sheet berdasarkan koordinat + kategori (juna | pjl) */
+function findSheetByCoordinates_(ss, reqLat, reqLng, category) {
+  var sheets = ss.getSheets();
+  for (var i = 0; i < sheets.length; i++) {
+    var sheet = sheets[i];
+    if (!sheetHasPhotoColumns_(sheet)) continue;
+    var sheetName = String(sheet.getName());
+    var isPjlTab = /^CDK\d+_FORMATSISTEM$/i.test(sheetName);
+    if (category === "pjl" && !isPjlTab) continue;
+    if (category === "juna" && isPjlTab) continue;
+
+    var data = sheet.getDataRange().getValues();
+    if (data.length < 2) continue;
+    var headers = data[0];
+    var coords = findCoordColumnIndices_(headers);
+    if (coords.yIdx === -1 || coords.xIdx === -1) continue;
+
+    for (var r = 1; r < data.length; r++) {
+      var rawLat = String(data[r][coords.yIdx]).replace(",", ".");
+      var rawLng = String(data[r][coords.xIdx]).replace(",", ".");
+      var sheetLat = parseFloat(rawLat) || 0;
+      var sheetLng = parseFloat(rawLng) || 0;
+      if (
+        Math.abs(sheetLat - reqLat) < 0.001 &&
+        Math.abs(sheetLng - reqLng) < 0.001
+      ) {
+        return sheet;
+      }
+    }
+  }
+  return null;
+}
+
+function getUploadFolder_(category, year) {
+  if (category === "pjl") {
+    var folderId = PJL_DRIVE_FOLDERS[String(year)];
+    if (!folderId) {
+      throw new Error("Folder Drive PJL untuk tahun " + year + " belum dikonfigurasi.");
+    }
+    return DriveApp.getFolderById(folderId);
+  }
+  return getOrCreateFolder_("Juna Permanen Tahun " + year);
+}
+
 // ─── Helper: Update baris di Spreadsheet berdasarkan koordinat ───
 function updateRowData_(sheet, reqLat, reqLng, year, newUrl, newDate) {
   var data = sheet.getDataRange().getValues();
   var headers = data[0];
 
   // Cari indeks kolom koordinat (cek berbagai variasi nama header)
-  var yIdx = -1,
-    xIdx = -1;
-  for (var h = 0; h < headers.length; h++) {
-    var hdr = String(headers[h]).trim().toLowerCase();
-    if (
-      hdr.indexOf("titik koordinat") !== -1 &&
-      (hdr.indexOf("(y)") !== -1 || hdr.indexOf("y)") !== -1)
-    )
-      yIdx = h;
-    if (
-      hdr.indexOf("titik koordinat") !== -1 &&
-      (hdr.indexOf("(x)") !== -1 || hdr.indexOf("x)") !== -1)
-    )
-      xIdx = h;
-  }
+  var coordIdx = findCoordColumnIndices_(headers);
+  var yIdx = coordIdx.yIdx;
+  var xIdx = coordIdx.xIdx;
 
   var fotoColIdx = -1,
     tglColIdx = -1;
@@ -118,21 +195,9 @@ function deleteRowData_(sheet, reqLat, reqLng, year, targetUrl) {
   var headers = data[0];
 
   // Cari indeks kolom koordinat (cek berbagai variasi nama header)
-  var yIdx = -1,
-    xIdx = -1;
-  for (var h = 0; h < headers.length; h++) {
-    var hdr = String(headers[h]).trim().toLowerCase();
-    if (
-      hdr.indexOf("titik koordinat") !== -1 &&
-      (hdr.indexOf("(y)") !== -1 || hdr.indexOf("y)") !== -1)
-    )
-      yIdx = h;
-    if (
-      hdr.indexOf("titik koordinat") !== -1 &&
-      (hdr.indexOf("(x)") !== -1 || hdr.indexOf("x)") !== -1)
-    )
-      xIdx = h;
-  }
+  var coordIdx = findCoordColumnIndices_(headers);
+  var yIdx = coordIdx.yIdx;
+  var xIdx = coordIdx.xIdx;
 
   var fotoColIdx = -1,
     tglColIdx = -1;
@@ -175,15 +240,33 @@ function deleteRowData_(sheet, reqLat, reqLng, year, targetUrl) {
         ? String(data[i][tglColIdx]).trim()
         : "";
 
-      var fotosArr = currentFotos.split("|").map(function(s){return s.trim();}).filter(function(s){return s !== "";});
-      var tglsArr = currentTgls.split("|").map(function(s){return s.trim();}).filter(function(s){return s !== "";});
+      var fotosArr = currentFotos
+        .split("|")
+        .map(function (s) {
+          return s.trim();
+        })
+        .filter(function (s) {
+          return s !== "";
+        });
+      var tglsArr = currentTgls
+        .split("|")
+        .map(function (s) {
+          return s.trim();
+        })
+        .filter(function (s) {
+          return s !== "";
+        });
 
-      var targetMatch = targetUrl.match(/id=([a-zA-Z0-9_-]+)/) || targetUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
+      var targetMatch =
+        targetUrl.match(/id=([a-zA-Z0-9_-]+)/) ||
+        targetUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
       var targetId = targetMatch ? targetMatch[1] : targetUrl;
 
       var delIdx = -1;
       for (var j = 0; j < fotosArr.length; j++) {
-        var cMatch = fotosArr[j].match(/id=([a-zA-Z0-9_-]+)/) || fotosArr[j].match(/\/d\/([a-zA-Z0-9_-]+)/);
+        var cMatch =
+          fotosArr[j].match(/id=([a-zA-Z0-9_-]+)/) ||
+          fotosArr[j].match(/\/d\/([a-zA-Z0-9_-]+)/);
         var cId = cMatch ? cMatch[1] : fotosArr[j];
         if (cId === targetId) {
           delIdx = j;
@@ -210,12 +293,62 @@ function deleteRowData_(sheet, reqLat, reqLng, year, targetUrl) {
 }
 
 // ═══════════════════════════════════════════════════════════
-//  doPost: Menerima request POST dari Dashboard (Upload Foto)
+// Helper: Ambil atau buat sheet Data_Spasial
+// ═══════════════════════════════════════════════════════════
+var SPATIAL_HEADERS_ = [
+  "FileID",
+  "Nama",
+  "URL_GeoJSON",
+  "Diunggah",
+  "Ukuran_KB",
+  "CDK_Tag",
+  "BBox_W",
+  "BBox_S",
+  "BBox_E",
+  "BBox_N",
+];
+
+function getOrCreateSpatialSheet_(ss) {
+  var sheet = ss.getSheetByName(SPATIAL_SHEET_NAME);
+  if (!sheet) {
+    sheet = ss.insertSheet(SPATIAL_SHEET_NAME);
+    sheet.appendRow(SPATIAL_HEADERS_);
+  } else {
+    ensureSpatialSheetHeaders_(sheet);
+  }
+  return sheet;
+}
+
+function ensureSpatialSheetHeaders_(sheet) {
+  var lastCol = sheet.getLastColumn();
+  var headers =
+    lastCol > 0
+      ? sheet.getRange(1, 1, 1, lastCol).getValues()[0]
+      : [];
+
+  // Sheet lama mungkin hanya punya 4 kolom (FileID–Diunggah).
+  if (lastCol < 6) {
+    sheet
+      .getRange(1, 5, 1, 2)
+      .setValues([["Ukuran_KB", "CDK_Tag"]]);
+  }
+
+  // getRange(row, col, numRows, numColumns) — bukan indeks kolom akhir.
+  if (!headers[6] || String(headers[6]).indexOf("BBox") === -1) {
+    sheet
+      .getRange(1, 7, 1, 4)
+      .setValues([["BBox_W", "BBox_S", "BBox_E", "BBox_N"]]);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  doPost: Menerima request POST dari Dashboard (Upload Foto + Spasial)
 // ═══════════════════════════════════════════════════════════
 function doPost(e) {
   try {
     var data = JSON.parse(e.postData.contents);
 
+    // ─── ACTION: upload foto ───
     if (data.action === "upload") {
       var base64Data = data.base64;
       var mimeType = data.mimeType || "image/jpeg";
@@ -223,35 +356,43 @@ function doPost(e) {
       var reqLng = parseFloat(data.lng);
       var year = String(data.year);
       var date = String(data.date);
-      var filename = "Juna_" + year + "_" + new Date().getTime() + ".jpg";
+      var category = String(data.category || "juna");
+      var filename =
+        (category === "pjl" ? "PJL_" : "Juna_") +
+        year +
+        "_" +
+        new Date().getTime() +
+        ".jpg";
 
-      // 1. Simpan foto ke Google Drive sesuai tahun
-      var folderName = "Juna Permanen Tahun " + year;
-      var folder = getOrCreateFolder_(folderName);
+      var folder = getUploadFolder_(category, year);
       var decoded = Utilities.base64Decode(base64Data);
       var blob = Utilities.newBlob(decoded, mimeType, filename);
       var file = folder.createFile(blob);
 
-      // Set sharing: ANYONE_WITH_LINK dengan VIEW permission
       try {
-        file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-        Logger.log("File sharing berhasil: " + file.getId());
-      } catch(shareErr) {
-        Logger.log("Warning: File sharing gagal (mungkin workspace restriction): " + shareErr.toString());
+        file.setSharing(
+          DriveApp.Access.ANYONE_WITH_LINK,
+          DriveApp.Permission.VIEW,
+        );
+      } catch (shareErr) {
+        Logger.log("Warning sharing: " + shareErr.toString());
       }
 
-      // Gunakan /uc?export=view format yang paling reliable
       var imgUrl = "https://drive.google.com/uc?export=view&id=" + file.getId();
-      Logger.log("Image URL created: " + imgUrl);
-
-      // 2. Update Spreadsheet
       var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-      var targetSheet = findSheetWithColumns_(ss);
+      var targetSheet = findSheetByCoordinates_(ss, reqLat, reqLng, category);
       if (!targetSheet) {
         return ContentService.createTextOutput(
           JSON.stringify({
             success: false,
-            error: "Tidak menemukan tab Sheet yang memiliki kolom 'Foto_2026'.",
+            error:
+              "Tidak menemukan baris lokasi di spreadsheet untuk koordinat " +
+              reqLat +
+              ", " +
+              reqLng +
+              " (kategori: " +
+              category +
+              ").",
           }),
         ).setMimeType(ContentService.MimeType.JSON);
       }
@@ -265,40 +406,52 @@ function doPost(e) {
           date: date,
         }),
       ).setMimeType(ContentService.MimeType.JSON);
+
+      // ─── ACTION: delete foto ───
     } else if (data.action === "delete") {
       var reqLatDel = parseFloat(data.lat);
       var reqLngDel = parseFloat(data.lng);
       var yearDel = String(data.year);
       var urlToDelete = String(data.url);
+      var categoryDel = String(data.category || "juna");
 
-      // Extract ID to delete from Google Drive
-      var targetMatch = urlToDelete.match(/id=([a-zA-Z0-9_-]+)/) || urlToDelete.match(/\/d\/([a-zA-Z0-9_-]+)/);
+      var targetMatch =
+        urlToDelete.match(/id=([a-zA-Z0-9_-]+)/) ||
+        urlToDelete.match(/\/d\/([a-zA-Z0-9_-]+)/);
       var fileId = targetMatch ? targetMatch[1] : null;
 
-      // 1. Trash from Drive
       if (fileId) {
         try {
           var f = DriveApp.getFileById(fileId);
           f.setTrashed(true);
-          Logger.log("File ditrash: " + fileId);
-        } catch(delErr) {
+        } catch (delErr) {
           Logger.log("Gagal men-trash file: " + delErr.toString());
         }
       }
 
-      // 2. Remove from Spreadsheet
       var ssDel = SpreadsheetApp.openById(SPREADSHEET_ID);
-      var targetSheetDel = findSheetWithColumns_(ssDel);
+      var targetSheetDel = findSheetByCoordinates_(
+        ssDel,
+        reqLatDel,
+        reqLngDel,
+        categoryDel,
+      );
       if (!targetSheetDel) {
         return ContentService.createTextOutput(
           JSON.stringify({
             success: false,
-            error: "Tidak menemukan tab Sheet yang sesuai.",
+            error: "Tidak menemukan tab Sheet yang sesuai untuk koordinat ini.",
           }),
         ).setMimeType(ContentService.MimeType.JSON);
       }
 
-      deleteRowData_(targetSheetDel, reqLatDel, reqLngDel, yearDel, urlToDelete);
+      deleteRowData_(
+        targetSheetDel,
+        reqLatDel,
+        reqLngDel,
+        yearDel,
+        urlToDelete,
+      );
 
       return ContentService.createTextOutput(
         JSON.stringify({
@@ -306,14 +459,107 @@ function doPost(e) {
           deletedId: fileId,
         }),
       ).setMimeType(ContentService.MimeType.JSON);
-    }
 
-    return ContentService.createTextOutput(
-      JSON.stringify({
-        success: false,
-        error: "Aksi tidak dikenal: " + (data.action || "kosong"),
-      }),
-    ).setMimeType(ContentService.MimeType.JSON);
+      // ─── ACTION: upload polygon spasial ───
+    } else if (data.action === "uploadSpatial") {
+      var geoJsonStr = data.geojson;
+      var spFileName = String(
+        data.filename || "spasial_" + new Date().getTime() + ".geojson",
+      );
+      // Pastikan ekstensi .geojson
+      if (!String(spFileName).toLowerCase().endsWith(".geojson")) {
+        spFileName = String(spFileName).replace(/\.[^.]+$/, "") + ".geojson";
+      }
+      var cdkTag = String(data.cdk_tag || "");
+      var ssSp = SpreadsheetApp.openById(SPREADSHEET_ID);
+      var spFolder = getOrCreateFolder_(SPATIAL_FOLDER_NAME);
+      var spBlob = Utilities.newBlob(
+        geoJsonStr,
+        "application/geo+json",
+        spFileName,
+      );
+      var spFile = spFolder.createFile(spBlob);
+      try {
+        spFile.setSharing(
+          DriveApp.Access.ANYONE_WITH_LINK,
+          DriveApp.Permission.VIEW,
+        );
+      } catch (e) {}
+      // Frontend membutuhkan akses via fetch, yang rawan CORS.
+      // Jadi kita kirim url berbasis /uc?export=download tetapi untuk render kita
+      // akan menghindari fetch langsung (dengan menggunakan geojson langsung saat upload lokal).
+      // Untuk jaga-jaga, tetap simpan url ini.
+      var spFileUrl =
+        "https://drive.google.com/uc?export=download&id=" + spFile.getId();
+      var now = Utilities.formatDate(
+        new Date(),
+        Session.getScriptTimeZone(),
+        "dd/MM/yyyy HH:mm",
+      );
+      var sizeKB = Math.round((geoJsonStr.length / 1024) * 10) / 10;
+      var spatialSheet = getOrCreateSpatialSheet_(ssSp);
+      spatialSheet.appendRow([
+        spFile.getId(),
+        spFileName,
+        spFileUrl,
+        now,
+        sizeKB,
+        cdkTag,
+        data.bbox_w || "",
+        data.bbox_s || "",
+        data.bbox_e || "",
+        data.bbox_n || "",
+      ]);
+      return ContentService.createTextOutput(
+        JSON.stringify({
+          success: true,
+          fileId: spFile.getId(),
+          url: spFileUrl,
+          filename: spFileName,
+          uploaded: now,
+          sizeKB: sizeKB,
+        }),
+      ).setMimeType(ContentService.MimeType.JSON);
+
+      // ─── ACTION: delete polygon spasial ───
+    } else if (data.action === "deleteSpatial") {
+      var delFileId = String(data.fileId || "");
+      if (!delFileId) {
+        return ContentService.createTextOutput(
+          JSON.stringify({
+            success: false,
+            error: "fileId kosong",
+          }),
+        ).setMimeType(ContentService.MimeType.JSON);
+      }
+      try {
+        DriveApp.getFileById(delFileId).setTrashed(true);
+      } catch (e) {}
+      var ssDelSp = SpreadsheetApp.openById(SPREADSHEET_ID);
+      var spSheetDel = getOrCreateSpatialSheet_(ssDelSp);
+      var spRows = spSheetDel.getDataRange().getValues();
+      for (var ri = 1; ri < spRows.length; ri++) {
+        if (String(spRows[ri][0]) === delFileId) {
+          spSheetDel.deleteRow(ri + 1);
+          break;
+        }
+      }
+      return ContentService.createTextOutput(
+        JSON.stringify({
+          success: true,
+          deletedId: delFileId,
+        }),
+      ).setMimeType(ContentService.MimeType.JSON);
+
+      // ─── Aksi tidak dikenal ───
+    } else {
+      return ContentService.createTextOutput(
+        JSON.stringify({
+          success: false,
+          error: "Aksi tidak dikenal: " + (data.action || "kosong"),
+        }),
+      ).setMimeType(ContentService.MimeType.JSON);
+    }
   } catch (err) {
     return ContentService.createTextOutput(
       JSON.stringify({
@@ -330,6 +576,71 @@ function doPost(e) {
 function doGet(e) {
   var params = e ? e.parameter : {};
   var action = params.action || "";
+
+  if (action === "getSpatialFiles") {
+    try {
+      var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+      var sheet = getOrCreateSpatialSheet_(ss);
+      var rows = sheet.getDataRange().getValues();
+      var files = [];
+      for (var i = 1; i < rows.length; i++) {
+        if (rows[i][0]) {
+          var fileId = String(rows[i][0]);
+          var filename = String(rows[i][1]);
+          var url = String(rows[i][2]);
+          var uploaded = String(rows[i][3]);
+          var sizeKB = rows[i][4];
+          var cdkTag = String(rows[i][5] || "");
+          var bbox = null;
+          if (rows[i][6] !== "" && rows[i][7] !== "" && rows[i][8] !== "" && rows[i][9] !== "") {
+            bbox = {
+              west: Number(rows[i][6]),
+              south: Number(rows[i][7]),
+              east: Number(rows[i][8]),
+              north: Number(rows[i][9]),
+            };
+          }
+
+          files.push({
+            fileId: fileId,
+            filename: filename,
+            url: url,
+            uploaded: uploaded,
+            sizeKB: sizeKB,
+            cdkTag: cdkTag,
+            bbox: bbox,
+          });
+        }
+      }
+      return ContentService.createTextOutput(
+        JSON.stringify({ success: true, files: files }),
+      ).setMimeType(ContentService.MimeType.JSON);
+    } catch (err) {
+      return ContentService.createTextOutput(
+        JSON.stringify({ success: false, error: err.toString() }),
+      ).setMimeType(ContentService.MimeType.JSON);
+    }
+  }
+
+  if (action === "getSpatialGeoJSON") {
+    try {
+      var geoFileId = String(params.fileId || "");
+      if (!geoFileId) {
+        return ContentService.createTextOutput(
+          JSON.stringify({ success: false, error: "fileId kosong" }),
+        ).setMimeType(ContentService.MimeType.JSON);
+      }
+      var geoFile = DriveApp.getFileById(geoFileId);
+      var geoContent = geoFile.getBlob().getDataAsString();
+      return ContentService.createTextOutput(
+        JSON.stringify({ success: true, geojson: JSON.parse(geoContent) }),
+      ).setMimeType(ContentService.MimeType.JSON);
+    } catch (err) {
+      return ContentService.createTextOutput(
+        JSON.stringify({ success: false, error: err.toString() }),
+      ).setMimeType(ContentService.MimeType.JSON);
+    }
+  }
 
   if (action === "getFolder") {
     try {
@@ -357,7 +668,7 @@ function doGet(e) {
               DriveApp.Access.ANYONE_WITH_LINK,
               DriveApp.Permission.VIEW,
             );
-          } catch(shareErr) {
+          } catch (shareErr) {
             // Abaikan jika diblokir
           }
           var d = f.getDateCreated();

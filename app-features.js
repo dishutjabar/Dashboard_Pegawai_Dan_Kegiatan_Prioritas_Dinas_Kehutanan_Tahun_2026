@@ -82,6 +82,824 @@ function togglePjlPolygons() {
   showToast('Area Tanam 2 Ha (Jaga Leuweung) ' + (PJL_POLYGON_ENABLED ? 'ditampilkan' : 'disembunyikan'));
 }
 
+/* ════════════════════════════════════════════════════════════
+   🗺️  SPATIAL UPLOAD SYSTEM
+   ════════════════════════════════════════════════════════════ */
+var SPATIAL_UPLOAD_LAYER = null;
+var SPATIAL_ENABLED = false;
+var SPATIAL_FILES_CACHE = []; // [{fileId, filename, url, uploaded, sizeKB, cdkTag, geojson}]
+var SPATIAL_RENDER_TOKEN = 0;
+var SPATIAL_LIST_ALL = [];
+var SPATIAL_LIST_PAGE = 0;
+var SPATIAL_LIST_PAGE_SIZE = 10;
+var SPATIAL_LIST_QUERY = '';
+var SPATIAL_FETCH_CONCURRENCY = 4;
+var SPATIAL_LOAD_QUEUE = null;
+var SPATIAL_MAP_MOVE_BOUND = false;
+var SPATIAL_GEOJSON_MEM = {}; // fileId -> geojson (session cache)
+var SHP_SIDECAR_EXTS = ['shp','shx','dbf','prj','cpg','sbn','sbx','qix','xml'];
+
+function getShpBaseName(filename) {
+  var name = String(filename || '').split(/[/\\]/).pop();
+  return name.replace(/\.[^.]+$/i, '');
+}
+
+function getShpGroupSidecars(group) {
+  var sidecars = {};
+  SHP_SIDECAR_EXTS.forEach(function(ext) {
+    if (group[ext] instanceof Blob) sidecars[ext] = group[ext];
+  });
+  return sidecars;
+}
+
+function readBlobAsArrayBuffer(f) {
+  return new Promise(function(res, rej) {
+    var r = new FileReader();
+    r.onload = function(e) { res(e.target.result); };
+    r.onerror = function() { rej(new Error('Gagal membaca file')); };
+    r.readAsArrayBuffer(f);
+  });
+}
+
+function readBlobAsText(f) {
+  return new Promise(function(res, rej) {
+    var r = new FileReader();
+    r.onload = function(e) { res(e.target.result); };
+    r.onerror = function() { rej(new Error('Gagal membaca file')); };
+    r.readAsText(f);
+  });
+}
+
+function normalizeGeoJSON(data) {
+  if (!data || typeof data !== 'object') return null;
+  if (data.type === 'FeatureCollection' && Array.isArray(data.features)) return data;
+  if (data.type === 'Feature' && data.geometry) {
+    return { type: 'FeatureCollection', features: [data] };
+  }
+  var geomTypes = ['Point', 'MultiPoint', 'LineString', 'MultiLineString', 'Polygon', 'MultiPolygon', 'GeometryCollection'];
+  if (geomTypes.indexOf(data.type) !== -1) {
+    return { type: 'FeatureCollection', features: [{ type: 'Feature', geometry: data, properties: {} }] };
+  }
+  if (Array.isArray(data) && data.length && data[0] && data[0].type === 'Feature') {
+    return { type: 'FeatureCollection', features: data };
+  }
+  return null;
+}
+
+function parseKmlFromZipEntry(kmlFile, cb) {
+  kmlFile.async('string').then(function(kmlStr) {
+    var kmlDoc = (new DOMParser()).parseFromString(kmlStr, 'text/xml');
+    var gj = (typeof toGeoJSON !== 'undefined') ? toGeoJSON.kml(kmlDoc) : null;
+    if (gj) cb(gj, null);
+    else cb(null, 'Gagal parse KML dalam zip');
+  }).catch(function(err) { cb(null, err.message); });
+}
+
+/** Parse shapefile dengan file apa pun yang tersedia (.shp saja, atau paket lengkap/sebagian) */
+function parseShpGroupFlexible(group, base, cb) {
+  if (typeof shp === 'undefined') { cb(null, 'Library shpjs tidak tersedia'); return; }
+
+  var sidecars = getShpGroupSidecars(group);
+  if (!sidecars.shp) {
+    cb(null, 'File .shp tidak ditemukan untuk ' + base);
+    return;
+  }
+
+  function tryZipParse() {
+    if (typeof JSZip === 'undefined') return Promise.reject(new Error('JSZip tidak tersedia'));
+    var zipBuilder = new JSZip();
+    return Promise.all(Object.keys(sidecars).map(function(ext) {
+      return readBlobAsArrayBuffer(sidecars[ext]).then(function(ab) {
+        zipBuilder.file(base + '.' + ext, ab);
+      });
+    })).then(function() {
+      return zipBuilder.generateAsync({ type: 'arraybuffer' });
+    }).then(function(ab) {
+      return shp(ab);
+    });
+  }
+
+  function tryManualParse() {
+    return Promise.all([
+      readBlobAsArrayBuffer(sidecars.shp),
+      sidecars.prj ? readBlobAsText(sidecars.prj) : Promise.resolve(null),
+      sidecars.dbf ? readBlobAsArrayBuffer(sidecars.dbf) : Promise.resolve(null),
+      sidecars.cpg ? readBlobAsText(sidecars.cpg) : Promise.resolve(null)
+    ]).then(function(results) {
+      var geometries = shp.parseShp(results[0], results[1] || undefined);
+      var properties = results[2] ? shp.parseDbf(results[2], results[3] || undefined) : null;
+      return shp.combine([geometries, properties]);
+    });
+  }
+
+  tryZipParse()
+    .then(function(gj) { cb(gj, null); })
+    .catch(function() {
+      tryManualParse()
+        .then(function(gj) { cb(gj, null); })
+        .catch(function(err) { cb(null, err.message || String(err)); });
+    });
+}
+
+
+function toggleSpatialPolygons() {
+  SPATIAL_ENABLED = document.getElementById('toggle-spatial').checked;
+  if (SPATIAL_ENABLED) scheduleSpatialPolygonLoad(50);
+  else {
+    if (SPATIAL_UPLOAD_LAYER && mapObj) { try { mapObj.removeLayer(SPATIAL_UPLOAD_LAYER); } catch(e) {} }
+    SPATIAL_UPLOAD_LAYER = null;
+    SPATIAL_RENDER_TOKEN = Date.now();
+  }
+  showToast('Polygon Spasial ' + (SPATIAL_ENABLED ? 'ditampilkan' : 'disembunyikan'));
+}
+
+function openSpatialModal() {
+  var m = document.getElementById('spatial-modal');
+  if (m) {
+    m.style.display = 'flex';
+    var searchEl = document.getElementById('sp-file-search');
+    if (searchEl) searchEl.value = '';
+    SPATIAL_LIST_QUERY = '';
+    fetchSpatialFileList();
+  }
+}
+function closeSpatialModal() {
+  var m = document.getElementById('spatial-modal');
+  if (m) m.style.display = 'none';
+}
+
+/* ── Handle Drop (supports folder drag via webkitGetAsEntry) ── */
+function handleSpatialDrop(event) {
+  event.preventDefault();
+  var dz = document.getElementById('spatial-dropzone');
+  if (dz) dz.classList.remove('active');
+  var items = event.dataTransfer.items;
+  if (items && items.length && items[0].webkitGetAsEntry) {
+    var entries = [];
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].kind === 'file') {
+        var entry = items[i].webkitGetAsEntry();
+        if (entry) entries.push(entry);
+      }
+    }
+    if (entries.length) {
+      collectSpatialEntryFiles(entries, function(files) {
+        if (files.length) handleSpatialFiles(files);
+        else showToast('Tidak ada file spasial yang valid dalam drop.');
+      });
+      return;
+    }
+  }
+  var files = event.dataTransfer.files ? Array.from(event.dataTransfer.files) : [];
+  if (files.length > 0) handleSpatialFiles(files);
+}
+
+function collectSpatialEntryFiles(entries, cb) {
+  var allFiles = [];
+  var pending = 0;
+  function tick() { if (pending <= 0) cb(allFiles); }
+
+  function readDir(dirEntry) {
+    pending++;
+    var reader = dirEntry.createReader();
+    var batch = [];
+    function readBatch() {
+      reader.readEntries(function(results) {
+        if (!results.length) {
+          var subPending = batch.length;
+          if (!subPending) { pending--; tick(); return; }
+          batch.forEach(function(entry) { walk(entry); });
+          return;
+        }
+        batch = batch.concat(Array.prototype.slice.call(results));
+        readBatch();
+      }, function() { pending--; tick(); });
+    }
+    readBatch();
+  }
+
+  function walk(entry) {
+    if (entry.isFile) {
+      pending++;
+      entry.file(function(f) { allFiles.push(f); pending--; tick(); }, function() { pending--; tick(); });
+    } else if (entry.isDirectory) {
+      readDir(entry);
+    }
+  }
+
+  entries.forEach(walk);
+  tick();
+}
+
+/* ── Handle Files (from input or drop) ── */
+function handleSpatialFiles(fileList) {
+  // Reset render layer to avoid stale artifacts on re-upload
+  if (SPATIAL_UPLOAD_LAYER && mapObj) { try { mapObj.removeLayer(SPATIAL_UPLOAD_LAYER); } catch(e) {} }
+  SPATIAL_UPLOAD_LAYER = null;
+  var files = Array.from(fileList);
+  if (!files.length) return;
+
+  // Collect all relevant spatial files
+  var toProcess = [];
+  var zipFiles = [];
+  var shpGroup = {}; // {baseName: {shp, dbf, prj, shx, ...}}
+
+  files.forEach(function(f) {
+    var nameLower = f.name.toLowerCase();
+    var ext = nameLower.split('.').pop();
+    if (nameLower.endsWith('.zip') || nameLower.endsWith('.kmz') || nameLower.endsWith('.rar')) {
+      zipFiles.push(f);
+    } else if (nameLower.endsWith('.geojson') || nameLower.endsWith('.json')) {
+      toProcess.push({type: 'geojson', file: f, name: f.name});
+    } else if (nameLower.endsWith('.kml')) {
+      toProcess.push({type: 'kml', file: f, name: f.name});
+    } else if (SHP_SIDECAR_EXTS.indexOf(ext) !== -1) {
+      var baseKey = getShpBaseName(f.name).toLowerCase();
+      if (!shpGroup[baseKey]) shpGroup[baseKey] = { baseName: getShpBaseName(f.name) };
+      shpGroup[baseKey][ext] = f;
+    }
+  });
+
+  var allJobs = [];
+  zipFiles.forEach(function(f) {
+    var nl = f.name.toLowerCase();
+    if (nl.endsWith('.kmz')) allJobs.push({type: 'kmz', file: f, name: f.name});
+    else if (nl.endsWith('.rar')) allJobs.push({type: 'rar', file: f, name: f.name});
+    else allJobs.push({type: 'zip', file: f, name: f.name});
+  });
+  Object.keys(shpGroup).forEach(function(baseKey) {
+    var grp = shpGroup[baseKey];
+    if (grp.shp) {
+      var displayBase = grp.baseName || baseKey;
+      allJobs.push({type: 'shp_group', group: grp, name: displayBase + '.shp', base: displayBase});
+    }
+  });
+  allJobs = allJobs.concat(toProcess);
+
+  if (!allJobs.length) { showToast('Format file tidak didukung.'); return; }
+
+  showSpatialProgress(0, 'Mempersiapkan ' + allJobs.length + ' file...');
+  var processed = 0;
+
+  function processNext(idx) {
+    if (idx >= allJobs.length) {
+      hideSpatialProgress();
+      fetchSpatialFileList();
+      return;
+    }
+    var job = allJobs[idx];
+    showSpatialProgress(Math.round(idx / allJobs.length * 100), 'Memproses: ' + job.name);
+    parseSpatialFile(job, function(geojson, err) {
+      processed++;
+      if (geojson) {
+        uploadSpatialToBackend(geojson, job.name, function() {
+          showSpatialProgress(Math.round((idx+1) / allJobs.length * 100), 'Berhasil: ' + job.name);
+          processNext(idx + 1);
+        });
+      } else {
+        showToast('Gagal parse: ' + job.name + (err ? ' — ' + err : ''));
+        processNext(idx + 1);
+      }
+    });
+  }
+  processNext(0);
+}
+
+/* ── Parse single file/group to GeoJSON ── */
+function parseSpatialFile(job, cb) {
+  try {
+    if (job.type === 'geojson') {
+      var fr = new FileReader();
+      fr.onload = function(e) {
+        try {
+          var parsed = JSON.parse(e.target.result);
+          var gj = normalizeGeoJSON(parsed);
+          if (gj) cb(gj, null);
+          else cb(null, 'Format JSON tidak dikenali sebagai GeoJSON');
+        } catch(err) { cb(null, err.message); }
+      };
+      fr.readAsText(job.file);
+
+    } else if (job.type === 'kml') {
+      var fr2 = new FileReader();
+      fr2.onload = function(e) {
+        try {
+          var kmlDoc = (new DOMParser()).parseFromString(e.target.result, 'text/xml');
+          var gj = (typeof toGeoJSON !== 'undefined') ? toGeoJSON.kml(kmlDoc) : null;
+          if (!gj) { cb(null, 'Library toGeoJSON tidak tersedia'); return; }
+          cb(gj, null);
+        } catch(err) { cb(null, err.message); }
+      };
+      fr2.readAsText(job.file);
+
+    } else if (job.type === 'zip') {
+      var fr3 = new FileReader();
+      fr3.onload = function(e) {
+        if (typeof shp === 'undefined') { cb(null, 'Library shpjs tidak tersedia'); return; }
+        shp(e.target.result).then(function(gj) { cb(gj, null); }).catch(function() {
+          JSZip.loadAsync(e.target.result).then(function(zip) {
+            var jsonFile = null;
+            var kmlFile = null;
+            zip.forEach(function(path, file) {
+              var pl = path.toLowerCase();
+              if (!jsonFile && (pl.endsWith('.geojson') || pl.endsWith('.json'))) jsonFile = file;
+              if (!kmlFile && pl.endsWith('.kml')) kmlFile = file;
+            });
+            if (jsonFile) {
+              jsonFile.async('string').then(function(str) {
+                try {
+                  var gj = normalizeGeoJSON(JSON.parse(str));
+                  if (gj) cb(gj, null);
+                  else if (kmlFile) parseKmlFromZipEntry(kmlFile, cb);
+                  else cb(null, 'Format JSON dalam zip tidak valid');
+                } catch(err) { cb(null, err.message); }
+              });
+              return;
+            }
+            if (kmlFile) { parseKmlFromZipEntry(kmlFile, cb); return; }
+            cb(null, 'Zip tidak berisi SHP, GeoJSON, atau KML');
+          }).catch(function(e2) { cb(null, e2.message); });
+        });
+      };
+      fr3.readAsArrayBuffer(job.file);
+
+    } else if (job.type === 'kmz') {
+      var fr4 = new FileReader();
+      fr4.onload = function(e) {
+        JSZip.loadAsync(e.target.result).then(function(zip) {
+          var kmlFile = null;
+          zip.forEach(function(path, file) { if (path.toLowerCase().endsWith('.kml')) kmlFile = file; });
+          if (!kmlFile) { cb(null, 'KMZ tidak berisi file KML'); return; }
+          kmlFile.async('string').then(function(kmlStr) {
+            var kmlDoc = (new DOMParser()).parseFromString(kmlStr, 'text/xml');
+            var gj = (typeof toGeoJSON !== 'undefined') ? toGeoJSON.kml(kmlDoc) : null;
+            if (gj) cb(gj, null); else cb(null, 'Gagal parse KML dalam KMZ');
+          });
+        }).catch(function(e2) { cb(null, e2.message); });
+      };
+      fr4.readAsArrayBuffer(job.file);
+
+    } else if (job.type === 'rar') {
+      cb(null, 'Format .rar belum didukung langsung. Ekstrak terlebih dahulu ke .zip atau upload folder shapefile.');
+
+    } else if (job.type === 'shp_group') {
+      parseShpGroupFlexible(job.group, job.base, cb);
+
+    } else { cb(null, 'Tipe tidak dikenal'); }
+  } catch(e) { cb(null, e.message); }
+}
+
+/* ── Upload GeoJSON ke Backend GAS ── */
+function uploadSpatialToBackend(geojson, filename, done) {
+  // Ensure we remove any existing cached polygons with same filename to force re-fetch.
+  // (Drive may return cached/forbidden responses for old IDs.)
+
+  if (!GAS_WEB_APP_URL || GAS_WEB_APP_URL.indexOf('script.google.com') === -1) {
+    showToast('Backend GAS belum dikonfigurasi!'); if (done) done(); return;
+  }
+  var geoStr = JSON.stringify(geojson);
+  var cdkTag = FILTER.cdk && FILTER.cdk.length ? FILTER.cdk.join(',') : '';
+  var bbox = computeGeoJSONBBox(geojson);
+
+  // Paksa ekstensi menjadi .geojson supaya backend menyimpan file dengan tipe yang benar,
+  // dan agar getSpatialFiles bisa membaca/parse tanpa ambiguitas.
+  var safeBase = String(filename || 'spasial');
+  safeBase = safeBase.replace(/\.(shp|zip|rar|kmz|kml|json|geojson)$/i, '');
+  var geojsonFilename = safeBase + '.geojson';
+
+  fetch(GAS_WEB_APP_URL, {
+    method: 'POST',
+    body: JSON.stringify({
+      action: 'uploadSpatial',
+      geojson: geoStr,
+      filename: geojsonFilename,
+      cdk_tag: cdkTag,
+      bbox_w: bbox ? bbox.west : '',
+      bbox_s: bbox ? bbox.south : '',
+      bbox_e: bbox ? bbox.east : '',
+      bbox_n: bbox ? bbox.north : ''
+    })
+  }).then(function(r) { return r.json(); })
+  .then(function(res) {
+    if (res.success) {
+      // Cache locally
+      var entry = {
+        fileId: res.fileId,
+        filename: res.filename,
+        url: res.url,
+        uploaded: res.uploaded,
+        sizeKB: res.sizeKB,
+        cdkTag: cdkTag,
+        geojson: geojson,
+        bbox: bbox
+      };
+      SPATIAL_FILES_CACHE.push(entry);
+      SPATIAL_GEOJSON_MEM[res.fileId] = geojson;
+      if (bbox) saveSpatialBBoxToLS(res.fileId, bbox);
+      if (SPATIAL_ENABLED) scheduleSpatialPolygonLoad(50);
+      showToast('✓ Tersimpan: ' + filename);
+    } else { showToast('Gagal simpan: ' + (res.error || 'Error')); }
+    if (done) done();
+  }).catch(function(err) { showToast('Error upload: ' + err.message); if (done) done(); });
+}
+
+/* ── Fetch daftar file spasial dari backend ── */
+function computeGeoJSONBBox(gj) {
+  if (!gj) return null;
+  try {
+    var bb = turf.bbox(gj);
+    return { west: bb[0], south: bb[1], east: bb[2], north: bb[3] };
+  } catch (e) { return null; }
+}
+
+function normalizeSpatialBBox(b) {
+  if (!b) return null;
+  if (typeof b.west === 'number') return b;
+  if (Array.isArray(b) && b.length >= 4) {
+    return { west: b[0], south: b[1], east: b[2], north: b[3] };
+  }
+  return null;
+}
+
+function getSpatialBBoxFromLS(fileId) {
+  try {
+    var raw = localStorage.getItem('sp_bbox_' + fileId);
+    return raw ? normalizeSpatialBBox(JSON.parse(raw)) : null;
+  } catch (e) { return null; }
+}
+
+function saveSpatialBBoxToLS(fileId, bbox) {
+  try { localStorage.setItem('sp_bbox_' + fileId, JSON.stringify(bbox)); } catch (e) {}
+}
+
+function bboxIntersectsMap(bbox, mapBounds) {
+  if (!bbox || !mapBounds) return true;
+  var sw = mapBounds.getSouthWest();
+  var ne = mapBounds.getNorthEast();
+  return !(bbox.east < sw.lng || bbox.west > ne.lng || bbox.north < sw.lat || bbox.south > ne.lat);
+}
+
+function getSpatialFileBBox(fileObj) {
+  return normalizeSpatialBBox(fileObj.bbox) || fileObj._bbox || getSpatialBBoxFromLS(fileObj.fileId);
+}
+
+function scheduleSpatialPolygonLoad(delay) {
+  clearTimeout(SPATIAL_LOAD_QUEUE);
+  SPATIAL_LOAD_QUEUE = setTimeout(function() {
+    if (SPATIAL_ENABLED) renderSpatialPolygons();
+  }, delay || 200);
+}
+
+function bindSpatialMapEvents() {
+  if (SPATIAL_MAP_MOVE_BOUND || !mapObj) return;
+  SPATIAL_MAP_MOVE_BOUND = true;
+  var debounceTimer = null;
+  mapObj.on('moveend zoomend', function() {
+    if (!SPATIAL_ENABLED) return;
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(function() { renderSpatialPolygons(); }, 450);
+  });
+}
+
+function fetchSpatialGeoJSONFromBackend(fileId) {
+  var fileObj = SPATIAL_FILES_CACHE.find(function(c) { return c.fileId === fileId; });
+  return fetch(GAS_WEB_APP_URL + '?action=getSpatialGeoJSON&fileId=' + encodeURIComponent(fileId))
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+      if (res.success && res.geojson) return res.geojson;
+      throw new Error(res.error || 'Gagal memuat GeoJSON');
+    })
+    .catch(function() {
+      if (!fileObj || !fileObj.url) throw new Error('Gagal memuat GeoJSON');
+      return fetch(fileObj.url, { method: 'GET' })
+        .then(function(r) { return r.text(); })
+        .then(function(txt) {
+          var gj = JSON.parse(txt);
+          if (!gj) throw new Error('Format GeoJSON tidak valid');
+          return gj;
+        });
+    });
+}
+
+function loadSpatialGeoJSONForFile(fileObj) {
+  if (fileObj.geojson) return Promise.resolve(fileObj.geojson);
+  if (SPATIAL_GEOJSON_MEM[fileObj.fileId]) {
+    fileObj.geojson = SPATIAL_GEOJSON_MEM[fileObj.fileId];
+    return Promise.resolve(fileObj.geojson);
+  }
+  return fetchSpatialGeoJSONFromBackend(fileObj.fileId).then(function(gj) {
+    fileObj.geojson = gj;
+    SPATIAL_GEOJSON_MEM[fileObj.fileId] = gj;
+    fileObj._bbox = computeGeoJSONBBox(gj);
+    if (fileObj._bbox) saveSpatialBBoxToLS(fileObj.fileId, fileObj._bbox);
+    return gj;
+  });
+}
+
+function passesCdkSpatialFilter(gj, activeCDKs, activePJLPoints) {
+  if (!activeCDKs.length) return true;
+  if (!activePJLPoints.length) return false;
+  if (!gj || !gj.features || !gj.features.length) return false;
+  try {
+    var fileBbox = turf.bbox(gj);
+    var anyNear = activePJLPoints.some(function(pt) {
+      return pt[1] >= fileBbox[0] && pt[1] <= fileBbox[2] && pt[0] >= fileBbox[1] && pt[0] <= fileBbox[3];
+    });
+    if (!anyNear) return false;
+    for (var i = 0; i < gj.features.length; i++) {
+      var geom = gj.features[i].geometry;
+      if (!geom) continue;
+      var turfFeat = turf.feature(geom);
+      var fb = turf.bbox(turfFeat);
+      for (var j = 0; j < activePJLPoints.length; j++) {
+        var pt = activePJLPoints[j];
+        if (pt[1] < fb[0] || pt[1] > fb[2] || pt[0] < fb[1] || pt[0] > fb[3]) continue;
+        try {
+          if (turf.booleanPointInPolygon(turf.point([pt[1], pt[0]]), turfFeat)) return true;
+        } catch (e) { return true; }
+      }
+    }
+    return false;
+  } catch (e) { return true; }
+}
+
+function getSpatialFilteredFiles() {
+  var q = (SPATIAL_LIST_QUERY || '').trim().toLowerCase();
+  if (!q) return SPATIAL_LIST_ALL;
+  return SPATIAL_LIST_ALL.filter(function(f) {
+    return (f.filename || '').toLowerCase().indexOf(q) !== -1 ||
+           (f.cdkTag || '').toLowerCase().indexOf(q) !== -1;
+  });
+}
+
+function updateSpatialFileCount() {
+  var countEl = document.getElementById('sp-file-count');
+  if (!countEl) return;
+  var filtered = getSpatialFilteredFiles();
+  var total = SPATIAL_LIST_ALL.length;
+  countEl.textContent = filtered.length === total ? total + ' file' : filtered.length + ' / ' + total + ' file';
+}
+
+function spatialFileListSearch(val) {
+  SPATIAL_LIST_QUERY = val || '';
+  SPATIAL_LIST_PAGE = 0;
+  renderSpatialFileListPage();
+  updateSpatialFileCount();
+}
+
+function fetchSpatialFileList() {
+  var listEl = document.getElementById('spatial-file-list');
+  var countEl = document.getElementById('sp-file-count');
+  if (!GAS_WEB_APP_URL || GAS_WEB_APP_URL.indexOf('script.google.com') === -1) {
+    if (listEl) listEl.innerHTML = '<div class="sp-file-list-error">Backend GAS belum dikonfigurasi.</div>';
+    return;
+  }
+  fetch(GAS_WEB_APP_URL + '?action=getSpatialFiles')
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+      if (!res.success) { if (listEl) listEl.innerHTML = '<div class="sp-file-list-error">Gagal memuat: ' + (res.error||'') + '</div>'; return; }
+      var files = res.files || [];
+      files.forEach(function(f) {
+        var existing = SPATIAL_FILES_CACHE.find(function(c) { return c.fileId === f.fileId; });
+        if (existing && existing.geojson) f.geojson = existing.geojson;
+        if (existing && existing._bbox) f._bbox = existing._bbox;
+        if (!f.bbox && !f._bbox) {
+          var lsBbox = getSpatialBBoxFromLS(f.fileId);
+          if (lsBbox) f.bbox = lsBbox;
+        }
+        f.bbox = normalizeSpatialBBox(f.bbox);
+      });
+      SPATIAL_FILES_CACHE = files;
+      renderSpatialFileList(files);
+      updateSpatialFileCount();
+      scheduleSpatialPolygonLoad(150);
+    })
+    .catch(function(err) { if (listEl) listEl.innerHTML = '<div class="sp-file-list-error">Gagal terhubung ke backend.</div>'; });
+}
+
+/* ── Render daftar file di modal (scroll + pagination) ── */
+function renderSpatialFileList(files) {
+  SPATIAL_LIST_ALL = files || [];
+  SPATIAL_LIST_PAGE = 0;
+  renderSpatialFileListPage();
+  updateSpatialFileCount();
+}
+
+function spatialListGoPage(page) {
+  var maxPage = Math.max(0, Math.ceil(SPATIAL_LIST_ALL.length / SPATIAL_LIST_PAGE_SIZE) - 1);
+  SPATIAL_LIST_PAGE = Math.max(0, Math.min(page, maxPage));
+  renderSpatialFileListPage();
+}
+
+function renderSpatialFileListPage() {
+  var listEl = document.getElementById('spatial-file-list');
+  if (!listEl) return;
+  var files = getSpatialFilteredFiles();
+  if (!files.length) {
+    listEl.innerHTML = SPATIAL_LIST_QUERY
+      ? '<div class="sp-file-list-empty">Tidak ada file yang cocok dengan pencarian.</div>'
+      : '<div class="sp-file-list-empty">Belum ada polygon yang diupload.</div>';
+    return;
+  }
+  var totalPages = Math.ceil(files.length / SPATIAL_LIST_PAGE_SIZE);
+  if (SPATIAL_LIST_PAGE > totalPages - 1) SPATIAL_LIST_PAGE = Math.max(0, totalPages - 1);
+  var start = SPATIAL_LIST_PAGE * SPATIAL_LIST_PAGE_SIZE;
+  var pageFiles = files.slice(start, start + SPATIAL_LIST_PAGE_SIZE);
+  var icons = {geojson:'🗺️', json:'🗺️', kml:'📍', kmz:'📍', shp:'🟫', zip:'📦'};
+  var html = pageFiles.map(function(f) {
+    var ext = f.filename.split('.').pop().toLowerCase();
+    var icon = icons[ext] || '📄';
+    var cdkBadge = f.cdkTag ? '<span class="sp-upload-badge">' + f.cdkTag + '</span>' : '';
+    return '<div class="sp-file-item" id="sp-item-' + f.fileId + '">' +
+      '<div class="sp-file-icon">' + icon + '</div>' +
+      '<div class="sp-file-info">' +
+        '<div class="sp-file-name">' + f.filename + cdkBadge + '</div>' +
+        '<div class="sp-file-meta">Diunggah: ' + f.uploaded + ' &bull; ' + (f.sizeKB||'?') + ' KB</div>' +
+      '</div>' +
+      '<div class="sp-file-actions">' +
+        '<button class="sp-btn-view" onclick="zoomToSpatialFile(\'' + f.fileId + '\')">&#128269; Lihat</button>' +
+        '<button class="sp-btn-del" onclick="deleteSpatialFile(\'' + f.fileId + '\', \'' + f.filename.replace(/'/g,"\\'") + '\')">&#128465; Hapus</button>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+  if (totalPages > 1) {
+    html += '<div class="sp-file-pagination">' +
+      '<button type="button" class="sp-page-btn" onclick="spatialListGoPage(' + (SPATIAL_LIST_PAGE - 1) + ')" ' + (SPATIAL_LIST_PAGE <= 0 ? 'disabled' : '') + '>&#8249; Sebelumnya</button>' +
+      '<span class="sp-page-info">Hal ' + (SPATIAL_LIST_PAGE + 1) + ' / ' + totalPages + ' (' + files.length + ' file)</span>' +
+      '<button type="button" class="sp-page-btn" onclick="spatialListGoPage(' + (SPATIAL_LIST_PAGE + 1) + ')" ' + (SPATIAL_LIST_PAGE >= totalPages - 1 ? 'disabled' : '') + '>Berikutnya &#8250;</button>' +
+      '</div>';
+  }
+  listEl.innerHTML = html;
+}
+
+/* ── Render polygon ke peta dengan filter CDK (lazy + viewport) ── */
+function renderSpatialPolygons() {
+  if (SPATIAL_UPLOAD_LAYER) { try { mapObj.removeLayer(SPATIAL_UPLOAD_LAYER); } catch(e) {} }
+  SPATIAL_UPLOAD_LAYER = null;
+  var fetchToken = Date.now();
+  SPATIAL_RENDER_TOKEN = fetchToken;
+
+  if (!SPATIAL_ENABLED || !mapObj) return;
+  bindSpatialMapEvents();
+  SPATIAL_UPLOAD_LAYER = L.layerGroup().addTo(mapObj);
+
+  var mapBounds = mapObj.getBounds();
+  var activeCDKs = FILTER.cdk && FILTER.cdk.length ? FILTER.cdk.map(function(c){ return c.toLowerCase(); }) : [];
+  var activePJLPoints = [];
+  if (activeCDKs.length > 0) {
+    DATA.pjl.forEach(function(r) {
+      if (!r._lat || !r._lng) return;
+      var cdk = String(r['Unit Kerja'] || r['CDK'] || '').toLowerCase();
+      var match = activeCDKs.some(function(f) { return cdk.indexOf(f) !== -1; });
+      if (match) activePJLPoints.push([r._lat, r._lng]);
+    });
+  }
+
+  var candidates = SPATIAL_FILES_CACHE.filter(function(f) {
+    var bb = getSpatialFileBBox(f);
+    if (bb) return bboxIntersectsMap(bb, mapBounds);
+    return true;
+  });
+
+  var idx = 0;
+  function processBatch() {
+    if (SPATIAL_RENDER_TOKEN !== fetchToken) return;
+    var batch = candidates.slice(idx, idx + SPATIAL_FETCH_CONCURRENCY);
+    if (!batch.length) return;
+    idx += SPATIAL_FETCH_CONCURRENCY;
+    Promise.all(batch.map(function(f) {
+      return loadSpatialGeoJSONForFile(f).then(function(gj) {
+        if (SPATIAL_RENDER_TOKEN !== fetchToken || !SPATIAL_UPLOAD_LAYER) return;
+        if (!passesCdkSpatialFilter(gj, activeCDKs, activePJLPoints)) return;
+        var bb = getSpatialFileBBox(f) || computeGeoJSONBBox(gj);
+        f._bbox = bb;
+        if (bb) {
+          f.bbox = bb;
+          saveSpatialBBoxToLS(f.fileId, bb);
+        }
+        if (bb && !bboxIntersectsMap(bb, mapBounds)) return;
+        addGeoJSONToSpatialLayer(gj, f, activeCDKs, activePJLPoints);
+      }).catch(function() {});
+    })).then(function() {
+      if (idx < candidates.length && SPATIAL_RENDER_TOKEN === fetchToken) {
+        setTimeout(processBatch, 16);
+      }
+    });
+  }
+  processBatch();
+}
+
+/* ── Add one GeoJSON to the spatial layer with CDK spatial filter ── */
+function addGeoJSONToSpatialLayer(gj, fileInfo, activeCDKs, activePJLPoints) {
+  if (!gj || !gj.features || !SPATIAL_UPLOAD_LAYER) return;
+  var useFeatureFilter = activeCDKs.length > 0 && activePJLPoints.length > 0;
+  try {
+    L.geoJSON(gj, {
+      style: function() {
+        return { color: '#e53935', weight: 2, fillColor: '#ef5350', fillOpacity: 0.3, dashArray: null };
+      },
+      filter: useFeatureFilter ? function(feature) {
+        var geom = feature.geometry;
+        if (!geom) return false;
+        try {
+          var turfFeat = turf.feature(geom);
+          var fb = turf.bbox(turfFeat);
+          return activePJLPoints.some(function(pt) {
+            if (pt[1] < fb[0] || pt[1] > fb[2] || pt[0] < fb[1] || pt[0] > fb[3]) return false;
+            try { return turf.booleanPointInPolygon(turf.point([pt[1], pt[0]]), turfFeat); }
+            catch (e) {
+              return pt[1] >= fb[0] && pt[1] <= fb[2] && pt[0] >= fb[1] && pt[0] <= fb[3];
+            }
+          });
+        } catch (e) { return true; }
+      } : undefined,
+      onEachFeature: function(feature, layer) {
+        var props = feature.properties || {};
+        var keys = Object.keys(props).filter(function(k) { return props[k] != null && props[k] !== ''; });
+        if (!keys.length) { layer.bindPopup('<b>' + fileInfo.filename + '</b>'); return; }
+        var rows = keys.slice(0, 20).map(function(k) {
+          return '<tr><td style="padding:2px 8px 2px 0; font-weight:600; color:var(--primary,#43a047); white-space:nowrap;">' + k + '</td><td style="padding:2px 0;">' + props[k] + '</td></tr>';
+        }).join('');
+        var html = '<div style="font-size:11px; font-family:Inter; max-height:220px; overflow-y:auto;">' +
+          '<b style="font-size:12px; color:#e53935; display:block; margin-bottom:6px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:4px;">📄 ' + fileInfo.filename + '</b>' +
+          '<table>' + rows + '</table></div>';
+        layer.bindPopup(html);
+      }
+    }).addTo(SPATIAL_UPLOAD_LAYER);
+  } catch(e) {}
+}
+
+/* ── Zoom ke polygon tertentu ── */
+function zoomToSpatialFile(fileId) {
+  var f = SPATIAL_FILES_CACHE.find(function(c) { return c.fileId === fileId; });
+  if (!f) { showToast('File tidak ditemukan.'); return; }
+  loadSpatialGeoJSONForFile(f).then(function(gj) {
+    try {
+      var gjLayer = L.geoJSON(gj);
+      if (gjLayer) { mapObj.fitBounds(gjLayer.getBounds(), {padding: [40,40]}); closeSpatialModal(); }
+    } catch(e) { showToast('Gagal zoom: ' + e.message); }
+  }).catch(function(err) { showToast('Gagal memuat file: ' + err.message); });
+}
+
+/* ── Hapus polygon dari Drive, Sheet, dan peta ── */
+function deleteSpatialFile(fileId, filename) {
+  if (!confirm('Yakin ingin menghapus polygon "' + filename + '"?\nFile akan dihapus dari Google Drive dan Database secara permanen.')) return;
+  if (!GAS_WEB_APP_URL || GAS_WEB_APP_URL.indexOf('script.google.com') === -1) { showToast('Backend GAS belum dikonfigurasi!'); return; }
+  var itemEl = document.getElementById('sp-item-' + fileId);
+  if (itemEl) { itemEl.style.opacity = '0.4'; itemEl.style.pointerEvents = 'none'; }
+  fetch(GAS_WEB_APP_URL, {
+    method: 'POST',
+    body: JSON.stringify({ action: 'deleteSpatial', fileId: fileId })
+  }).then(function(r) { return r.json(); })
+  .then(function(res) {
+    if (res.success) {
+      SPATIAL_FILES_CACHE = SPATIAL_FILES_CACHE.filter(function(c) { return c.fileId !== fileId; });
+      delete SPATIAL_GEOJSON_MEM[fileId];
+      try { localStorage.removeItem('sp_bbox_' + fileId); } catch (e) {}
+      renderSpatialPolygons();
+      fetchSpatialFileList();
+      showToast('✓ Polygon "' + filename + '" berhasil dihapus.');
+    } else { showToast('Gagal hapus: ' + (res.error || 'Error backend')); if (itemEl) { itemEl.style.opacity = '1'; itemEl.style.pointerEvents = ''; } }
+  }).catch(function(err) { showToast('Error: ' + err.message); if (itemEl) { itemEl.style.opacity = '1'; itemEl.style.pointerEvents = ''; } });
+}
+
+/* ── Progress helpers ── */
+function showSpatialProgress(pct, text) {
+  var pw = document.getElementById('spatial-progress-wrap');
+  var pb = document.getElementById('sp-progress-bar');
+  var pt = document.getElementById('sp-progress-text');
+  if (pw) pw.style.display = 'block';
+  if (pb) pb.style.width = pct + '%';
+  if (pt) pt.textContent = text || '';
+}
+function hideSpatialProgress() {
+  var pw = document.getElementById('spatial-progress-wrap');
+  setTimeout(function() { if (pw) pw.style.display = 'none'; }, 1500);
+}
+
+/* ── Auto-fetch saat halaman selesai dimuat ── */
+function initSpatialSystem() {
+  if (GAS_WEB_APP_URL && GAS_WEB_APP_URL.indexOf('script.google.com') !== -1) {
+    fetch(GAS_WEB_APP_URL + '?action=getSpatialFiles')
+      .then(function(r) { return r.json(); })
+      .then(function(res) {
+        if (res.success && res.files) {
+          res.files.forEach(function(f) {
+            f.bbox = normalizeSpatialBBox(f.bbox) || getSpatialBBoxFromLS(f.fileId);
+          });
+          SPATIAL_FILES_CACHE = res.files;
+          if (res.files.length) {
+            var toggle = document.getElementById('toggle-spatial');
+            if (toggle && !toggle.checked) { toggle.checked = true; SPATIAL_ENABLED = true; }
+          }
+          bindSpatialMapEvents();
+          scheduleSpatialPolygonLoad(800);
+        }
+      }).catch(function() {});
+  }
+}
+
+
 /**
  * Generator Poligon Organik 2 Ha
  * Luas 2 Ha = 20.000 meter persegi.
@@ -178,7 +996,24 @@ function closeSourceModal() { document.getElementById('source-modal').classList.
 function closeGlobalSearch() { document.getElementById('global-search-results').classList.remove('open'); }
 function focusGlobalSearch() { var el = document.getElementById('global-search-input'); if(el) el.focus(); }
 function coordText(y, x) { return y && x ? y + ', ' + x : 'Data tidak tersedia'; }
-function mapsLink(lat, lng) { return '<a href="https://www.google.com/maps?q='+lat+','+lng+'" target="_blank" class="btn-icon" style="justify-content:center; padding:8px;">Buka di Google Maps</a>'; }
+function mapsLink(lat, lng) { return '<a href="https://www.google.com/maps?q='+lat+','+lng+'" target="_blank" class="drawer-maps-link">Buka di Google Maps</a>'; }
+
+function buildMarkerTipPanel(title, rows, titleColor) {
+  var color = titleColor || '#333';
+  var html = '<div class="marker-tip-panel">';
+  if (title) html += '<div class="marker-tip-title" style="color:' + color + '">' + title + '</div>';
+  (rows || []).forEach(function(row) {
+    var v = row[1];
+    if (v == null || v === '') v = '-';
+    html += '<div class="marker-tip-row"><span class="marker-tip-lbl">' + row[0] + '</span><span class="marker-tip-val">' + v + '</span></div>';
+  });
+  return html + '</div>';
+}
+
+function buildPjlPopupRow(label, value) {
+  var v = value == null || value === '' ? '-' : value;
+  return '<div class="pjl-popup-row"><span class="pjl-popup-lbl">' + label + '</span><span class="pjl-popup-val">' + v + '</span></div>';
+}
 
 /* Drawer */
 function openDrawer(type, r) {
@@ -211,11 +1046,12 @@ function openDrawer(type, r) {
       ['Pemilik Lahan', r['Pemangku Penanaman/ Pemilik Lahan'] || r['Pemangku Penanaman/Pemilik Lahan'] || r['Pemilik Lahan']],
       ['Wilayah Binaan Kuncen', r['Wilayah Binaan Kuncen']],
       ['Wilayah Binaan JL', r['Wilayah Binaan Jaga Leuweung']],
-      ['Penyuluh', r['Penyuluh Kehutanan']],
+      ['Petugas Lapangan', r['Penyuluh Kehutanan']],
       ['PEH', r['Pengendali Ekosistem Hutan (PEH)'] || r['PEH']],
       ['Link BA', linkOrNA(r['Upload Link BA Jaga Leuweung (Validasi, surat pengantar desa, dll.)'] || r['Upload Link BA Jaga Leuweung'] || r['Link BA'])],
       ['Link SK', linkOrNA(r['Upload Link SK Penetapan / Penerima Manfaat Jaga Leuweung'] || r['Upload Link SK Penetapan/Penerima Manfaat'] || r['Link SK'])]
     ];
+    var _pjlPhotoRow = r;
   } else if (type === 'per' || type === 'persemaian') {
     config = [
       ['Unit Kerja', r['Unit Kerja']],
@@ -272,23 +1108,34 @@ function openDrawer(type, r) {
     if (String(v).indexOf('<a') === -1 && item[0].toLowerCase().indexOf('link') > -1 && String(v).indexOf('http') > -1) {
       v = '<a href="'+v+'" target="_blank">Buka Tautan</a>';
     }
-    html += '<div class="detail-item"><div class="detail-lbl">'+item[0]+'</div><div class="detail-val">'+v+'</div></div>';
+    html += '<div class="detail-item"><span class="detail-lbl">'+item[0]+'</span><span class="detail-val">'+v+'</span></div>';
   });
-  if (cy && cx) html += '<div style="margin-top:15px">' + mapsLink(cy, cx) + '</div>';
+  if (cy && cx) html += '<div class="drawer-maps-wrap">' + mapsLink(cy, cx) + '</div>';
 
-  // Inject photo gallery for Jumat Menanam
+  // Inject photo gallery for Jumat Menanam & PJL
   if ((type === 'jum' || type === 'jumat') && typeof _jumPhotoRow !== 'undefined') {
-    html += buildJumPhotoSection(_jumPhotoRow);
+    html += buildPhotoSection(_jumPhotoRow, 'juna');
+  }
+  if (type === 'pjl' && typeof _pjlPhotoRow !== 'undefined') {
+    html += buildPhotoSection(_pjlPhotoRow, 'pjl');
   }
 
   if (c) c.innerHTML = html;
   
   // Init gallery state after DOM injection
   if ((type === 'jum' || type === 'jumat') && typeof _jumPhotoRow !== 'undefined') {
-    JUM_GALLERY.row = _jumPhotoRow;
-    JUM_GALLERY.year = getCurrentPhotoYear(_jumPhotoRow);
-    JUM_GALLERY.idx = 0;
-    refreshGalleryForYear(JUM_GALLERY.year);
+    PHOTO_GALLERY.context = 'juna';
+    PHOTO_GALLERY.row = _jumPhotoRow;
+    PHOTO_GALLERY.year = getCurrentPhotoYear(_jumPhotoRow, 'juna');
+    PHOTO_GALLERY.idx = 0;
+    refreshGalleryForYear(PHOTO_GALLERY.year);
+  }
+  if (type === 'pjl' && typeof _pjlPhotoRow !== 'undefined') {
+    PHOTO_GALLERY.context = 'pjl';
+    PHOTO_GALLERY.row = _pjlPhotoRow;
+    PHOTO_GALLERY.year = getCurrentPhotoYear(_pjlPhotoRow, 'pjl');
+    PHOTO_GALLERY.idx = 0;
+    refreshGalleryForYear(PHOTO_GALLERY.year);
   }
   
   if (dr) dr.classList.add('open');
@@ -622,6 +1469,8 @@ function onLoaded() {
         setTimeout(function() { overlay.style.display = 'none'; }, 500);
       }
       showToast('Data berhasil dimuat sepenuhnya');
+      // Inisialisasi sistem polygon spasial setelah semua data siap
+      if (typeof initSpatialSystem === 'function') initSpatialSystem();
     }, 1000);
   }
 }
@@ -678,7 +1527,7 @@ function fillDropdown() {
   pop('f_cdk', S.cdk, 'Semua CDK'); pop('f_pegawai', S.unit, 'Semua Unit'); pop('f_kab', S.kab, 'Semua Kab/Kota');
   pop('f_status', S.status, 'Semua Status'); pop('f_kawasan', S.kawasan, 'Semua Kawasan');
   pop('f_jabatan', S.jabatan, 'Semua Jabatan'); pop('f_nama_pegawai', S.nama_pegawai, 'Semua Nama Pegawai');
-  pop('f_penyuluh', S.penyuluh, 'Semua Penyuluh'); pop('f_kategori_lojuna', S.kategori_lojuna, 'Semua Kategori');
+  pop('f_penyuluh', S.penyuluh, 'Semua Petugas Lapangan'); pop('f_kategori_lojuna', S.kategori_lojuna, 'Semua Kategori');
 }
 
 var GLOBAL_POLY_COORDS = {};
@@ -732,8 +1581,8 @@ function doRender() {
           var hoverHTML = name;
           if (type === 'jum') {
             // Build rich thumbnail tooltip for JUM markers
-            var thumbYear = getCurrentPhotoYear(r);
-            var thumbMerged = getMergedData(r, thumbYear);
+            var thumbYear = getCurrentPhotoYear(r, 'juna');
+            var thumbMerged = getMergedData(r, thumbYear, 'juna');
             var thumbUrl = thumbMerged.photos.length > 0 ? thumbMerged.photos[0] : null;
             var desa = r['Desa/Kelurahan'] || r['Desa/ Kelurahan'] || r['Desa'] || r['DESA'] || '-';
             var kat2 = String(r['Kategori Lojuna'] || '').trim() || 'Lokasi Juna';
@@ -750,7 +1599,7 @@ function doRender() {
               hoverHTML = '<div class="jum-tooltip-thumb">' +
                 '<img src="' + thumbUrl + '" alt="foto" onerror="handleDriveImageError(this);" />' +
                 '<div class="jum-tooltip-thumb-name">' + name + '</div>' +
-                '<div class="jum-tooltip-thumb-year">&#128247; Foto ' + thumbYear + ' &bull; ' + kat2 + '</div>' +
+                '<div class="jum-tooltip-thumb-year">&#128247; Foto ' + thumbYear + ' &bull; ' + (thumbMerged.dates[0] ? formatDateIndo(thumbMerged.dates[0]) : kat2) + '</div>' +
                 infoHtml +
                 '</div>';
             } else {
@@ -760,20 +1609,62 @@ function doRender() {
                 infoHtml +
                 '</div>';
             }
+          } else if (type === 'pjl') {
+            var pjlYear = getCurrentPhotoYear(r, 'pjl');
+            var pjlMerged = getMergedData(r, pjlYear, 'pjl');
+            var pjlThumb = pjlMerged.photos.length > 0 ? pjlMerged.photos[0] : null;
+            var pjlCdk = r['Unit Kerja'] || '-';
+            var pjlAlamat = r['Alamat'] || '-';
+            var cPen = coordText(toFloat(r['Titik Koordinat Penanaman (Y)']), toFloat(r['Titik Koordinat Penanaman (X)']));
+            var cPer = coordText(toFloat(r['Titik Koordinat Persemaian (Y)']), toFloat(r['Titik Koordinat Persemaian (X)']));
+            var pjlInfo = '<div class="pjl-tooltip-info">' +
+              '<div class="pjl-tooltip-row"><span class="marker-tip-lbl">CDK</span><span class="marker-tip-val">' + pjlCdk + '</span></div>' +
+              '<div class="pjl-tooltip-row"><span class="marker-tip-lbl">Alamat</span><span class="marker-tip-val">' + pjlAlamat + '</span></div>' +
+              '<div class="pjl-tooltip-row"><span class="marker-tip-lbl">Koord. Penanaman</span><span class="marker-tip-val">' + cPen + '</span></div>' +
+              '<div class="pjl-tooltip-row"><span class="marker-tip-lbl">Koord. Persemaian</span><span class="marker-tip-val">' + cPer + '</span></div>' +
+              '</div>';
+            if (pjlThumb) {
+              hoverHTML = '<div class="jum-tooltip-thumb pjl-tooltip-thumb">' +
+                '<img src="' + pjlThumb + '" alt="foto PJL" onerror="handleDriveImageError(this);" />' +
+                '<div class="jum-tooltip-thumb-name">' + name + '</div>' +
+                '<div class="jum-tooltip-thumb-year">&#128247; ' + (pjlMerged.dates[0] ? formatDateIndo(pjlMerged.dates[0]) : 'Foto ' + pjlYear) + '</div>' +
+                pjlInfo +
+                '</div>';
+            } else {
+              hoverHTML = '<div class="jum-tooltip-no-img">' +
+                '<div style="font-weight:700;font-size:11px;margin-bottom:3px;">' + name + '</div>' +
+                '<div style="font-size:10px;color:#2e7d32;font-weight:600;">Petugas Jaga Leuweung</div>' +
+                pjlInfo +
+                '</div>';
+            }
           } else if (type === 'per') {
-            var kec = r['Kecamatan'] || '-';
-            var desa = r['Desa/ Kelurahan'] || r['Desa/Kelurahan'] || r['Desa'] || '-';
-            var blok = r['Blok'] || '-';
-            var namaPersonil = r['Nama Personil Jaga leuweung'] || r['Nama Personil Jaga Leuweung'] || r['Nama'] || '-';
-            var statusPer = r['Status Persemaian'] || '-';
-            var tahapan = r['Tahapan Kegiatan'] || r['Tahapan'] || '-';
-            hoverHTML = '<div style="text-align:left; line-height:1.4;">' +
-                        '<b>Kecamatan:</b> ' + kec + '<br>' +
-                        '<b>Desa/Kelurahan:</b> ' + desa + '<br>' +
-                        '<b>Blok:</b> ' + blok + '<br>' +
-                        '<b>Nama Personil Jaga Leuweung:</b> ' + namaPersonil + '<br>' +
-                        '<b>Status Persemaian:</b> ' + statusPer + '<br>' +
-                        '<b>Tahapan Kegiatan:</b> ' + tahapan + '</div>';
+            hoverHTML = buildMarkerTipPanel(
+              name || 'Lokasi Persemaian',
+              [
+                ['Unit Kerja', r['Unit Kerja']],
+                ['Kecamatan', r['Kecamatan']],
+                ['Desa/Kelurahan', r['Desa/ Kelurahan'] || r['Desa/Kelurahan'] || r['Desa']],
+                ['Blok', r['Blok']],
+                ['Petugas JL', r['Nama Personil Jaga leuweung'] || r['Nama Personil Jaga Leuweung'] || r['Nama']],
+                ['Status', r['Status Persemaian']],
+                ['Tahapan', r['Tahapan Kegiatan'] || r['Tahapan']],
+                ['Luas (Ha)', r['Luas (Ha)'] || r['Luas']],
+                ['Target Bibit', r['Target Bibit']],
+                ['Realisasi', r['Realisasi Bibit'] || r['Realisasi']]
+              ],
+              '#1e88e5'
+            );
+          } else if (type === 'peg') {
+            hoverHTML = buildMarkerTipPanel(
+              name || 'Pegawai Dinas Kehutanan',
+              [
+                ['Unit Kerja', r['Unit Kerja'] || r['UNIT KERJA']],
+                ['Jabatan', r['Nama Jabatan'] || r['Jabatan'] || r['JABATAN']],
+                ['Alamat', r['Alamat'] || r['ALAMAT']],
+                ['Koordinat', coordText(r._lat, r._lng)]
+              ],
+              '#fb8c00'
+            );
           }
           mk.bindTooltip(hoverHTML, { className: 'marker-tooltip', direction: 'top', offset: [0, -8], opacity: 0.95 });
         }
@@ -798,21 +1689,21 @@ function doRender() {
              var cPersemaian = r['Titik Koordinat Persemaian (Y)'] && r['Titik Koordinat Persemaian (X)'] ? 
                                r['Titik Koordinat Persemaian (Y)'] + ', ' + r['Titik Koordinat Persemaian (X)'] : 'Data tidak tersedia';
 
-             var popHtml = '<div style="font-size:11px; font-family:Inter; max-height:250px; overflow-y:auto; padding-right:5px;">' +
-               '<b style="font-size:13px; color:#2E7D32; border-bottom:1px solid #ccc; display:block; padding-bottom:4px; margin-bottom:6px;">Area Tanam 2 Ha</b>' +
-               '<b>Petugas:</b> ' + name + '<br>' +
-               '<b>Nama Lengkap:</b> ' + (r['Nama Lengkap'] || r['Nama Petugas'] || r['Nama'] || '-') + '<br>' +
-               '<b>Alamat:</b> ' + (r['Alamat'] || '-') + '<br>' +
-               '<b>Kordinat Penanaman:</b> ' + cPenanaman + '<br>' +
-               '<b>Kordinat Persemaian:</b> ' + cPersemaian + '<br>' +
-               '<b>Kawasan:</b> ' + (r['Kawasan Leuweung/ Gunung'] || '-') + '<br>' +
-               '<b>Wil. Binaan Kuncen:</b> ' + (r['Wilayah Binaan Kuncen'] || '-') + '<br>' +
-               '<b>Wil. Binaan JL:</b> ' + (r['Wilayah Binaan Jaga Leuweung'] || '-') + '<br>' +
-               '<b>Penyuluh:</b> ' + (r['Penyuluh Kehutanan'] || '-') + '<br>' +
-               '<b>PEH:</b> ' + (r['PEH'] || '-') +
+             var popHtml = '<div class="pjl-popup-content">' +
+               '<div class="pjl-popup-title">Area Tanam 2 Ha</div>' +
+               buildPjlPopupRow('Petugas', name) +
+               buildPjlPopupRow('Nama Lengkap', r['Nama Lengkap'] || r['Nama Petugas'] || r['Nama']) +
+               buildPjlPopupRow('Alamat', r['Alamat']) +
+               buildPjlPopupRow('Koord. Penanaman', cPenanaman) +
+               buildPjlPopupRow('Koord. Persemaian', cPersemaian) +
+               buildPjlPopupRow('Kawasan', r['Kawasan Leuweung/ Gunung']) +
+               buildPjlPopupRow('Wil. Binaan Kuncen', r['Wilayah Binaan Kuncen']) +
+               buildPjlPopupRow('Wil. Binaan JL', r['Wilayah Binaan Jaga Leuweung']) +
+               buildPjlPopupRow('Petugas Lapangan', r['Penyuluh Kehutanan']) +
+               buildPjlPopupRow('PEH', r['PEH']) +
                '</div>';
 
-             poly.bindPopup(popHtml);
+             poly.bindPopup(popHtml, { maxWidth: 340, minWidth: 260, className: 'pjl-leaflet-popup' });
              poly.addTo(PJL_POLYGON_LAYER);
            }
         }
@@ -1137,7 +2028,7 @@ function showAnalysisModal(inPoly) {
     var kab = safe(r._kab);
     var jabat = '-';
     if (item.t === 'peg') jabat = safe(r['Nama Jabatan'] || r['Jabatan'] || r['JABATAN']);
-    if (item.t === 'pjl') jabat = 'Pendamping PJL';
+    if (item.t === 'pjl') jabat = 'Petugas Lapangan';
     html += '<tr><td>'+POP_LABEL[item.t]+'</td><td>'+name+'</td><td>'+jabat+'</td><td>'+unit+'</td><td>'+kab+'</td></tr>';
   }
   
@@ -1166,15 +2057,76 @@ function openTableModal() {
 }
 
 /* ═══════════════════════════════════════════════════════════
-   📸 PHOTO GALLERY – JUMAT MENANAM PERMANEN
+   📸 PHOTO GALLERY – JUNA PERMANEN & PJL
    ═══════════════════════════════════════════════════════════ */
 
 var PHOTO_YEARS = ['2026','2027','2028','2029','2030'];
+var BULAN_ID = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
 
-// Gallery state object
-var JUM_GALLERY = { row: null, year: '2026', idx: 0, photos: [], dates: [], sheetCount: 0, localCount: 0 };
-// Lightbox state
-var LB_STATE = { photos: [], dates: [], idx: 0, year: '2026', locName: '' };
+var PHOTO_GALLERY = { context: 'juna', row: null, year: '2026', idx: 0, photos: [], dates: [], sheetCount: 0, localCount: 0 };
+var JUM_GALLERY = PHOTO_GALLERY;
+var LB_STATE = { photos: [], dates: [], idx: 0, year: '2026', locName: '', context: 'juna' };
+
+function getPhotoContextPrefix(context) {
+  return context === 'pjl' ? 'pjl' : 'jum';
+}
+
+function getPhotoRowId(r) {
+  return r._row_idx || r.id || r['No'] || (r._lat + '_' + r._lng);
+}
+
+function getPhotoCoords(r) {
+  var lat = toFloat(r['Titik Koordinat Penanaman (Y)']) || toFloat(r['Titik Koordinat (Y)']) || r._lat;
+  var lng = toFloat(r['Titik Koordinat Penanaman (X)']) || toFloat(r['Titik Koordinat (x)']) || toFloat(r['Titik Koordinat (X)']) || r._lng;
+  return {
+    lat: parseFloat(String(lat).replace(',', '.')),
+    lng: parseFloat(String(lng).replace(',', '.'))
+  };
+}
+
+/** Format tanggal ke Bahasa Indonesia, mis. 17/06/2026 → 17 Juni 2026 */
+function formatDateIndo(dStr) {
+  if (!dStr) return '';
+  var s = String(dStr).trim();
+  var m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (m) {
+    var day = parseInt(m[1], 10);
+    var monthIdx = parseInt(m[2], 10) - 1;
+    var year = m[3];
+    if (monthIdx >= 0 && monthIdx < 12) {
+      var out = day + ' ' + BULAN_ID[monthIdx] + ' ' + year;
+      if (m[4]) out += ' · ' + String(m[4]).padStart(2, '0') + ':' + m[5];
+      return out;
+    }
+  }
+  m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}):(\d{2}))?/);
+  if (m) {
+    var day2 = parseInt(m[3], 10);
+    var monthIdx2 = parseInt(m[2], 10) - 1;
+    if (monthIdx2 >= 0 && monthIdx2 < 12) {
+      var out2 = day2 + ' ' + BULAN_ID[monthIdx2] + ' ' + m[1];
+      if (m[4]) out2 += ' · ' + m[4] + ':' + m[5];
+      return out2;
+    }
+  }
+  return s;
+}
+
+/** Parse DD/MM/YYYY [HH:mm] into timestamp for sorting */
+function parseExifDate(dStr) {
+  if (!dStr) return 0;
+  var s = String(dStr).trim();
+  var m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2}))?/);
+  if (m) {
+    var h = m[4] ? parseInt(m[4], 10) : 0;
+    var min = m[5] ? parseInt(m[5], 10) : 0;
+    return new Date(parseInt(m[3], 10), parseInt(m[2], 10) - 1, parseInt(m[1], 10), h, min).getTime();
+  }
+  m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10)).getTime();
+  var ts = Date.parse(s);
+  return isNaN(ts) ? 0 : ts;
+}
 
 /** Parse pipe-separated values from a spreadsheet cell */
 function parsePipeField(val) {
@@ -1182,92 +2134,97 @@ function parsePipeField(val) {
   return String(val).split('|').map(function(s) { return s.trim(); }).filter(Boolean);
 }
 
-/** Get photos array for a given row + year (auto-normalize URLs, ignores folder links) */
-function getJumPhotos(r, year) {
+function getRowPhotos(r, year) {
   var urls = parsePipeField(r['Foto_' + year]);
   var res = [];
   urls.forEach(function(u) {
-    if (!extractDriveFolderId(u)) { // ignore folders here
-      res.push(normalizeImageUrl(u));
-    }
+    if (!extractDriveFolderId(u)) res.push(normalizeImageUrl(u));
   });
   return res;
 }
 
-/** Get dates array for a given row + year */
-function getJumDates(r, year) {
+function getRowDates(r, year) {
   return parsePipeField(r['Tanggal_' + year]);
 }
 
-/** Find the earliest year that has photos (sheet + local), or default to current year */
-function getCurrentPhotoYear(r) {
+function getJumPhotos(r, year) { return getRowPhotos(r, year); }
+function getJumDates(r, year) { return getRowDates(r, year); }
+
+function getCurrentPhotoYear(r, context) {
+  context = context || PHOTO_GALLERY.context || 'juna';
   var todayStr = String(new Date().getFullYear());
-  if (getMergedData(r, todayStr).photos.length > 0) return todayStr;
+  if (getMergedData(r, todayStr, context).photos.length > 0) return todayStr;
   for (var i = 0; i < PHOTO_YEARS.length; i++) {
-    if (getMergedData(r, PHOTO_YEARS[i]).photos.length > 0) return PHOTO_YEARS[i];
+    if (getMergedData(r, PHOTO_YEARS[i], context).photos.length > 0) return PHOTO_YEARS[i];
   }
   return todayStr;
 }
 
-/** Build the entire photo section HTML */
-function buildJumPhotoSection(r) {
-  var html = '<div class="jum-photo-section" id="jum-photo-section">';
-  
-  // Section title
-  html += '<div class="jum-photo-section-title">' +
-    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8e24aa" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>' +
-    'Dokumentasi Foto Lokasi' +
-    '</div>';
+function getGalleryDomIds(context) {
+  if (context === 'pjl') {
+    return { section: 'pjl-photo-section', timeline: 'pjl-year-timeline', carousel: 'pjl-carousel-wrap' };
+  }
+  return { section: 'jum-photo-section', timeline: 'jum-year-timeline', carousel: 'jum-carousel-wrap' };
+}
 
-  // Year Timeline Pills
-  html += '<div class="year-timeline" id="jum-year-timeline">';
+function buildPhotoSection(r, context) {
+  context = context || 'juna';
+  var ids = getGalleryDomIds(context);
+  var title = context === 'pjl'
+    ? 'Dokumentasi Tanam & Pelihara Pohon (PJL)'
+    : 'Dokumentasi Foto Lokasi';
+  var accent = context === 'pjl' ? '#2e7d32' : '#8e24aa';
+
+  var html = '<div class="jum-photo-section" id="' + ids.section + '">';
+  html += '<div class="jum-photo-section-title">' +
+    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="' + accent + '" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>' +
+    title + '</div>';
+
+  html += '<div class="year-timeline" id="' + ids.timeline + '">';
   PHOTO_YEARS.forEach(function(yr) {
-    var mergedYr = getMergedData(r, yr);
+    var mergedYr = getMergedData(r, yr, context);
     var hasPhoto = mergedYr.photos.length > 0;
     var photoCount = mergedYr.photos.length;
-    var isActive = (yr === getCurrentPhotoYear(r));
+    var isActive = (yr === getCurrentPhotoYear(r, context));
     html += '<button class="year-pill' + (isActive ? ' active' : '') + (hasPhoto ? ' has-photo' : '') + '"' +
       ' data-year="' + yr + '"' +
-      ' onclick="changeGalleryYear(\''+yr+'\')"' +
+      ' onclick="changeGalleryYear(\'' + yr + '\')"' +
       ' title="' + (hasPhoto ? photoCount + ' foto tersedia' : 'Belum ada foto') + '">' +
       yr + '</button>';
   });
   html += '</div>';
 
-  // Carousel container (will be filled by refreshGalleryForYear)
-  html += '<div id="jum-carousel-wrap" class="jum-carousel-wrap">' +
+  html += '<div id="' + ids.carousel + '" class="jum-carousel-wrap">' +
     '<div class="jum-no-photo">' +
     '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>' +
-    '<span>Memuat foto...</span>' +
-    '</div>' +
-    '</div>';
+    '<span>Memuat foto...</span></div></div>';
 
-  // Upload button footer
   html += '<div style="margin-top:10px; display:flex; justify-content:flex-end;">' +
-    '<button class="jum-upload-btn" onclick="openUploadModal(JUM_GALLERY.row)">' +
+    '<button class="jum-upload-btn" onclick="openUploadModal(PHOTO_GALLERY.row)">' +
     '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>' +
-    ' Upload Foto Baru' +
-    '</button>' +
-    '</div>';
+    ' Upload Foto Baru</button></div>';
 
-  html += '</div>'; // .jum-photo-section
+  html += '</div>';
   return html;
 }
 
+function buildJumPhotoSection(r) { return buildPhotoSection(r, 'juna'); }
+
 /** Refresh carousel display for selected year */
 function refreshGalleryForYear(year) {
-  if (!JUM_GALLERY.row) return;
-  var r = JUM_GALLERY.row;
-  JUM_GALLERY.year = year;
+  if (!PHOTO_GALLERY.row) return;
+  var r = PHOTO_GALLERY.row;
+  var context = PHOTO_GALLERY.context || 'juna';
+  var ids = getGalleryDomIds(context);
+  PHOTO_GALLERY.year = year;
   
-  // Highlight pill early
-  var pills = document.querySelectorAll('#jum-year-timeline .year-pill, #upload-year-pills .year-pill');
+  var pills = document.querySelectorAll('#' + ids.timeline + ' .year-pill, #upload-year-pills .year-pill');
   pills.forEach(function(p) {
     p.classList.remove('active');
     if ((p.getAttribute('data-year') || p.textContent.trim()) === year) p.classList.add('active');
   });
 
-  var wrap = document.getElementById('jum-carousel-wrap');
+  var wrap = document.getElementById(ids.carousel);
   if (!wrap) return;
 
   var val = String(r['Foto_' + year] || '').trim();
@@ -1298,8 +2255,7 @@ function refreshGalleryForYear(year) {
         });
     }
   } else {
-    // Normal merge & sort logic
-    applyGalleryData(getMergedData(r, year));
+    applyGalleryData(getMergedData(r, year, context));
   }
 
   function processExtractedFolder(files) {
@@ -1309,12 +2265,9 @@ function refreshGalleryForYear(year) {
       combined.push({ url: normalizeImageUrl(f.url), date: f.date, timestamp: parseExifDate(f.date), isLocal: false });
     });
     
-    // Local photos
-    var locals = getLocalPhotos(r, year);
+    var locals = getLocalPhotos(r, year, context);
     locals.forEach(function(l) {
-      // Cek apakah foto lokal ini sudah masuk ke spreadsheet
       var lNorm = normalizeImageUrl(l.url);
-      // Ekstrak ID Drive jika memungkinkan untuk perbandingan akurat
       var m = lNorm.match(/\/d\/([a-zA-Z0-9_-]+)/) || lNorm.match(/id=([a-zA-Z0-9_-]+)/);
       var lId = m ? m[1] : lNorm;
       
@@ -1344,12 +2297,12 @@ function refreshGalleryForYear(year) {
   }
 
   function applyGalleryData(_merged) {
-    JUM_GALLERY.photos = _merged.photos;
-    JUM_GALLERY.dates = _merged.dates;
-    JUM_GALLERY.sheetCount = _merged.sheetCount;
-    JUM_GALLERY.localCount = _merged.localCount;
-    JUM_GALLERY.isLocalMap = _merged.isLocalMap;
-    JUM_GALLERY.idx = 0;
+    PHOTO_GALLERY.photos = _merged.photos;
+    PHOTO_GALLERY.dates = _merged.dates;
+    PHOTO_GALLERY.sheetCount = _merged.sheetCount;
+    PHOTO_GALLERY.localCount = _merged.localCount;
+    PHOTO_GALLERY.isLocalMap = _merged.isLocalMap;
+    PHOTO_GALLERY.idx = 0;
 
     if (_merged.photos.length === 0) {
       wrap.innerHTML = '<div class="jum-no-photo">' +
@@ -1359,19 +2312,22 @@ function refreshGalleryForYear(year) {
         '</div>';
       return;
     }
-    renderCarousel(JUM_GALLERY.photos, JUM_GALLERY.dates);
+    renderCarousel(PHOTO_GALLERY.photos, PHOTO_GALLERY.dates);
   }
 }
 
 /** Render carousel with photos array */
 function renderCarousel(photos, dates) {
-  var wrap = document.getElementById('jum-carousel-wrap');
+  var context = PHOTO_GALLERY.context || 'juna';
+  var ids = getGalleryDomIds(context);
+  var wrap = document.getElementById(ids.carousel);
   if (!wrap) return;
-  var idx = JUM_GALLERY.idx;
+  var idx = PHOTO_GALLERY.idx;
   var url = photos[idx] || '';
   var date = dates[idx] || '';
+  var dateDisplay = formatDateIndo(date);
   var total = photos.length;
-  var isLocalPhoto = (JUM_GALLERY.isLocalMap && JUM_GALLERY.isLocalMap[idx]);
+  var isLocalPhoto = (PHOTO_GALLERY.isLocalMap && PHOTO_GALLERY.isLocalMap[idx]);
 
   var dotsHtml = '';
   if (total > 1) {
@@ -1386,7 +2342,7 @@ function renderCarousel(photos, dates) {
 
   wrap.innerHTML = 
     '<div class="jum-carousel-inner" id="jum-car-inner" onclick="openPhotoLightbox()">' +
-      '<img class="jum-carousel-img" id="jum-car-img" src="' + url + '" alt="Foto ' + JUM_GALLERY.year + '"' +
+      '<img class="jum-carousel-img" id="jum-car-img" src="' + url + '" alt="Foto ' + PHOTO_GALLERY.year + '"' +
         ' onerror="handleDriveImageError(this); this.parentElement.querySelector(\'.jum-zoom-hint\').style.display=\'none\'; if(this.dataset.driveFallback===\'1\'){this.src=\'data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'200\' height=\'120\'%3E%3Crect width=\'200\' height=\'120\' fill=\'%23222\'/%3E%3Ctext x=\'100\' y=\'60\' fill=\'%23666\' text-anchor=\'middle\' dominant-baseline=\'middle\' font-size=\'12\' font-family=\'Arial\'%3EGagal memuat foto%3C/text%3E%3C/svg%3E\' }" />' +
       (total > 1 ?
         '<button class="car-nav-btn car-nav-prev" onclick="event.stopPropagation();navCarousel(-1)" ' + (idx === 0 ? 'disabled' : '') + '>&#8249;</button>' +
@@ -1397,7 +2353,7 @@ function renderCarousel(photos, dates) {
     '<div class="jum-carousel-footer">' +
       '<div class="jum-photo-timestamp">' +
         localBadge +
-        (date ? '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> ' + date : '<span style="opacity:0.4;">Tanggal tidak tersedia</span>') +
+        (dateDisplay ? '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> ' + dateDisplay : '<span style="opacity:0.4;">Tanggal tidak tersedia</span>') +
       '</div>' +
       '<div style="display:flex;align-items:center;gap:8px;">' +
         deleteBtn +
@@ -1408,20 +2364,18 @@ function renderCarousel(photos, dates) {
 
 /** Navigate carousel */
 function navCarousel(dir) {
-  var total = JUM_GALLERY.photos.length;
-  JUM_GALLERY.idx = Math.max(0, Math.min(total - 1, JUM_GALLERY.idx + dir));
-  renderCarousel(JUM_GALLERY.photos, JUM_GALLERY.dates);
-  // Sync lightbox if open
+  var total = PHOTO_GALLERY.photos.length;
+  PHOTO_GALLERY.idx = Math.max(0, Math.min(total - 1, PHOTO_GALLERY.idx + dir));
+  renderCarousel(PHOTO_GALLERY.photos, PHOTO_GALLERY.dates);
   if (document.getElementById('photo-lightbox').classList.contains('open')) {
-    LB_STATE.idx = JUM_GALLERY.idx;
+    LB_STATE.idx = PHOTO_GALLERY.idx;
     refreshLightbox();
   }
 }
 
-/** Jump to specific photo index */
 function jumpCarousel(i) {
-  JUM_GALLERY.idx = i;
-  renderCarousel(JUM_GALLERY.photos, JUM_GALLERY.dates);
+  PHOTO_GALLERY.idx = i;
+  renderCarousel(PHOTO_GALLERY.photos, PHOTO_GALLERY.dates);
 }
 
 /** Change gallery year from timeline pill click */
@@ -1433,23 +2387,33 @@ function changeGalleryYear(year) {
 
 /** Open fullscreen lightbox with current gallery state */
 function openPhotoLightbox() {
-  var photos = JUM_GALLERY.photos;
+  var photos = PHOTO_GALLERY.photos;
   if (!photos || photos.length === 0) return;
   LB_STATE.photos = photos;
-  LB_STATE.dates = JUM_GALLERY.dates;
-  LB_STATE.idx = JUM_GALLERY.idx;
-  LB_STATE.year = JUM_GALLERY.year;
+  LB_STATE.dates = PHOTO_GALLERY.dates;
+  LB_STATE.idx = PHOTO_GALLERY.idx;
+  LB_STATE.year = PHOTO_GALLERY.year;
+  LB_STATE.context = PHOTO_GALLERY.context || 'juna';
   
-  if (JUM_GALLERY.row) {
-    var r = JUM_GALLERY.row;
-    var name = getName(r);
-    var cdk = r['Unit Kerja'] || r._cdk || '-';
-    var kab = r['Kabupaten/Kota'] || r._kab || '-';
-    var desa = r['Desa/Kelurahan'] || r['Desa/ Kelurahan'] || r['Desa'] || r['DESA'] || '-';
-    var ket = r['Keterangan'] || '-';
-    LB_STATE.locName = '<strong style="color:#fff;">' + name + '</strong><br/>' +
-                       cdk + ' &bull; ' + kab + ' &bull; ' + desa + '<br/>' +
-                       '<span style="opacity:0.7;font-size:10px;">' + ket + '</span>';
+  if (PHOTO_GALLERY.row) {
+    var r = PHOTO_GALLERY.row;
+    if (LB_STATE.context === 'pjl') {
+      var cPen = coordText(toFloat(r['Titik Koordinat Penanaman (Y)']), toFloat(r['Titik Koordinat Penanaman (X)']));
+      var cPer = coordText(toFloat(r['Titik Koordinat Persemaian (Y)']), toFloat(r['Titik Koordinat Persemaian (X)']));
+      LB_STATE.locName = '<strong style="color:#fff;">' + getName(r) + '</strong><br/>' +
+        (r['Unit Kerja'] || '-') + '<br/>' +
+        '<span style="opacity:0.85;">' + (r['Alamat'] || '-') + '</span><br/>' +
+        '<span style="opacity:0.7;font-size:10px;">Penanaman: ' + cPen + '<br/>Persemaian: ' + cPer + '</span>';
+    } else {
+      var name = getName(r);
+      var cdk = r['Unit Kerja'] || r._cdk || '-';
+      var kab = r['Kabupaten/Kota'] || r._kab || '-';
+      var desa = r['Desa/Kelurahan'] || r['Desa/ Kelurahan'] || r['Desa'] || r['DESA'] || '-';
+      var ket = r['Keterangan'] || '-';
+      LB_STATE.locName = '<strong style="color:#fff;">' + name + '</strong><br/>' +
+                         cdk + ' &bull; ' + kab + ' &bull; ' + desa + '<br/>' +
+                         '<span style="opacity:0.7;font-size:10px;">' + ket + '</span>';
+    }
   } else {
     LB_STATE.locName = '';
   }
@@ -1490,9 +2454,8 @@ function handleLightboxBackdropClick(e) {
 function lightboxNav(dir) {
   var total = LB_STATE.photos.length;
   LB_STATE.idx = Math.max(0, Math.min(total - 1, LB_STATE.idx + dir));
-  // Sync carousel
-  JUM_GALLERY.idx = LB_STATE.idx;
-  renderCarousel(JUM_GALLERY.photos, JUM_GALLERY.dates);
+  PHOTO_GALLERY.idx = LB_STATE.idx;
+  renderCarousel(PHOTO_GALLERY.photos, PHOTO_GALLERY.dates);
   refreshLightbox();
 }
 
@@ -1513,7 +2476,7 @@ function refreshLightbox() {
   if (yBadge) yBadge.textContent = 'Foto ' + LB_STATE.year;
   if (counter) counter.textContent = (idx + 1) + ' dari ' + total;
   if (stamp) stamp.innerHTML = date ?
-    '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> ' + date :
+    '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> ' + formatDateIndo(date) :
     '';
   if (locInfo) locInfo.innerHTML = LB_STATE.locName;
 
@@ -1563,8 +2526,8 @@ function refreshLightbox() {
 /** Jump lightbox to index */
 function lightboxJump(i) {
   LB_STATE.idx = i;
-  JUM_GALLERY.idx = i;
-  renderCarousel(JUM_GALLERY.photos, JUM_GALLERY.dates);
+  PHOTO_GALLERY.idx = i;
+  renderCarousel(PHOTO_GALLERY.photos, PHOTO_GALLERY.dates);
   refreshLightbox();
 }
 
@@ -1631,59 +2594,49 @@ function lightboxJump(i) {
    ═══════════════════════════════════════════════════════════ */
 
 /** Get local photos from localStorage for a specific row & year */
-function getLocalPhotos(r, year) {
-  var rowId = r._row_idx || r.id || r['No'] || (r._lat + '_' + r._lng);
-  var key = 'jum_photos_' + rowId + '_' + year;
+function getLocalPhotos(r, year, context) {
+  context = context || PHOTO_GALLERY.context || 'juna';
+  var key = getPhotoContextPrefix(context) + '_photos_' + getPhotoRowId(r) + '_' + year;
   try {
     var data = localStorage.getItem(key);
     return data ? JSON.parse(data) : [];
   } catch (e) { return []; }
 }
 
-/** Save local photos to localStorage */
-function saveLocalPhotosToStorage(r, year, photosData) {
-  var rowId = r._row_idx || r.id || r['No'] || (r._lat + '_' + r._lng);
-  var key = 'jum_photos_' + rowId + '_' + year;
+function saveLocalPhotosToStorage(r, year, photosData, context) {
+  context = context || PHOTO_GALLERY.context || 'juna';
+  var key = getPhotoContextPrefix(context) + '_photos_' + getPhotoRowId(r) + '_' + year;
   localStorage.setItem(key, JSON.stringify(photosData));
 }
 
-/** Parse DD/MM/YYYY into timestamp */
-function parseExifDate(dStr) {
-  if(!dStr) return 0;
-  var p = String(dStr).split('/');
-  if(p.length === 3) return new Date(p[2], p[1]-1, p[0]).getTime();
-  return 0;
-}
-
-/** Helper functions for deleted photos tracking (optimistic UI) */
-function getDeletedPhotoIds(r, year) {
+function getDeletedPhotoIds(r, year, context) {
   try {
-    var rowId = r._row_idx || r.id || r['No'] || (r._lat + '_' + r._lng);
-    var key = 'jum_deleted_' + rowId + '_' + year;
+    context = context || PHOTO_GALLERY.context || 'juna';
+    var key = getPhotoContextPrefix(context) + '_deleted_' + getPhotoRowId(r) + '_' + year;
     var data = localStorage.getItem(key);
     return data ? JSON.parse(data) : [];
   } catch(e) { return []; }
 }
-function addDeletedPhotoId(r, year, id) {
-  var ids = getDeletedPhotoIds(r, year);
+function addDeletedPhotoId(r, year, id, context) {
+  context = context || PHOTO_GALLERY.context || 'juna';
+  var ids = getDeletedPhotoIds(r, year, context);
   if (ids.indexOf(id) === -1) {
     ids.push(id);
-    var rowId = r._row_idx || r.id || r['No'] || (r._lat + '_' + r._lng);
-    var key = 'jum_deleted_' + rowId + '_' + year;
+    var key = getPhotoContextPrefix(context) + '_deleted_' + getPhotoRowId(r) + '_' + year;
     localStorage.setItem(key, JSON.stringify(ids));
   }
 }
 
 /** Merge spreadsheet photos and local photos, then sort by date newest first */
-function getMergedData(r, year) {
-  var sheetPhotos = getJumPhotos(r, year);
-  var sheetDates = getJumDates(r, year);
-  var locals = getLocalPhotos(r, year);
+function getMergedData(r, year, context) {
+  context = context || PHOTO_GALLERY.context || 'juna';
+  var sheetPhotos = getRowPhotos(r, year);
+  var sheetDates = getRowDates(r, year);
+  var locals = getLocalPhotos(r, year, context);
   
   var combined = [];
-  var deletedIds = getDeletedPhotoIds(r, year);
+  var deletedIds = getDeletedPhotoIds(r, year, context);
   
-  // Sheet photos
   for(var i=0; i<sheetPhotos.length; i++) {
     var url = sheetPhotos[i];
     var m = url.match(/\/d\/([a-zA-Z0-9_-]+)/) || url.match(/id=([a-zA-Z0-9_-]+)/);
@@ -1695,11 +2648,8 @@ function getMergedData(r, year) {
     }
   }
   
-  // Local photos
   locals.forEach(function(l) {
-    // Cek apakah foto lokal ini sudah masuk ke spreadsheet
     var lNorm = normalizeImageUrl(l.url);
-    // Ekstrak ID Drive jika memungkinkan untuk perbandingan akurat
     var m = lNorm.match(/\/d\/([a-zA-Z0-9_-]+)/) || lNorm.match(/id=([a-zA-Z0-9_-]+)/);
     var lId = m ? m[1] : lNorm;
     
@@ -1714,7 +2664,6 @@ function getMergedData(r, year) {
     }
   });
   
-  // Sort by date newest first
   combined.sort(function(a, b) {
     return b.timestamp - a.timestamp;
   });
@@ -1741,34 +2690,36 @@ function getMergedData(r, year) {
 /** Delete the currently viewed photo from all sources */
 function deleteCurrentCarouselPhoto() {
   if (!confirm('Apakah Anda yakin ingin menghapus foto ini secara permanen dari Dashboard, Google Drive, dan Spreadsheet?')) return;
-  var r = JUM_GALLERY.row;
-  var year = JUM_GALLERY.year;
-  var idx = JUM_GALLERY.idx;
-  var targetUrl = JUM_GALLERY.photos[idx];
+  var r = PHOTO_GALLERY.row;
+  var year = PHOTO_GALLERY.year;
+  var context = PHOTO_GALLERY.context || 'juna';
+  var idx = PHOTO_GALLERY.idx;
+  var targetUrl = PHOTO_GALLERY.photos[idx];
   
   var targetMatch = targetUrl.match(/id=([a-zA-Z0-9_-]+)/) || targetUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
   var targetId = targetMatch ? targetMatch[1] : targetUrl;
   
-  // 1. Remove from local storage immediately (optimistic UI)
-  var locals = getLocalPhotos(r, year);
+  var locals = getLocalPhotos(r, year, context);
   var filteredLocals = locals.filter(function(l) { 
     var m1 = l.url.match(/id=([a-zA-Z0-9_-]+)/) || l.url.match(/\/d\/([a-zA-Z0-9_-]+)/);
     var id1 = m1 ? m1[1] : l.url;
     return id1 !== targetId; 
   });
-  saveLocalPhotosToStorage(r, year, filteredLocals);
-  addDeletedPhotoId(r, year, targetId);
+  saveLocalPhotosToStorage(r, year, filteredLocals, context);
+  addDeletedPhotoId(r, year, targetId, context);
 
   showToast('Menghapus foto...', 'info');
   var btn = document.querySelector('.car-delete-btn');
   if(btn) btn.style.opacity = '0.5';
 
+  var coords = getPhotoCoords(r);
   var payload = {
     action: "delete",
     url: targetUrl,
-    lat: parseFloat(String(r._lat).replace(',', '.')),
-    lng: parseFloat(String(r._lng).replace(',', '.')),
-    year: year
+    lat: coords.lat,
+    lng: coords.lng,
+    year: year,
+    category: context === 'pjl' ? 'pjl' : 'juna'
   };
 
   fetch(GAS_WEB_APP_URL, {
@@ -1798,20 +2749,34 @@ function openUploadModal(r) {
   if (!m || !r) return;
   
   var locInfo = document.getElementById('upload-loc-info');
-  if (locInfo) locInfo.innerHTML = '\ud83d\udccd ' + getName(r) + ' &bull; ' + (r['Kabupaten/Kota'] || '');
+  var context = PHOTO_GALLERY.context || 'juna';
+  if (locInfo) {
+    if (context === 'pjl') {
+      locInfo.innerHTML = '&#128205; ' + getName(r) + ' &bull; ' + (r['Unit Kerja'] || '');
+    } else {
+      locInfo.innerHTML = '&#128205; ' + getName(r) + ' &bull; ' + (r['Kabupaten/Kota'] || '');
+    }
+  }
+  
+  var modalTitle = document.querySelector('#upload-modal .modal-head h2');
+  if (modalTitle) {
+    modalTitle.textContent = context === 'pjl'
+      ? 'Upload Dokumentasi Tanam & Pelihara (PJL)'
+      : 'Upload Foto Dokumentasi';
+  }
   
   var pillsWrap = document.getElementById('upload-year-pills');
   if (pillsWrap) {
     var pillsHtml = '';
     PHOTO_YEARS.forEach(function(yr) {
-      var isActive = (yr === JUM_GALLERY.year);
+      var isActive = (yr === PHOTO_GALLERY.year);
       pillsHtml += '<button class="year-pill' + (isActive ? ' active' : '') + '"' +
         ' data-year="' + yr + '"' +
         ' type="button" onclick="selectUploadYear(\''+yr+'\')">' + yr + '</button>';
     });
     pillsWrap.innerHTML = pillsHtml;
   }
-  document.getElementById('upload-year').value = JUM_GALLERY.year;
+  document.getElementById('upload-year').value = PHOTO_GALLERY.year;
   
   // Reset input file
   var fi = document.getElementById('upload-files');
@@ -1833,8 +2798,10 @@ function saveLocalPhoto() {
     return;
   }
 
-  var r = JUM_GALLERY.row;
+  var r = PHOTO_GALLERY.row;
   var year = document.getElementById('upload-year').value;
+  var context = PHOTO_GALLERY.context || 'juna';
+  var coords = getPhotoCoords(r);
   
   var btn = document.querySelector('#upload-modal .btn-apply');
   var oldText = btn.innerHTML;
@@ -1863,10 +2830,11 @@ function saveLocalPhoto() {
             action: "upload",
             base64: base64Clean,
             mimeType: file.type,
-            lat: parseFloat(String(r._lat).replace(',','.')),
-            lng: parseFloat(String(r._lng).replace(',','.')),
+            lat: coords.lat,
+            lng: coords.lng,
             year: year,
-            date: finalDateStr
+            date: finalDateStr,
+            category: context === 'pjl' ? 'pjl' : 'juna'
           };
 
           fetch(GAS_WEB_APP_URL, {
@@ -1878,9 +2846,9 @@ function saveLocalPhoto() {
             processed++;
             if (data.success) {
               successCount++;
-              var locals = getLocalPhotos(r, year);
+              var locals = getLocalPhotos(r, year, context);
               locals.push({ url: data.url, date: data.date });
-              saveLocalPhotosToStorage(r, year, locals);
+              saveLocalPhotosToStorage(r, year, locals, context);
             } else {
               console.error("Upload Error:", data.error);
             }
@@ -1907,7 +2875,10 @@ function saveLocalPhoto() {
             var parts = exifDateStr.split(" ");
             if (parts.length > 0) {
               var ymd = parts[0].split(":");
-              if (ymd.length === 3) fDate = ymd[2] + "/" + ymd[1] + "/" + ymd[0];
+              if (ymd.length === 3) {
+                fDate = ymd[2] + "/" + ymd[1] + "/" + ymd[0];
+                if (parts[1]) fDate += " " + parts[1].substring(0, 5);
+              }
             }
           }
           proceedWithUpload(fDate);

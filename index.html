@@ -26,6 +26,8 @@
 <script src="https://unpkg.com/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="https://unpkg.com/leaflet-kmz@1.0.9/dist/leaflet-kmz.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/exif-js"></script>
+<script src="https://unpkg.com/shpjs@4.0.4/dist/shp.js"></script>
+<script src="https://unpkg.com/@tmcw/togeojson@5.8.1/dist/togeojson.umd.js"></script>
 <link rel="stylesheet" href="styles.css"/>
 </head>
 <body>
@@ -63,6 +65,7 @@
   </div>
   <div class="topbar-right">
     <div id="clock">00:00:00</div>
+    <button class="btn-icon btn-spatial-upload" onclick="openSpatialModal()" title="Upload File Spasial (SHP, KML, GeoJSON, ZIP, Folder)">&#128205; <span class="d-none-mobile">Upload Spasial</span></button>
     <button class="btn-icon" onclick="openTableModal()">&#128203; <span class="d-none-mobile">Tabel Data</span></button>
     <button class="btn-icon" onclick="openSourceModal()">&#128240; <span class="d-none-mobile">Sumber Data</span></button>
     <button class="btn-icon" onclick="openExportModal()">&#128196; <span class="d-none-mobile">Export</span></button>
@@ -86,7 +89,7 @@
     <div class="filter-group"><label>Kawasan Leuweung</label><select id="f_kawasan" multiple="multiple"></select></div>
     <div class="filter-group"><label>Jabatan Pegawai</label><select id="f_jabatan" multiple="multiple"></select></div>
     <div class="filter-group"><label>Nama Pegawai</label><select id="f_nama_pegawai" multiple="multiple"></select></div>
-    <div class="filter-group"><label>Penyuluh Kehutanan (Pendamping PJL)</label><select id="f_penyuluh" multiple="multiple"></select></div>
+    <div class="filter-group"><label>Petugas Lapangan (Pendamping PJL)</label><select id="f_penyuluh" multiple="multiple"></select></div>
     <div class="filter-group"><label>Kategori Lojuna</label><select id="f_kategori_lojuna" multiple="multiple"></select></div>
     <div class="btn-row">
       <button class="btn-apply" onclick="applyFilter()">Terapkan</button>
@@ -106,6 +109,7 @@
       <label><input type="checkbox" id="toggle-cluster" checked onchange="toggleClustering()"> Aktifkan Clustering</label>
       <label><input type="checkbox" id="toggle-heatmap" onchange="toggleHeatmap()"> Tampilkan Heatmap</label>
       <label><input type="checkbox" id="toggle-pjl-polygon" onchange="togglePjlPolygons()"> Tampilkan Area Tanam 2 Ha (Petugas Jaga Leuweung)</label>
+      <label><input type="checkbox" id="toggle-spatial" onchange="toggleSpatialPolygons()"> Tampilkan Polygon Spasial (Upload)</label>
       <label><input type="checkbox" id="toggle-buffer" onchange="toggleBuffer()"> Buffer Zone Saat Diklik (10/20/30km)</label>
       <button class="btn-icon" style="margin-top:10px; width:100%; justify-content:center; background:var(--secondary); color:white;" onclick="downloadMap()">&#128247; Unduh Tampilan Peta (.png)</button>
     </div>
@@ -377,5 +381,56 @@
 
 <script src="app-core.js" defer></script>
 <script src="app-features.js" defer></script>
+
+<!-- ===== MODAL UPLOAD SPASIAL ===== -->
+<div id="spatial-modal" class="spatial-modal-overlay" style="display:none;">
+  <div class="spatial-modal-box">
+    <div class="spatial-modal-header">
+      <span>&#128205; Upload Polygon Spasial</span>
+      <button class="spatial-modal-close" onclick="closeSpatialModal()">&#215;</button>
+    </div>
+    <div class="spatial-modal-body">
+      <!-- UPLOAD AREA -->
+      <div class="spatial-dropzone" id="spatial-dropzone"
+           ondragover="event.preventDefault(); this.classList.add('active')"
+           ondragleave="this.classList.remove('active')"
+           ondrop="handleSpatialDrop(event)">
+        <div class="spatial-dropzone-icon">&#128228;</div>
+        <div class="spatial-dropzone-text">Seret & Lepas file di sini</div>
+        <div class="spatial-dropzone-sub">Mendukung: .shp saja, paket shapefile (sebagian/lengkap), .geojson, .json, .zip, folder, .kml, .kmz — atau pilih multi-file sekaligus</div>
+        <div class="spatial-upload-btns">
+          <label class="btn-sp-upload" for="sp-file-input">&#128196; Pilih File / Multi-File</label>
+          <input type="file" id="sp-file-input" style="display:none" multiple
+                 accept=".shp,.shx,.dbf,.prj,.cpg,.sbn,.sbx,.qix,.zip,.rar,.kmz,.kml,.geojson,.json"
+                 onchange="handleSpatialFiles(this.files)">
+          <label class="btn-sp-upload btn-sp-folder" for="sp-folder-input">&#128193; Upload Folder</label>
+          <input type="file" id="sp-folder-input" style="display:none" multiple webkitdirectory
+                 onchange="handleSpatialFiles(this.files)">
+        </div>
+      </div>
+
+      <!-- STATUS PROGRESS -->
+      <div id="spatial-progress-wrap" style="display:none; margin:12px 0;">
+        <div class="sp-progress-bar-bg"><div class="sp-progress-bar" id="sp-progress-bar"></div></div>
+        <div id="sp-progress-text" class="sp-progress-text"></div>
+      </div>
+
+      <!-- DAFTAR FILE TERUPLOAD -->
+      <div class="sp-file-list-header">
+        <span>&#128266; File Polygon Tersimpan</span>
+        <span id="sp-file-count" class="sp-file-count"></span>
+      </div>
+      <div class="sp-file-search-wrap">
+        <span class="sp-file-search-icon">&#128269;</span>
+        <input type="search" id="sp-file-search" class="sp-file-search-input"
+               placeholder="Cari nama file polygon..." autocomplete="off"
+               oninput="spatialFileListSearch(this.value)">
+      </div>
+      <div id="spatial-file-list" class="sp-file-list">
+        <div class="sp-file-list-empty">Memuat daftar file...</div>
+      </div>
+    </div>
+  </div>
+</div>
 </body>
 </html>

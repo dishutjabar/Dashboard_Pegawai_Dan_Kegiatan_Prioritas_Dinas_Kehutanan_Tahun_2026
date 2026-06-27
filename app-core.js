@@ -84,7 +84,7 @@ function getCDK(val) {
 }
 function getName(r) {
   if (!r) return 'Data tidak tersedia';
-  var n = r['Nama Kawasan'] || r['Nama Lokasi'] || r['Lokasi Penanaman'] || r['Nama Petugas'] || r['Nama Persemaian'] || r['Nama'] || r['Lokasi'] || r['Unit Kerja'] || r['UNIT KERJA'] || '';
+  var n = r['Nama Lengkap'] || r['Nama Kawasan'] || r['Nama Lokasi'] || r['Lokasi Penanaman'] || r['Nama Petugas'] || r['Nama Persemaian'] || r['Nama'] || r['Lokasi'] || r['Unit Kerja'] || r['UNIT KERJA'] || '';
   return String(n).trim() || 'Data tidak tersedia';
 }
 function linkOrNA(url, label) {
