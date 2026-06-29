@@ -596,8 +596,18 @@ function loadSpatialGeoJSONForFile(fileObj) {
   });
 }
 
-function passesCdkSpatialFilter(gj, activeCDKs, activePJLPoints) {
+function passesCdkSpatialFilter(gj, activeCDKs, activePJLPoints, fileInfo) {
   if (!activeCDKs.length) return true;
+
+  if (fileInfo && fileInfo.cdkTag) {
+    var fileCdkTags = fileInfo.cdkTag.toLowerCase().split(',').map(function(s) { return s.trim(); });
+    var match = activeCDKs.some(function(cdk) {
+      return fileCdkTags.indexOf(cdk.toLowerCase()) !== -1;
+    });
+    if (match) return true;
+    return false;
+  }
+
   if (!activePJLPoints.length) return false;
   if (!gj || !gj.features || !gj.features.length) return false;
   try {
@@ -750,7 +760,8 @@ function renderSpatialPolygons() {
     DATA.pjl.forEach(function(r) {
       if (!r._lat || !r._lng) return;
       var cdk = String(r['Unit Kerja'] || r['CDK'] || '').toLowerCase();
-      var match = activeCDKs.some(function(f) { return cdk.indexOf(f) !== -1; });
+      var cdkTags = cdk.split(',').map(function(s) { return s.trim(); });
+      var match = activeCDKs.some(function(f) { return cdkTags.indexOf(f) !== -1; });
       if (match) activePJLPoints.push([r._lat, r._lng]);
     });
   }
@@ -770,7 +781,7 @@ function renderSpatialPolygons() {
     Promise.all(batch.map(function(f) {
       return loadSpatialGeoJSONForFile(f).then(function(gj) {
         if (SPATIAL_RENDER_TOKEN !== fetchToken || !SPATIAL_UPLOAD_LAYER) return;
-        if (!passesCdkSpatialFilter(gj, activeCDKs, activePJLPoints)) return;
+        if (!passesCdkSpatialFilter(gj, activeCDKs, activePJLPoints, f)) return;
         var bb = getSpatialFileBBox(f) || computeGeoJSONBBox(gj);
         f._bbox = bb;
         if (bb) {
@@ -792,11 +803,30 @@ function renderSpatialPolygons() {
 /* ── Add one GeoJSON to the spatial layer with CDK spatial filter ── */
 function addGeoJSONToSpatialLayer(gj, fileInfo, activeCDKs, activePJLPoints) {
   if (!gj || !gj.features || !SPATIAL_UPLOAD_LAYER) return;
-  var useFeatureFilter = activeCDKs.length > 0 && activePJLPoints.length > 0;
+  
+  var hasCdkTagMatch = false;
+  if (activeCDKs.length > 0 && fileInfo && fileInfo.cdkTag) {
+    var fileCdkTags = fileInfo.cdkTag.toLowerCase().split(',').map(function(s) { return s.trim(); });
+    hasCdkTagMatch = activeCDKs.some(function(cdk) {
+      return fileCdkTags.indexOf(cdk.toLowerCase()) !== -1;
+    });
+  }
+  
+  var useFeatureFilter = activeCDKs.length > 0 && activePJLPoints.length > 0 && !hasCdkTagMatch;
   try {
     L.geoJSON(gj, {
       style: function() {
         return { color: '#e53935', weight: 2, fillColor: '#ef5350', fillOpacity: 0.3, dashArray: null };
+      },
+      pointToLayer: function(feature, latlng) {
+        return L.marker(latlng, {
+          icon: L.divIcon({
+            className: 'custom-diamond-icon',
+            html: '<svg width="10" height="10" viewBox="0 0 100 100" style="overflow:visible;"><polygon points="50,0 100,50 50,100 0,50" fill="#ff9800" stroke="#d84315" stroke-width="10" stroke-linejoin="round"/></svg>',
+            iconSize: [10, 10],
+            iconAnchor: [5, 5]
+          })
+        });
       },
       filter: useFeatureFilter ? function(feature) {
         var geom = feature.geometry;
