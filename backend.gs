@@ -302,11 +302,11 @@ var SPATIAL_HEADERS_ = [
   "Diunggah",
   "Ukuran_KB",
   "CDK_Tag",
-  "Kategori",
   "BBox_W",
   "BBox_S",
   "BBox_E",
   "BBox_N",
+  "Kategori",
 ];
 
 function getOrCreateSpatialSheet_(ss) {
@@ -507,11 +507,11 @@ function doPost(e) {
         now,
         sizeKB,
         cdkTag,
-        kategori,
         data.bbox_w || "",
         data.bbox_s || "",
         data.bbox_e || "",
         data.bbox_n || "",
+        kategori,
       ]);
       return ContentService.createTextOutput(
         JSON.stringify({
@@ -601,28 +601,16 @@ function doGet(e) {
           var uploaded = String(rows[i][3]);
           var sizeKB = rows[i][4];
           var cdkTag = String(rows[i][5] || "");
-          var kategoriStr = String(rows[i][6] || "");
-          var kategori = "Jaga Leuweung";
           var bbox = null;
-          
-          if (kategoriStr !== "" && !isNaN(parseFloat(kategoriStr))) {
-             bbox = {
-               west: Number(rows[i][6]),
-               south: Number(rows[i][7]),
-               east: Number(rows[i][8]),
-               north: Number(rows[i][9]),
-             };
-          } else {
-             kategori = kategoriStr || "Jaga Leuweung";
-             if (rows[i][7] && rows[i][8] && rows[i][9] && rows[i][10]) {
-               bbox = {
-                 west: Number(rows[i][7]),
-                 south: Number(rows[i][8]),
-                 east: Number(rows[i][9]),
-                 north: Number(rows[i][10]),
-               };
-             }
+          if (rows[i][6] && rows[i][7] && rows[i][8] && rows[i][9]) {
+            bbox = {
+              west: Number(rows[i][6]),
+              south: Number(rows[i][7]),
+              east: Number(rows[i][8]),
+              north: Number(rows[i][9]),
+            };
           }
+          var kategori = String(rows[i][10] || "Jaga Leuweung");
 
           files.push({
             fileId: fileId,
