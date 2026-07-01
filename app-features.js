@@ -558,7 +558,7 @@ function bindSpatialMapEvents() {
   mapObj.on('moveend zoomend', function() {
     if (!SPATIAL_ENABLED) return;
     clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(function() { renderSpatialPolygons(); }, 450);
+    debounceTimer = setTimeout(function() { renderSpatialPolygons(false); }, 450);
   });
 }
 
@@ -636,6 +636,7 @@ function passesCdkSpatialFilter(gj, activeCDKs, activePJLPoints, fileInfo) {
 
 var SPATIAL_ACTIVE_TAB = 'Jaga Leuweung';
 var SPATIAL_VISIBLE_CACHE = {};
+var RENDERED_SPATIAL_FILES = {};
 
 function switchSpatialTab(tabName) {
   SPATIAL_ACTIVE_TAB = tabName;
@@ -656,7 +657,12 @@ function switchSpatialTab(tabName) {
 
 function toggleSpatialFile(fileId, checked) {
   SPATIAL_VISIBLE_CACHE[fileId] = checked;
-  scheduleSpatialPolygonLoad(50);
+  if (!checked && RENDERED_SPATIAL_FILES[fileId] && SPATIAL_UPLOAD_LAYER) {
+    SPATIAL_UPLOAD_LAYER.removeLayer(RENDERED_SPATIAL_FILES[fileId]);
+    delete RENDERED_SPATIAL_FILES[fileId];
+  } else if (checked) {
+    scheduleSpatialPolygonLoad(50);
+  }
 }
 
 function getSpatialFilteredFiles() {
@@ -775,15 +781,20 @@ function renderSpatialFileListPage() {
 }
 
 /* ── Render polygon ke peta dengan filter CDK (lazy + viewport) ── */
-function renderSpatialPolygons() {
-  if (SPATIAL_UPLOAD_LAYER) { try { mapObj.removeLayer(SPATIAL_UPLOAD_LAYER); } catch(e) {} }
-  SPATIAL_UPLOAD_LAYER = null;
+function renderSpatialPolygons(forceRebuild) {
+  if (forceRebuild) {
+    if (SPATIAL_UPLOAD_LAYER && mapObj) { try { mapObj.removeLayer(SPATIAL_UPLOAD_LAYER); } catch(e) {} }
+    SPATIAL_UPLOAD_LAYER = null;
+    RENDERED_SPATIAL_FILES = {};
+  }
   var fetchToken = Date.now();
   SPATIAL_RENDER_TOKEN = fetchToken;
 
   if (!SPATIAL_ENABLED || !mapObj) return;
   bindSpatialMapEvents();
-  SPATIAL_UPLOAD_LAYER = L.layerGroup().addTo(mapObj);
+  if (!SPATIAL_UPLOAD_LAYER) {
+    SPATIAL_UPLOAD_LAYER = L.layerGroup().addTo(mapObj);
+  }
 
   var mapBounds = mapObj.getBounds();
   var activeCDKs = FILTER.cdk && FILTER.cdk.length ? FILTER.cdk.map(function(c){ return c.toLowerCase(); }) : [];
@@ -799,6 +810,7 @@ function renderSpatialPolygons() {
   }
 
   var candidates = SPATIAL_FILES_CACHE.filter(function(f) {
+    if (SPATIAL_VISIBLE_CACHE[f.fileId] === false) return false;
     var bb = getSpatialFileBBox(f);
     if (bb) return bboxIntersectsMap(bb, mapBounds);
     return true;
@@ -811,6 +823,7 @@ function renderSpatialPolygons() {
     if (!batch.length) return;
     idx += SPATIAL_FETCH_CONCURRENCY;
     Promise.all(batch.map(function(f) {
+      if (RENDERED_SPATIAL_FILES[f.fileId]) return Promise.resolve(); // Already loaded and rendered
       return loadSpatialGeoJSONForFile(f).then(function(gj) {
         if (SPATIAL_RENDER_TOKEN !== fetchToken || !SPATIAL_UPLOAD_LAYER) return;
         if (!passesCdkSpatialFilter(gj, activeCDKs, activePJLPoints, f)) return;
@@ -821,7 +834,8 @@ function renderSpatialPolygons() {
           saveSpatialBBoxToLS(f.fileId, bb);
         }
         if (bb && !bboxIntersectsMap(bb, mapBounds)) return;
-        addGeoJSONToSpatialLayer(gj, f, activeCDKs, activePJLPoints);
+        var layer = addGeoJSONToSpatialLayer(gj, f, activeCDKs, activePJLPoints);
+        if (layer) { RENDERED_SPATIAL_FILES[f.fileId] = layer; }
       }).catch(function() {});
     })).then(function() {
       if (idx < candidates.length && SPATIAL_RENDER_TOKEN === fetchToken) {
@@ -834,7 +848,7 @@ function renderSpatialPolygons() {
 
 /* ── Add one GeoJSON to the spatial layer with CDK spatial filter ── */
 function addGeoJSONToSpatialLayer(gj, fileInfo, activeCDKs, activePJLPoints) {
-  if (!gj || !gj.features || !SPATIAL_UPLOAD_LAYER) return;
+  if (!gj || !gj.features || !SPATIAL_UPLOAD_LAYER) return null;
   
   var hasCdkTagMatch = false;
   if (activeCDKs.length > 0 && fileInfo && fileInfo.cdkTag) {
@@ -870,7 +884,7 @@ function addGeoJSONToSpatialLayer(gj, fileInfo, activeCDKs, activePJLPoints) {
     var isLarge = fileInfo && (fileInfo.sizeKB > 1500);
     var renderer = isLarge ? L.canvas({ padding: 0.5 }) : L.svg({ padding: 0.5 });
 
-    L.geoJSON(filteredGj, {
+    var geojsonLayer = L.geoJSON(filteredGj, {
       renderer: renderer,
       style: function() { return { color: '#e53935', weight: 2, fillColor: '#ef5350', fillOpacity: 0.3, dashArray: null }; },
       pointToLayer: function(feature, latlng) {
@@ -888,8 +902,10 @@ function addGeoJSONToSpatialLayer(gj, fileInfo, activeCDKs, activePJLPoints) {
           '<table>' + rows + '</table></div>';
         layer.bindPopup(html);
       }
-    }).addTo(SPATIAL_UPLOAD_LAYER);
-  } catch(e) {}
+    });
+    geojsonLayer.addTo(SPATIAL_UPLOAD_LAYER);
+    return geojsonLayer;
+  } catch(e) { return null; }
 }
 
 /* ── Zoom ke polygon tertentu ── */
@@ -1843,6 +1859,7 @@ function doRender() {
     document.getElementById('cnt-jum').textContent = cnt.jum;
   } catch(e) {}
   updateCharts(cnt);
+  if (typeof renderSpatialPolygons === 'function') renderSpatialPolygons(true);
 }
 
 /* Charts */
