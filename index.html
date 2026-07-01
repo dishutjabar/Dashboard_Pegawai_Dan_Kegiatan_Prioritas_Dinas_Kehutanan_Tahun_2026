@@ -28,6 +28,7 @@
 <script src="https://cdn.jsdelivr.net/npm/exif-js"></script>
 <script src="https://unpkg.com/shpjs@4.0.4/dist/shp.js"></script>
 <script src="https://unpkg.com/@tmcw/togeojson@5.8.1/dist/togeojson.umd.js"></script>
+<script src="https://unpkg.com/leaflet.vectorgrid@latest/dist/Leaflet.VectorGrid.bundled.js"></script>
 <link rel="stylesheet" href="styles.css"/>
 </head>
 <body>
@@ -426,6 +427,13 @@
                placeholder="Cari nama file polygon..." autocomplete="off"
                oninput="spatialFileListSearch(this.value)">
       </div>
+      
+      <div class="sp-file-tabs">
+        <button class="sp-tab active" id="sptab-jl" onclick="switchSpatialTab('Jaga Leuweung')">Jaga Leuweung</button>
+        <button class="sp-tab" id="sptab-kh" onclick="switchSpatialTab('Kawasan Hutan')">Kawasan Hutan</button>
+        <button class="sp-tab" id="sptab-lk" onclick="switchSpatialTab('Lahan Kritis')">Lahan Kritis</button>
+      </div>
+
       <div id="spatial-file-list" class="sp-file-list">
         <div class="sp-file-list-empty">Memuat daftar file...</div>
       </div>

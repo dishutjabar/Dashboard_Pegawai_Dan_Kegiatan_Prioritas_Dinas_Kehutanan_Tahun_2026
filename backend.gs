@@ -7,7 +7,7 @@
 
 var SPREADSHEET_ID = "14jmMYMOY6vl2nIdbZdO-wahixn1yN3LTLqwI-19RNtY";
 var UPLOAD_FOLDER_NAME = "GeoHutan_Uploads";
-var SPATIAL_FOLDER_NAME = "IT_dokumentasi_spasial";
+var SPATIAL_FOLDER_ID = "1YJGN6B0mGblMuSWLOTjgWQv9CQe9rfYr";
 var SPATIAL_SHEET_NAME = "Data_Spasial";
 
 /** Folder Google Drive PJL per tahun linimasa */
@@ -302,6 +302,7 @@ var SPATIAL_HEADERS_ = [
   "Diunggah",
   "Ukuran_KB",
   "CDK_Tag",
+  "Kategori",
   "BBox_W",
   "BBox_S",
   "BBox_E",
@@ -471,8 +472,9 @@ function doPost(e) {
         spFileName = String(spFileName).replace(/\.[^.]+$/, "") + ".geojson";
       }
       var cdkTag = String(data.cdk_tag || "");
+      var kategori = String(data.kategori || "Jaga Leuweung");
       var ssSp = SpreadsheetApp.openById(SPREADSHEET_ID);
-      var spFolder = getOrCreateFolder_(SPATIAL_FOLDER_NAME);
+      var spFolder = DriveApp.getFolderById(SPATIAL_FOLDER_ID);
       var spBlob = Utilities.newBlob(
         geoJsonStr,
         "application/geo+json",
@@ -505,6 +507,7 @@ function doPost(e) {
         now,
         sizeKB,
         cdkTag,
+        kategori,
         data.bbox_w || "",
         data.bbox_s || "",
         data.bbox_e || "",
@@ -518,6 +521,13 @@ function doPost(e) {
           filename: spFileName,
           uploaded: now,
           sizeKB: sizeKB,
+          kategori: kategori,
+          bbox: {
+            west: data.bbox_w || "",
+            south: data.bbox_s || "",
+            east: data.bbox_e || "",
+            north: data.bbox_n || ""
+          },
         }),
       ).setMimeType(ContentService.MimeType.JSON);
 
@@ -591,14 +601,27 @@ function doGet(e) {
           var uploaded = String(rows[i][3]);
           var sizeKB = rows[i][4];
           var cdkTag = String(rows[i][5] || "");
+          var kategoriStr = String(rows[i][6] || "");
+          var kategori = "Jaga Leuweung";
           var bbox = null;
-          if (rows[i][6] !== "" && rows[i][7] !== "" && rows[i][8] !== "" && rows[i][9] !== "") {
-            bbox = {
-              west: Number(rows[i][6]),
-              south: Number(rows[i][7]),
-              east: Number(rows[i][8]),
-              north: Number(rows[i][9]),
-            };
+          
+          if (kategoriStr !== "" && !isNaN(parseFloat(kategoriStr))) {
+             bbox = {
+               west: Number(rows[i][6]),
+               south: Number(rows[i][7]),
+               east: Number(rows[i][8]),
+               north: Number(rows[i][9]),
+             };
+          } else {
+             kategori = kategoriStr || "Jaga Leuweung";
+             if (rows[i][7] && rows[i][8] && rows[i][9] && rows[i][10]) {
+               bbox = {
+                 west: Number(rows[i][7]),
+                 south: Number(rows[i][8]),
+                 east: Number(rows[i][9]),
+                 north: Number(rows[i][10]),
+               };
+             }
           }
 
           files.push({
@@ -608,6 +631,7 @@ function doGet(e) {
             uploaded: uploaded,
             sizeKB: sizeKB,
             cdkTag: cdkTag,
+            kategori: kategori,
             bbox: bbox,
           });
         }

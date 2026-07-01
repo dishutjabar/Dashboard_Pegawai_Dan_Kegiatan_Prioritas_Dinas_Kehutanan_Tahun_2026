@@ -474,6 +474,7 @@ function uploadSpatialToBackend(geojson, filename, done) {
       geojson: geoStr,
       filename: geojsonFilename,
       cdk_tag: cdkTag,
+      kategori: typeof SPATIAL_ACTIVE_TAB !== 'undefined' ? SPATIAL_ACTIVE_TAB : 'Jaga Leuweung',
       bbox_w: bbox ? bbox.west : '',
       bbox_s: bbox ? bbox.south : '',
       bbox_e: bbox ? bbox.east : '',
@@ -633,10 +634,37 @@ function passesCdkSpatialFilter(gj, activeCDKs, activePJLPoints, fileInfo) {
   } catch (e) { return true; }
 }
 
+var SPATIAL_ACTIVE_TAB = 'Jaga Leuweung';
+var SPATIAL_VISIBLE_CACHE = {};
+
+function switchSpatialTab(tabName) {
+  SPATIAL_ACTIVE_TAB = tabName;
+  var tabs = document.querySelectorAll('.sp-tab');
+  for (var i = 0; i < tabs.length; i++) {
+    tabs[i].classList.remove('active');
+  }
+  var jl = document.getElementById('sptab-jl');
+  var kh = document.getElementById('sptab-kh');
+  var lk = document.getElementById('sptab-lk');
+  if (tabName === 'Jaga Leuweung' && jl) jl.classList.add('active');
+  if (tabName === 'Kawasan Hutan' && kh) kh.classList.add('active');
+  if (tabName === 'Lahan Kritis' && lk) lk.classList.add('active');
+  SPATIAL_LIST_PAGE = 0;
+  if (typeof renderSpatialFileListPage === 'function') renderSpatialFileListPage();
+  if (typeof updateSpatialFileCount === 'function') updateSpatialFileCount();
+}
+
+function toggleSpatialFile(fileId, checked) {
+  SPATIAL_VISIBLE_CACHE[fileId] = checked;
+  scheduleSpatialPolygonLoad(50);
+}
+
 function getSpatialFilteredFiles() {
   var q = (SPATIAL_LIST_QUERY || '').trim().toLowerCase();
-  if (!q) return SPATIAL_LIST_ALL;
   return SPATIAL_LIST_ALL.filter(function(f) {
+    var kat = f.kategori || 'Jaga Leuweung';
+    if (kat !== SPATIAL_ACTIVE_TAB) return false;
+    if (!q) return true;
     return (f.filename || '').toLowerCase().indexOf(q) !== -1 ||
            (f.cdkTag || '').toLowerCase().indexOf(q) !== -1;
   });
@@ -670,6 +698,9 @@ function fetchSpatialFileList() {
       if (!res.success) { if (listEl) listEl.innerHTML = '<div class="sp-file-list-error">Gagal memuat: ' + (res.error||'') + '</div>'; return; }
       var files = res.files || [];
       files.forEach(function(f) {
+        if (typeof SPATIAL_VISIBLE_CACHE[f.fileId] === 'undefined') {
+          SPATIAL_VISIBLE_CACHE[f.fileId] = (f.kategori === 'Kawasan Hutan' || f.kategori === 'Lahan Kritis') ? false : true;
+        }
         var existing = SPATIAL_FILES_CACHE.find(function(c) { return c.fileId === f.fileId; });
         if (existing && existing.geojson) f.geojson = existing.geojson;
         if (existing && existing._bbox) f._bbox = existing._bbox;
@@ -727,6 +758,7 @@ function renderSpatialFileListPage() {
         '<div class="sp-file-meta">Diunggah: ' + f.uploaded + ' &bull; ' + (f.sizeKB||'?') + ' KB</div>' +
       '</div>' +
       '<div class="sp-file-actions">' +
+        '<label class="sp-switch"><input type="checkbox" onchange="toggleSpatialFile(\'' + f.fileId + '\', this.checked)" ' + (SPATIAL_VISIBLE_CACHE[f.fileId] ? 'checked' : '') + '><span class="sp-slider"></span></label>' +
         '<button class="sp-btn-view" onclick="zoomToSpatialFile(\'' + f.fileId + '\')">&#128269; Lihat</button>' +
         '<button class="sp-btn-del" onclick="deleteSpatialFile(\'' + f.fileId + '\', \'' + f.filename.replace(/'/g,"\\'") + '\')">&#128465; Hapus</button>' +
       '</div>' +
@@ -813,22 +845,12 @@ function addGeoJSONToSpatialLayer(gj, fileInfo, activeCDKs, activePJLPoints) {
   }
   
   var useFeatureFilter = activeCDKs.length > 0 && activePJLPoints.length > 0 && !hasCdkTagMatch;
+  if (fileInfo && SPATIAL_VISIBLE_CACHE[fileInfo.fileId] === false) return; // Hidden by toggle
+
   try {
-    L.geoJSON(gj, {
-      style: function() {
-        return { color: '#e53935', weight: 2, fillColor: '#ef5350', fillOpacity: 0.3, dashArray: null };
-      },
-      pointToLayer: function(feature, latlng) {
-        return L.marker(latlng, {
-          icon: L.divIcon({
-            className: 'custom-diamond-icon',
-            html: '<svg width="10" height="10" viewBox="0 0 100 100" style="overflow:visible;"><polygon points="50,0 100,50 50,100 0,50" fill="#ff9800" stroke="#d84315" stroke-width="10" stroke-linejoin="round"/></svg>',
-            iconSize: [10, 10],
-            iconAnchor: [5, 5]
-          })
-        });
-      },
-      filter: useFeatureFilter ? function(feature) {
+    var filteredGj = gj;
+    if (useFeatureFilter) {
+      filteredGj = { type: 'FeatureCollection', features: gj.features.filter(function(feature) {
         var geom = feature.geometry;
         if (!geom) return false;
         try {
@@ -842,20 +864,57 @@ function addGeoJSONToSpatialLayer(gj, fileInfo, activeCDKs, activePJLPoints) {
             }
           });
         } catch (e) { return true; }
-      } : undefined,
-      onEachFeature: function(feature, layer) {
-        var props = feature.properties || {};
+      }) };
+    }
+
+    var isLarge = fileInfo && (fileInfo.sizeKB > 1500);
+
+    if (isLarge && typeof L.vectorGrid !== 'undefined') {
+      var vectorLayer = L.vectorGrid.slicer(filteredGj, {
+        rendererFactory: L.canvas.tile,
+        vectorTileLayerStyles: {
+          sliced: function(properties, zoom) {
+            return { color: '#e53935', weight: 2, fillColor: '#ef5350', fillOpacity: 0.3, fill: true };
+          }
+        },
+        interactive: true,
+        getFeatureId: function(f) { return Math.random(); }
+      });
+      vectorLayer.on('click', function(e) {
+        var props = e.layer.properties || {};
         var keys = Object.keys(props).filter(function(k) { return props[k] != null && props[k] !== ''; });
-        if (!keys.length) { layer.bindPopup('<b>' + fileInfo.filename + '</b>'); return; }
-        var rows = keys.slice(0, 20).map(function(k) {
-          return '<tr><td style="padding:2px 8px 2px 0; font-weight:600; color:var(--primary,#43a047); white-space:nowrap;">' + k + '</td><td style="padding:2px 0;">' + props[k] + '</td></tr>';
-        }).join('');
-        var html = '<div style="font-size:11px; font-family:Inter; max-height:220px; overflow-y:auto;">' +
-          '<b style="font-size:12px; color:#e53935; display:block; margin-bottom:6px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:4px;">📄 ' + fileInfo.filename + '</b>' +
-          '<table>' + rows + '</table></div>';
-        layer.bindPopup(html);
-      }
-    }).addTo(SPATIAL_UPLOAD_LAYER);
+        var popupContent = '<b>' + (fileInfo ? fileInfo.filename : '') + '</b>';
+        if (keys.length > 0) {
+          var rows = keys.slice(0, 20).map(function(k) {
+            return '<tr><td style="padding:2px 8px 2px 0; font-weight:600; color:#43a047; white-space:nowrap;">' + k + '</td><td style="padding:2px 0;">' + props[k] + '</td></tr>';
+          }).join('');
+          popupContent = '<div style="font-size:11px; font-family:Inter; max-height:220px; overflow-y:auto;">' +
+            '<b style="font-size:12px; color:#e53935; display:block; margin-bottom:6px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:4px;">📄 ' + (fileInfo ? fileInfo.filename : '') + '</b>' +
+            '<table>' + rows + '</table></div>';
+        }
+        L.popup().setLatLng(e.latlng).setContent(popupContent).openOn(mapObj);
+      });
+      vectorLayer.addTo(SPATIAL_UPLOAD_LAYER);
+    } else {
+      L.geoJSON(filteredGj, {
+        style: function() { return { color: '#e53935', weight: 2, fillColor: '#ef5350', fillOpacity: 0.3, dashArray: null }; },
+        pointToLayer: function(feature, latlng) {
+          return L.marker(latlng, { icon: L.divIcon({ className: 'custom-diamond-icon', html: '<svg width="10" height="10" viewBox="0 0 100 100" style="overflow:visible;"><polygon points="50,0 100,50 50,100 0,50" fill="#ff9800" stroke="#d84315" stroke-width="10" stroke-linejoin="round"/></svg>', iconSize: [10, 10], iconAnchor: [5, 5] }) });
+        },
+        onEachFeature: function(feature, layer) {
+          var props = feature.properties || {};
+          var keys = Object.keys(props).filter(function(k) { return props[k] != null && props[k] !== ''; });
+          if (!keys.length) { layer.bindPopup('<b>' + (fileInfo ? fileInfo.filename : '') + '</b>'); return; }
+          var rows = keys.slice(0, 20).map(function(k) {
+            return '<tr><td style="padding:2px 8px 2px 0; font-weight:600; color:#43a047; white-space:nowrap;">' + k + '</td><td style="padding:2px 0;">' + props[k] + '</td></tr>';
+          }).join('');
+          var html = '<div style="font-size:11px; font-family:Inter; max-height:220px; overflow-y:auto;">' +
+            '<b style="font-size:12px; color:#e53935; display:block; margin-bottom:6px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:4px;">📄 ' + (fileInfo ? fileInfo.filename : '') + '</b>' +
+            '<table>' + rows + '</table></div>';
+          layer.bindPopup(html);
+        }
+      }).addTo(SPATIAL_UPLOAD_LAYER);
+    }
   } catch(e) {}
 }
 
@@ -1083,6 +1142,16 @@ function openDrawer(type, r) {
     ];
     var _pjlPhotoRow = r;
   } else if (type === 'per' || type === 'persemaian') {
+    var ket = String(r['Keterangan'] || '');
+    var totalBibit = 0;
+    var matches = ket.match(/\(\s*(\d+)\s*\)/g);
+    if (matches) {
+      matches.forEach(function(m) {
+        totalBibit += parseInt(m.replace(/\D/g, ''), 10);
+      });
+    }
+    var totalBibitStr = '<strong style="color:#43a047; font-size:12px;">' + totalBibit.toLocaleString('id-ID') + '</strong>';
+
     config = [
       ['Unit Kerja', r['Unit Kerja']],
       ['Kecamatan', r['Kecamatan']],
@@ -1095,7 +1164,8 @@ function openDrawer(type, r) {
       ['Target Bibit', r['Target Bibit']],
       ['Realisasi', r['Realisasi Bibit'] || r['Realisasi']],
       ['Koordinat', coordText(lat, lng)],
-      ['Keterangan', r['Keterangan']]
+      ['Ket.(Jenis & Jumlah Bibit) :', ket],
+      ['Total Bibit', totalBibit > 0 ? totalBibitStr : '0']
     ];
   } else if (type === 'peg' || type === 'pegawai') {
     config = [
@@ -1668,6 +1738,14 @@ function doRender() {
                 '</div>';
             }
           } else if (type === 'per') {
+            var ketTip = String(r['Keterangan'] || '');
+            var totalBibitTip = 0;
+            var matchesTip = ketTip.match(/\(\s*(\d+)\s*\)/g);
+            if (matchesTip) {
+              matchesTip.forEach(function(m) { totalBibitTip += parseInt(m.replace(/\D/g, ''), 10); });
+            }
+            var totalBibitStrTip = '<strong style="color:#43a047;">' + totalBibitTip.toLocaleString('id-ID') + '</strong>';
+
             hoverHTML = buildMarkerTipPanel(
               name || 'Lokasi Persemaian',
               [
@@ -1680,7 +1758,9 @@ function doRender() {
                 ['Tahapan', r['Tahapan Kegiatan'] || r['Tahapan']],
                 ['Luas (Ha)', r['Luas (Ha)'] || r['Luas']],
                 ['Target Bibit', r['Target Bibit']],
-                ['Realisasi', r['Realisasi Bibit'] || r['Realisasi']]
+                ['Realisasi', r['Realisasi Bibit'] || r['Realisasi']],
+                ['Ket.(Jenis & Jumlah Bibit) :', ketTip],
+                ['Total Bibit', totalBibitTip > 0 ? totalBibitStrTip : '0']
               ],
               '#1e88e5'
             );
