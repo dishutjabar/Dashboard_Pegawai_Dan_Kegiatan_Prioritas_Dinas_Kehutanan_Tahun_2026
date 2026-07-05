@@ -6,9 +6,71 @@
 // ==============================================================================
 
 var SPREADSHEET_ID = "14jmMYMOY6vl2nIdbZdO-wahixn1yN3LTLqwI-19RNtY";
+var JUNA_SPREADSHEET_ID = "1p7-7pSKtNCc58eC-tXJsXNKk3QSSswI68Gl6fNsZhSE";
 var UPLOAD_FOLDER_NAME = "GeoHutan_Uploads";
 var SPATIAL_FOLDER_ID = "1YJGN6B0mGblMuSWLOTjgWQv9CQe9rfYr";
 var SPATIAL_SHEET_NAME = "Data_Spasial";
+var ACCESS_SPREADSHEET_ID = "1UvYIHbYTMqXiTVn-T7A0Ph0ekecsDkkHUdIVbjeOorE";
+var ACCESS_SHEET_NAME = "Users_Akses";
+var AUTH_CACHE_PREFIX = "geohutan_auth_";
+var AUTH_ATTEMPT_PREFIX = "geohutan_attempt_";
+var AUTH_TOKEN_TTL_SECONDS = 21600;
+
+var ACCESS_HEADERS_ = [
+  "Username",
+  "PasswordHash",
+  "NamaLengkap",
+  "Jabatan",
+  "Role",
+  "Aktif",
+  "LastLogin",
+  "UpdatedAt",
+];
+
+var DEFAULT_ACCESS_USERS_ = [
+  {
+    username: "superadmingis",
+    password: "Mastertrees751#",
+    nama: "Super Admin GIS",
+    jabatan: "Super Administrator",
+    role: "admin",
+  },
+  {
+    username: "kadishutjabar",
+    password: "d15hutgis751",
+    nama: "Kepala Dinas Kehutanan Provinsi Jawa Barat",
+    jabatan: "Kepala Dinas",
+    role: "admin",
+  },
+  {
+    username: "KPDAS",
+    password: "d15hutgis751",
+    nama: "Kepala Bidang PDAS",
+    jabatan: "Kepala Bidang PDAS",
+    role: "user",
+  },
+  {
+    username: "KPKSDAE",
+    password: "d15hutgis751",
+    nama: "Kepala Bidang PKSDAE",
+    jabatan: "Kepala Bidang PKSDAE",
+    role: "user",
+  },
+  {
+    username: "KPPKH",
+    password: "d15hutgis751",
+    nama: "Kepala Bidang PPKH",
+    jabatan: "Kepala Bidang PPKH",
+    role: "user",
+  },
+  {
+    username: "KBUPM",
+    password: "d15hutgis751",
+    nama: "Kepala Bidang BUPM",
+    jabatan: "Kepala Bidang BUPM",
+    role: "user",
+  },
+];
 
 /** Folder Google Drive PJL per tahun linimasa */
 var PJL_DRIVE_FOLDERS = {
@@ -29,6 +91,208 @@ function getOrCreateFolder_(folderName) {
     return iter.next();
   }
   return DriveApp.createFolder(folderName);
+}
+
+function jsonOutput_(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(
+    ContentService.MimeType.JSON,
+  );
+}
+
+function formatDateForSheet_(dateObj) {
+  var d = dateObj instanceof Date && !isNaN(dateObj.getTime()) ? dateObj : new Date();
+  return Utilities.formatDate(d, Session.getScriptTimeZone(), "dd/MM/yyyy");
+}
+
+function normalizeUploadDate_(value) {
+  if (!value) return formatDateForSheet_(new Date());
+  if (value instanceof Date) return formatDateForSheet_(value);
+
+  var s = String(value).trim();
+  var m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2}))?/);
+  if (m) {
+    return ("0" + m[1]).slice(-2) + "/" + ("0" + m[2]).slice(-2) + "/" + m[3] +
+      (m[4] ? " " + ("0" + m[4]).slice(-2) + ":" + m[5] : "");
+  }
+
+  m = s.match(/^(\d{4})[-:](\d{2})[-:](\d{2})(?:[T\s](\d{1,2}):(\d{2}))?/);
+  if (m) {
+    return m[3] + "/" + m[2] + "/" + m[1] +
+      (m[4] ? " " + ("0" + m[4]).slice(-2) + ":" + m[5] : "");
+  }
+
+  var parsed = new Date(s);
+  if (!isNaN(parsed.getTime())) return formatDateForSheet_(parsed);
+  return formatDateForSheet_(new Date());
+}
+
+function sha256Hex_(value) {
+  var bytes = Utilities.computeDigest(
+    Utilities.DigestAlgorithm.SHA_256,
+    String(value || ""),
+    Utilities.Charset.UTF_8,
+  );
+  return bytes
+    .map(function (b) {
+      var v = b < 0 ? b + 256 : b;
+      return ("0" + v.toString(16)).slice(-2);
+    })
+    .join("");
+}
+
+function getOrCreateAccessSheet_() {
+  var ss = SpreadsheetApp.openById(ACCESS_SPREADSHEET_ID);
+  var sheet = ss.getSheetByName(ACCESS_SHEET_NAME);
+  if (!sheet) sheet = ss.insertSheet(ACCESS_SHEET_NAME);
+
+  var lastCol = sheet.getLastColumn();
+  if (lastCol < ACCESS_HEADERS_.length) {
+    sheet.getRange(1, 1, 1, ACCESS_HEADERS_.length).setValues([ACCESS_HEADERS_]);
+  }
+
+  var data = sheet.getDataRange().getValues();
+  var existing = {};
+  for (var i = 1; i < data.length; i++) {
+    if (data[i][0]) existing[String(data[i][0]).toLowerCase()] = true;
+  }
+
+  var now = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "dd/MM/yyyy HH:mm");
+  DEFAULT_ACCESS_USERS_.forEach(function (u) {
+    if (!existing[String(u.username).toLowerCase()]) {
+      sheet.appendRow([
+        u.username,
+        sha256Hex_(u.password),
+        u.nama,
+        u.jabatan,
+        u.role,
+        true,
+        "",
+        now,
+      ]);
+    }
+  });
+  return sheet;
+}
+
+function getAccessRows_() {
+  var sheet = getOrCreateAccessSheet_();
+  var data = sheet.getDataRange().getValues();
+  return { sheet: sheet, rows: data };
+}
+
+function findAccessUser_(username) {
+  var lookup = String(username || "").trim().toLowerCase();
+  var ctx = getAccessRows_();
+  for (var i = 1; i < ctx.rows.length; i++) {
+    if (String(ctx.rows[i][0] || "").trim().toLowerCase() === lookup) {
+      return { sheet: ctx.sheet, rowIndex: i + 1, row: ctx.rows[i] };
+    }
+  }
+  return null;
+}
+
+function isActiveUserRow_(row) {
+  var active = row[5];
+  return active === true || String(active).toLowerCase() === "true" || String(active) === "1";
+}
+
+function validateCredentialInput_(username, password) {
+  username = String(username || "").trim();
+  password = String(password || "");
+  if (!/^[A-Za-z0-9._-]{4,40}$/.test(username)) {
+    throw new Error("Username harus 4-40 karakter dan hanya huruf, angka, titik, garis bawah, atau strip.");
+  }
+  if (password.length < 8 || password.length > 72) {
+    throw new Error("Password harus 8-72 karakter.");
+  }
+}
+
+function issueAuthToken_(username) {
+  var token = Utilities.getUuid() + "." + Utilities.getUuid();
+  CacheService.getScriptCache().put(AUTH_CACHE_PREFIX + token, username, AUTH_TOKEN_TTL_SECONDS);
+  return token;
+}
+
+function verifyAuthToken_(token) {
+  token = String(token || "");
+  if (!token) return "";
+  return CacheService.getScriptCache().get(AUTH_CACHE_PREFIX + token) || "";
+}
+
+function requireAuth_(payload) {
+  var token = payload && (payload.authToken || payload.token);
+  var username = verifyAuthToken_(token);
+  if (!username) throw new Error("Sesi login tidak valid atau sudah kedaluwarsa.");
+  return username;
+}
+
+function loginAccessUser_(data) {
+  var username = String(data.username || "").trim();
+  var password = String(data.password || "");
+  validateCredentialInput_(username, password);
+
+  var attemptKey = AUTH_ATTEMPT_PREFIX + username.toLowerCase();
+  var cache = CacheService.getScriptCache();
+  var attempts = Number(cache.get(attemptKey) || 0);
+  if (attempts >= 8) {
+    return jsonOutput_({ success: false, error: "Terlalu banyak percobaan login. Coba lagi beberapa menit lagi." });
+  }
+
+  var user = findAccessUser_(username);
+  var hash = sha256Hex_(password);
+  if (!user || !isActiveUserRow_(user.row) || String(user.row[1]) !== hash) {
+    cache.put(attemptKey, String(attempts + 1), 600);
+    return jsonOutput_({ success: false, error: "Username atau password tidak sesuai." });
+  }
+
+  cache.remove(attemptKey);
+  var now = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "dd/MM/yyyy HH:mm");
+  user.sheet.getRange(user.rowIndex, 7).setValue(now);
+  var token = issueAuthToken_(String(user.row[0]));
+  return jsonOutput_({
+    success: true,
+    token: token,
+    expiresIn: AUTH_TOKEN_TTL_SECONDS,
+    user: {
+      username: String(user.row[0]),
+      nama: String(user.row[2] || ""),
+      jabatan: String(user.row[3] || ""),
+      role: String(user.row[4] || "user"),
+      lastLogin: now,
+    },
+  });
+}
+
+function changeAccessCredentials_(data) {
+  var oldUsername = String(data.oldUsername || "").trim();
+  var oldPassword = String(data.oldPassword || "");
+  var newUsername = String(data.newUsername || "").trim();
+  var newPassword = String(data.newPassword || "");
+  validateCredentialInput_(oldUsername, oldPassword);
+  validateCredentialInput_(newUsername, newPassword);
+
+  var user = findAccessUser_(oldUsername);
+  if (!user || !isActiveUserRow_(user.row) || String(user.row[1]) !== sha256Hex_(oldPassword)) {
+    return jsonOutput_({ success: false, error: "Username atau password lama tidak sesuai." });
+  }
+
+  var existing = findAccessUser_(newUsername);
+  if (existing && existing.rowIndex !== user.rowIndex) {
+    return jsonOutput_({ success: false, error: "Username baru sudah digunakan akun lain." });
+  }
+
+  var now = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "dd/MM/yyyy HH:mm");
+  user.sheet.getRange(user.rowIndex, 1, 1, 8).setValues([[
+    newUsername,
+    sha256Hex_(newPassword),
+    user.row[2],
+    user.row[3],
+    user.row[4],
+    true,
+    user.row[6],
+    now,
+  ]]);
+  return jsonOutput_({ success: true, message: "Username dan password berhasil diperbarui." });
 }
 
 // ─── Helper: Cari sheet Juna (bukan tab CDK PJL) yang punya kolom Foto_2026 ───
@@ -69,6 +333,61 @@ function findCoordColumnIndices_(headers) {
   return { yIdx: yIdx, xIdx: xIdx };
 }
 
+function getSpreadsheetIdForCategory_(category) {
+  return category === "juna" ? JUNA_SPREADSHEET_ID : SPREADSHEET_ID;
+}
+
+function getSheetByGid_(ss, gid) {
+  if (!gid && gid !== 0) return null;
+  var target = String(gid);
+  var sheets = ss.getSheets();
+  for (var i = 0; i < sheets.length; i++) {
+    if (String(sheets[i].getSheetId()) === target) return sheets[i];
+  }
+  return null;
+}
+
+function ensurePhotoColumns_(sheet, year) {
+  var lastCol = Math.max(sheet.getLastColumn(), 1);
+  var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  var fotoColIdx = -1;
+  var tglColIdx = -1;
+
+  for (var h = 0; h < headers.length; h++) {
+    if (String(headers[h]).trim() === "Foto_" + year) fotoColIdx = h;
+    if (String(headers[h]).trim() === "Tanggal_" + year) tglColIdx = h;
+  }
+
+  if (fotoColIdx === -1) {
+    fotoColIdx = lastCol;
+    sheet.getRange(1, fotoColIdx + 1).setValue("Foto_" + year);
+    lastCol++;
+  }
+
+  if (tglColIdx === -1) {
+    tglColIdx = lastCol;
+    sheet.getRange(1, tglColIdx + 1).setValue("Tanggal_" + year);
+  }
+
+  return { fotoColIdx: fotoColIdx, tglColIdx: tglColIdx };
+}
+
+function normalizePhotoDate_(value) {
+  var s = String(value || "").trim();
+  if (/^\d{1,2}\/\d{1,2}\/\d{4}(?:\s+\d{1,2}:\d{2})?$/.test(s)) {
+    var parts = s.split(/\s+/);
+    var dmy = parts[0].split("/");
+    var out = ("0" + dmy[0]).slice(-2) + "/" + ("0" + dmy[1]).slice(-2) + "/" + dmy[2];
+    if (parts[1]) out += " " + parts[1];
+    return out;
+  }
+  if (/^\d{4}-\d{2}-\d{2}(?:[T\s]\d{1,2}:\d{2})?/.test(s)) {
+    var m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{1,2}):(\d{2}))?/);
+    return m[3] + "/" + m[2] + "/" + m[1] + (m[4] ? " " + ("0" + m[4]).slice(-2) + ":" + m[5] : "");
+  }
+  return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "dd/MM/yyyy");
+}
+
 function sheetHasPhotoColumns_(sheet) {
   var lastCol = sheet.getLastColumn();
   if (lastCol === 0) return false;
@@ -80,11 +399,13 @@ function sheetHasPhotoColumns_(sheet) {
 }
 
 /** Cari tab sheet berdasarkan koordinat + kategori (juna | pjl) */
-function findSheetByCoordinates_(ss, reqLat, reqLng, category) {
-  var sheets = ss.getSheets();
+function findSheetByCoordinates_(ss, reqLat, reqLng, category, options) {
+  options = options || {};
+  var preferredSheet = getSheetByGid_(ss, options.sheetGid);
+  var sheets = preferredSheet ? [preferredSheet] : ss.getSheets();
   for (var i = 0; i < sheets.length; i++) {
     var sheet = sheets[i];
-    if (!sheetHasPhotoColumns_(sheet)) continue;
+    if (!preferredSheet && !sheetHasPhotoColumns_(sheet)) continue;
     var sheetName = String(sheet.getName());
     var isPjlTab = /^CDK\d+_FORMATSISTEM$/i.test(sheetName);
     if (category === "pjl" && !isPjlTab) continue;
@@ -95,16 +416,14 @@ function findSheetByCoordinates_(ss, reqLat, reqLng, category) {
     var headers = data[0];
     var coords = findCoordColumnIndices_(headers);
     if (coords.yIdx === -1 || coords.xIdx === -1) continue;
+    if (preferredSheet && options.rowIndex) return sheet;
 
     for (var r = 1; r < data.length; r++) {
       var rawLat = String(data[r][coords.yIdx]).replace(",", ".");
       var rawLng = String(data[r][coords.xIdx]).replace(",", ".");
       var sheetLat = parseFloat(rawLat) || 0;
       var sheetLng = parseFloat(rawLng) || 0;
-      if (
-        Math.abs(sheetLat - reqLat) < 0.001 &&
-        Math.abs(sheetLng - reqLng) < 0.001
-      ) {
+      if (Math.abs(sheetLat - reqLat) < 0.0015 && Math.abs(sheetLng - reqLng) < 0.0015) {
         return sheet;
       }
     }
@@ -124,7 +443,8 @@ function getUploadFolder_(category, year) {
 }
 
 // ─── Helper: Update baris di Spreadsheet berdasarkan koordinat ───
-function updateRowData_(sheet, reqLat, reqLng, year, newUrl, newDate) {
+function updateRowData_(sheet, reqLat, reqLng, year, newUrl, newDate, options) {
+  options = options || {};
   var data = sheet.getDataRange().getValues();
   var headers = data[0];
 
@@ -133,29 +453,43 @@ function updateRowData_(sheet, reqLat, reqLng, year, newUrl, newDate) {
   var yIdx = coordIdx.yIdx;
   var xIdx = coordIdx.xIdx;
 
-  var fotoColIdx = -1,
-    tglColIdx = -1;
-  for (var h2 = 0; h2 < headers.length; h2++) {
-    if (String(headers[h2]).trim() === "Foto_" + year) fotoColIdx = h2;
-    if (String(headers[h2]).trim() === "Tanggal_" + year) tglColIdx = h2;
-  }
+  var photoCols = ensurePhotoColumns_(sheet, year);
+  var fotoColIdx = photoCols.fotoColIdx;
+  var tglColIdx = photoCols.tglColIdx;
 
-  if (fotoColIdx === -1 || tglColIdx === -1) {
-    throw new Error(
-      "Kolom Foto_" +
-        year +
-        " atau Tanggal_" +
-        year +
-        " tidak ditemukan di Sheet.",
-    );
-  }
   if (xIdx === -1 || yIdx === -1) {
     throw new Error(
       "Kolom Titik Koordinat (X) atau (Y) tidak ditemukan di Sheet.",
     );
   }
 
-  // Cari baris yang cocok berdasarkan koordinat (toleransi 0.001)
+  function appendToRow_(rowNumber, rowValues) {
+    var currentFotos = rowValues[fotoColIdx]
+      ? String(rowValues[fotoColIdx]).trim()
+      : "";
+    var currentTgls = rowValues[tglColIdx]
+      ? String(rowValues[tglColIdx]).trim()
+      : "";
+
+    var nextFotos = currentFotos ? currentFotos + "|" + newUrl : newUrl;
+    var nextTgls = currentTgls ? currentTgls + "|" + newDate : newDate;
+
+    sheet.getRange(rowNumber, fotoColIdx + 1).setValue(nextFotos);
+    sheet.getRange(rowNumber, tglColIdx + 1).setValue(nextTgls);
+    return true;
+  }
+
+  var rowIndex = parseInt(options.rowIndex || 0, 10);
+  if (rowIndex && rowIndex >= 2 && rowIndex <= sheet.getLastRow()) {
+    var directRow = sheet.getRange(rowIndex, 1, 1, Math.max(sheet.getLastColumn(), tglColIdx + 1)).getValues()[0];
+    var dLat = parseFloat(String(directRow[yIdx]).replace(",", ".")) || 0;
+    var dLng = parseFloat(String(directRow[xIdx]).replace(",", ".")) || 0;
+    if (Math.abs(dLat - reqLat) < 0.0025 && Math.abs(dLng - reqLng) < 0.0025) {
+      return appendToRow_(rowIndex, directRow);
+    }
+  }
+
+  // Cari baris yang cocok berdasarkan koordinat (toleransi pembulatan CSV/Sheet)
   for (var i = 1; i < data.length; i++) {
     var rawLat = String(data[i][yIdx]).replace(",", ".");
     var rawLng = String(data[i][xIdx]).replace(",", ".");
@@ -163,24 +497,10 @@ function updateRowData_(sheet, reqLat, reqLng, year, newUrl, newDate) {
     var sheetLng = parseFloat(rawLng) || 0;
 
     if (
-      Math.abs(sheetLat - reqLat) < 0.001 &&
-      Math.abs(sheetLng - reqLng) < 0.001
+      Math.abs(sheetLat - reqLat) < 0.0025 &&
+      Math.abs(sheetLng - reqLng) < 0.0025
     ) {
-      // MATCH FOUND!
-      var currentFotos = data[i][fotoColIdx]
-        ? String(data[i][fotoColIdx]).trim()
-        : "";
-      var currentTgls = data[i][tglColIdx]
-        ? String(data[i][tglColIdx]).trim()
-        : "";
-
-      var nextFotos = currentFotos ? currentFotos + "|" + newUrl : newUrl;
-      var nextTgls = currentTgls ? currentTgls + "|" + newDate : newDate;
-
-      sheet.getRange(i + 1, fotoColIdx + 1).setValue(nextFotos);
-      sheet.getRange(i + 1, tglColIdx + 1).setValue(nextTgls);
-
-      return true;
+      return appendToRow_(i + 1, data[i]);
     }
   }
   throw new Error(
@@ -190,7 +510,8 @@ function updateRowData_(sheet, reqLat, reqLng, year, newUrl, newDate) {
 
 // ═══════════════════════════════════════════════════════════
 // Helper: Delete baris di Spreadsheet berdasarkan koordinat
-function deleteRowData_(sheet, reqLat, reqLng, year, targetUrl) {
+function deleteRowData_(sheet, reqLat, reqLng, year, targetUrl, options) {
+  options = options || {};
   var data = sheet.getDataRange().getValues();
   var headers = data[0];
 
@@ -221,16 +542,24 @@ function deleteRowData_(sheet, reqLat, reqLng, year, targetUrl) {
     );
   }
 
-  // Cari baris yang cocok berdasarkan koordinat (toleransi 0.001)
-  for (var i = 1; i < data.length; i++) {
+  var startRow = 1;
+  var endRow = data.length - 1;
+  var rowIndex = parseInt(options.rowIndex || 0, 10);
+  if (rowIndex && rowIndex >= 2 && rowIndex <= data.length) {
+    startRow = rowIndex - 1;
+    endRow = rowIndex - 1;
+  }
+
+  // Cari baris yang cocok berdasarkan koordinat (toleransi pembulatan CSV/Sheet)
+  for (var i = startRow; i <= endRow; i++) {
     var rawLat = String(data[i][yIdx]).replace(",", ".");
     var rawLng = String(data[i][xIdx]).replace(",", ".");
     var sheetLat = parseFloat(rawLat) || 0;
     var sheetLng = parseFloat(rawLng) || 0;
 
     if (
-      Math.abs(sheetLat - reqLat) < 0.001 &&
-      Math.abs(sheetLng - reqLng) < 0.001
+      Math.abs(sheetLat - reqLat) < 0.0025 &&
+      Math.abs(sheetLng - reqLng) < 0.0025
     ) {
       // MATCH FOUND!
       var currentFotos = data[i][fotoColIdx]
@@ -340,6 +669,12 @@ function ensureSpatialSheetHeaders_(sheet) {
       .getRange(1, 7, 1, 4)
       .setValues([["BBox_W", "BBox_S", "BBox_E", "BBox_N"]]);
   }
+
+  for (var i = 0; i < SPATIAL_HEADERS_.length; i++) {
+    if (String(headers[i] || "").trim() !== SPATIAL_HEADERS_[i]) {
+      sheet.getRange(1, i + 1).setValue(SPATIAL_HEADERS_[i]);
+    }
+  }
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -349,6 +684,37 @@ function doPost(e) {
   try {
     var data = JSON.parse(e.postData.contents);
 
+    if (data.action === "login") {
+      return loginAccessUser_(data);
+    }
+    if (data.action === "changeCredentials") {
+      return changeAccessCredentials_(data);
+    }
+    if (data.action === "logout") {
+      var logoutToken = String(data.authToken || data.token || "");
+      if (logoutToken) CacheService.getScriptCache().remove(AUTH_CACHE_PREFIX + logoutToken);
+      return jsonOutput_({ success: true });
+    }
+    if (data.action === "verifySession") {
+      var sessionUsername = verifyAuthToken_(data.authToken || data.token);
+      if (!sessionUsername) return jsonOutput_({ success: false, error: "Sesi tidak valid." });
+      var sessionUser = findAccessUser_(sessionUsername);
+      if (!sessionUser || !isActiveUserRow_(sessionUser.row)) {
+        return jsonOutput_({ success: false, error: "Akun tidak aktif." });
+      }
+      return jsonOutput_({
+        success: true,
+        user: {
+          username: String(sessionUser.row[0]),
+          nama: String(sessionUser.row[2] || ""),
+          jabatan: String(sessionUser.row[3] || ""),
+          role: String(sessionUser.row[4] || "user"),
+        },
+      });
+    }
+
+    requireAuth_(data);
+
     // ─── ACTION: upload foto ───
     if (data.action === "upload") {
       var base64Data = data.base64;
@@ -356,8 +722,10 @@ function doPost(e) {
       var reqLat = parseFloat(data.lat);
       var reqLng = parseFloat(data.lng);
       var year = String(data.year);
-      var date = String(data.date);
+      var date = normalizeUploadDate_(data.date);
       var category = String(data.category || "juna");
+      var rowIndex = data.rowIndex ? parseInt(data.rowIndex, 10) : 0;
+      var sheetGid = data.sheetGid || "";
       var filename =
         (category === "pjl" ? "PJL_" : "Juna_") +
         year +
@@ -365,23 +733,11 @@ function doPost(e) {
         new Date().getTime() +
         ".jpg";
 
-      var folder = getUploadFolder_(category, year);
-      var decoded = Utilities.base64Decode(base64Data);
-      var blob = Utilities.newBlob(decoded, mimeType, filename);
-      var file = folder.createFile(blob);
-
-      try {
-        file.setSharing(
-          DriveApp.Access.ANYONE_WITH_LINK,
-          DriveApp.Permission.VIEW,
-        );
-      } catch (shareErr) {
-        Logger.log("Warning sharing: " + shareErr.toString());
-      }
-
-      var imgUrl = "https://drive.google.com/uc?export=view&id=" + file.getId();
-      var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-      var targetSheet = findSheetByCoordinates_(ss, reqLat, reqLng, category);
+      var ss = SpreadsheetApp.openById(getSpreadsheetIdForCategory_(category));
+      var targetSheet = findSheetByCoordinates_(ss, reqLat, reqLng, category, {
+        sheetGid: sheetGid,
+        rowIndex: rowIndex,
+      });
       if (!targetSheet) {
         return ContentService.createTextOutput(
           JSON.stringify({
@@ -398,7 +754,37 @@ function doPost(e) {
         ).setMimeType(ContentService.MimeType.JSON);
       }
 
-      updateRowData_(targetSheet, reqLat, reqLng, year, imgUrl, date);
+      var folder = getUploadFolder_(category, year);
+      var decoded = Utilities.base64Decode(base64Data);
+      var blob = Utilities.newBlob(decoded, mimeType, filename);
+      var file = folder.createFile(blob);
+
+      try {
+        file.setSharing(
+          DriveApp.Access.ANYONE_WITH_LINK,
+          DriveApp.Permission.VIEW,
+        );
+      } catch (shareErr) {
+        Logger.log("Warning sharing: " + shareErr.toString());
+      }
+
+      var imgUrl = "https://drive.google.com/uc?export=view&id=" + file.getId();
+      var writeLock = LockService.getScriptLock();
+      try {
+        writeLock.waitLock(30000);
+        updateRowData_(targetSheet, reqLat, reqLng, year, imgUrl, date, {
+          rowIndex: rowIndex,
+        });
+      } catch (rowErr) {
+        try {
+          file.setTrashed(true);
+        } catch (trashErr) {}
+        throw rowErr;
+      } finally {
+        try {
+          writeLock.releaseLock();
+        } catch (releaseErr) {}
+      }
 
       return ContentService.createTextOutput(
         JSON.stringify({
@@ -415,6 +801,42 @@ function doPost(e) {
       var yearDel = String(data.year);
       var urlToDelete = String(data.url);
       var categoryDel = String(data.category || "juna");
+      var rowIndexDel = data.rowIndex ? parseInt(data.rowIndex, 10) : 0;
+      var sheetGidDel = data.sheetGid || "";
+
+      var ssDel = SpreadsheetApp.openById(getSpreadsheetIdForCategory_(categoryDel));
+      var targetSheetDel = findSheetByCoordinates_(
+        ssDel,
+        reqLatDel,
+        reqLngDel,
+        categoryDel,
+        { sheetGid: sheetGidDel, rowIndex: rowIndexDel },
+      );
+      if (!targetSheetDel) {
+        return ContentService.createTextOutput(
+          JSON.stringify({
+            success: false,
+          error: "Tidak menemukan tab Sheet yang sesuai untuk koordinat ini.",
+          }),
+        ).setMimeType(ContentService.MimeType.JSON);
+      }
+
+      var deleteLock = LockService.getScriptLock();
+      try {
+        deleteLock.waitLock(30000);
+        deleteRowData_(
+          targetSheetDel,
+          reqLatDel,
+          reqLngDel,
+          yearDel,
+          urlToDelete,
+          { rowIndex: rowIndexDel },
+        );
+      } finally {
+        try {
+          deleteLock.releaseLock();
+        } catch (releaseDelErr) {}
+      }
 
       var targetMatch =
         urlToDelete.match(/id=([a-zA-Z0-9_-]+)/) ||
@@ -429,30 +851,6 @@ function doPost(e) {
           Logger.log("Gagal men-trash file: " + delErr.toString());
         }
       }
-
-      var ssDel = SpreadsheetApp.openById(SPREADSHEET_ID);
-      var targetSheetDel = findSheetByCoordinates_(
-        ssDel,
-        reqLatDel,
-        reqLngDel,
-        categoryDel,
-      );
-      if (!targetSheetDel) {
-        return ContentService.createTextOutput(
-          JSON.stringify({
-            success: false,
-            error: "Tidak menemukan tab Sheet yang sesuai untuk koordinat ini.",
-          }),
-        ).setMimeType(ContentService.MimeType.JSON);
-      }
-
-      deleteRowData_(
-        targetSheetDel,
-        reqLatDel,
-        reqLngDel,
-        yearDel,
-        urlToDelete,
-      );
 
       return ContentService.createTextOutput(
         JSON.stringify({
@@ -586,6 +984,17 @@ function doPost(e) {
 function doGet(e) {
   var params = e ? e.parameter : {};
   var action = params.action || "";
+  if (
+    action === "getSpatialFiles" ||
+    action === "getSpatialGeoJSON" ||
+    action === "getFolder"
+  ) {
+    try {
+      requireAuth_(params);
+    } catch (authErr) {
+      return jsonOutput_({ success: false, error: authErr.toString() });
+    }
+  }
 
   if (action === "getSpatialFiles") {
     try {

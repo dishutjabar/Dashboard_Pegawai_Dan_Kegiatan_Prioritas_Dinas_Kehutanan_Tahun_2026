@@ -1,6 +1,260 @@
 /* ═══ GeoHutan Jabar – Features ═══ */
 /** URL Web App Google Apps Script */
 var GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwCdFIZ3y9BbBiRHJItturR5cSt2RvoQKEbePXXhogpusq_8oID6v6pN654k85sI1kb/exec";
+var AUTH_TOKEN_STORAGE_KEY = "geohutan_auth_token";
+var AUTH_USER_STORAGE_KEY = "geohutan_auth_user";
+
+function getAuthToken() {
+  try { return localStorage.getItem(AUTH_TOKEN_STORAGE_KEY) || ""; }
+  catch (e) { return ""; }
+}
+
+function setStoredAuth(token, user) {
+  try {
+    localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token || "");
+    localStorage.setItem(AUTH_USER_STORAGE_KEY, JSON.stringify(user || {}));
+  } catch (e) {}
+}
+
+function clearStoredAuth() {
+  try {
+    localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+    localStorage.removeItem(AUTH_USER_STORAGE_KEY);
+  } catch (e) {}
+}
+
+function appendAuthParam(url) {
+  var token = getAuthToken();
+  if (!token) return url;
+  return url + (url.indexOf("?") === -1 ? "?" : "&") + "token=" + encodeURIComponent(token);
+}
+
+function withAuthPayload(payload) {
+  payload = payload || {};
+  payload.authToken = getAuthToken();
+  return payload;
+}
+
+function setAuthStatus(message, isError) {
+  var el = document.getElementById("auth-status");
+  if (!el) return;
+  el.textContent = message || "";
+  el.className = "auth-status" + (isError ? " error" : "");
+}
+
+function getStoredAuthUser() {
+  try {
+    var raw = localStorage.getItem(AUTH_USER_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) { return null; }
+}
+
+function getUserInitials(user) {
+  var label = (user && (user.nama || user.username)) ? String(user.nama || user.username).trim() : "GH";
+  var parts = label.split(/\s+/).filter(Boolean);
+  if (!parts.length) return "GH";
+  if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+  return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+}
+
+function updateAuthUserUI(user) {
+  var pill = document.getElementById("auth-user-pill");
+  var profileMenu = document.getElementById("profile-menu");
+  var profileName = document.getElementById("profile-name");
+  var profileRole = document.getElementById("profile-role");
+  var profileAvatar = document.querySelector("#profile-menu .profile-avatar");
+  if (user && user.username) {
+    if (pill) pill.textContent = user.nama || user.username;
+    if (profileName) profileName.textContent = user.nama || user.username;
+    if (profileRole) {
+      var roleParts = [];
+      if (user.jabatan) roleParts.push(user.jabatan);
+      if (user.role) roleParts.push(user.role);
+      profileRole.textContent = roleParts.join(" - ") || "Pengguna Dashboard";
+    }
+    if (profileAvatar) profileAvatar.textContent = getUserInitials(user);
+    if (profileMenu) profileMenu.style.display = "block";
+  } else {
+    if (pill) pill.textContent = "";
+    if (profileName) profileName.textContent = "GeoHutan";
+    if (profileRole) profileRole.textContent = "Pengguna Dashboard";
+    if (profileAvatar) profileAvatar.textContent = "GH";
+    if (profileMenu) {
+      profileMenu.style.display = "none";
+      profileMenu.classList.remove("open");
+    }
+  }
+}
+
+function unlockDashboard(user) {
+  var portal = document.getElementById("auth-portal");
+  if (portal) portal.classList.add("hidden");
+  document.body.classList.add("auth-unlocked");
+  updateAuthUserUI(user);
+  if (typeof fetchSpatialFileList === "function") fetchSpatialFileList();
+}
+
+function lockDashboard(message) {
+  clearStoredAuth();
+  document.body.classList.remove("auth-unlocked");
+  updateAuthUserUI(null);
+  var portal = document.getElementById("auth-portal");
+  if (portal) portal.classList.remove("hidden");
+  setAuthStatus(message || "", !!message);
+}
+
+function postAuthAction(payload) {
+  return fetch(GAS_WEB_APP_URL, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  }).then(function(r) { return r.json(); });
+}
+
+function initAuthPortal() {
+  var portal = document.getElementById("auth-portal");
+  if (!portal) return;
+  var token = getAuthToken();
+  if (!token) {
+    lockDashboard("");
+    return;
+  }
+  var cachedUser = getStoredAuthUser();
+  if (cachedUser && cachedUser.username) {
+    document.body.classList.add("auth-unlocked");
+    updateAuthUserUI(cachedUser);
+  }
+  postAuthAction({ action: "verifySession", authToken: token })
+    .then(function(res) {
+      if (res.success) {
+        setStoredAuth(token, res.user);
+        unlockDashboard(res.user);
+      } else {
+        lockDashboard("");
+      }
+    })
+    .catch(function() { lockDashboard(""); });
+}
+
+function toggleProfileMenu(event) {
+  if (event) event.stopPropagation();
+  var menu = document.getElementById("profile-menu");
+  var trigger = menu ? menu.querySelector(".profile-trigger") : null;
+  if (!menu) return;
+  menu.classList.toggle("open");
+  if (trigger) trigger.setAttribute("aria-expanded", menu.classList.contains("open") ? "true" : "false");
+}
+
+function closeProfileMenu() {
+  var menu = document.getElementById("profile-menu");
+  var trigger = menu ? menu.querySelector(".profile-trigger") : null;
+  if (!menu) return;
+  menu.classList.remove("open");
+  if (trigger) trigger.setAttribute("aria-expanded", "false");
+}
+
+function submitLogin(event) {
+  if (event) event.preventDefault();
+  var username = (document.getElementById("login-username") || {}).value || "";
+  var password = (document.getElementById("login-password") || {}).value || "";
+  var captcha = document.getElementById("login-captcha");
+  var btn = document.getElementById("login-submit");
+  username = username.trim();
+  if (!username || !password) { setAuthStatus("Username dan password wajib diisi.", true); return; }
+  if (captcha && !captcha.checked) { setAuthStatus("Centang verifikasi keamanan terlebih dahulu.", true); return; }
+  if (btn) { btn.disabled = true; btn.textContent = "Memeriksa akses..."; }
+  setAuthStatus("Memverifikasi akun...", false);
+  postAuthAction({ action: "login", username: username, password: password })
+    .then(function(res) {
+      if (!res.success) throw new Error(res.error || "Login gagal.");
+      setStoredAuth(res.token, res.user);
+      setAuthStatus("", false);
+      unlockDashboard(res.user);
+      if (typeof showToast === "function") showToast("Login berhasil. Selamat datang, " + (res.user.nama || res.user.username) + ".", "success");
+    })
+    .catch(function(err) {
+      setAuthStatus(err.message || "Login gagal.", true);
+    })
+    .finally(function() {
+      if (btn) { btn.disabled = false; btn.textContent = "Masuk Dashboard"; }
+    });
+}
+
+function logoutGeoHutan() {
+  var token = getAuthToken();
+  if (token && GAS_WEB_APP_URL.indexOf("script.google.com") !== -1) {
+    postAuthAction({ action: "logout", authToken: token }).catch(function() {});
+  }
+  lockDashboard("Anda sudah keluar dari dashboard.");
+}
+
+function togglePasswordVisibility(inputId, btn) {
+  var input = document.getElementById(inputId);
+  if (!input) return;
+  input.type = input.type === "password" ? "text" : "password";
+  if (btn) btn.textContent = input.type === "password" ? "Tampilkan" : "Sembunyikan";
+}
+
+function toggleCredentialPanel() {
+  var panel = document.getElementById("credential-panel");
+  if (!panel) return;
+  panel.classList.toggle("open");
+  setAuthStatus("", false);
+}
+
+function submitCredentialChange(event) {
+  if (event) event.preventDefault();
+  var oldUsername = (document.getElementById("old-username") || {}).value || "";
+  var oldPassword = (document.getElementById("old-password") || {}).value || "";
+  var newUsername = (document.getElementById("new-username") || {}).value || "";
+  var newPassword = (document.getElementById("new-password") || {}).value || "";
+  var confirmPassword = (document.getElementById("confirm-new-password") || {}).value || "";
+  var captcha = document.getElementById("change-captcha");
+  var btn = document.getElementById("change-submit");
+  if (!oldUsername.trim() || !oldPassword || !newUsername.trim() || !newPassword) {
+    setAuthStatus("Lengkapi semua field perubahan akun.", true);
+    return;
+  }
+  if (newPassword !== confirmPassword) {
+    setAuthStatus("Konfirmasi password baru belum sama.", true);
+    return;
+  }
+  if (captcha && !captcha.checked) {
+    setAuthStatus("Centang konfirmasi perubahan terlebih dahulu.", true);
+    return;
+  }
+  if (btn) { btn.disabled = true; btn.textContent = "Menyimpan..."; }
+  postAuthAction({
+    action: "changeCredentials",
+    oldUsername: oldUsername.trim(),
+    oldPassword: oldPassword,
+    newUsername: newUsername.trim(),
+    newPassword: newPassword
+  }).then(function(res) {
+    if (!res.success) throw new Error(res.error || "Gagal memperbarui akun.");
+    clearStoredAuth();
+    var form = document.getElementById("credential-form");
+    if (form) form.reset();
+    var loginUser = document.getElementById("login-username");
+    if (loginUser) loginUser.value = newUsername.trim();
+    setAuthStatus("Akun berhasil diperbarui. Silakan login dengan username dan password baru.", false);
+  }).catch(function(err) {
+    setAuthStatus(err.message || "Gagal memperbarui akun.", true);
+  }).finally(function() {
+    if (btn) { btn.disabled = false; btn.textContent = "Simpan Perubahan"; }
+  });
+}
+
+document.addEventListener("DOMContentLoaded", function() {
+  initAuthPortal();
+  document.addEventListener("click", closeProfileMenu);
+  document.addEventListener("keydown", function(event) {
+    if (event.key === "Escape") closeProfileMenu();
+  });
+  var profileMenu = document.getElementById("profile-menu");
+  if (profileMenu) {
+    profileMenu.addEventListener("click", function(event) { event.stopPropagation(); });
+  }
+});
 
 /* UI INTERACTIONS */
 window.handleDriveImageError = function(img) {
@@ -204,7 +458,7 @@ function parseShpGroupFlexible(group, base, cb) {
 
 function toggleSpatialPolygons() {
   SPATIAL_ENABLED = document.getElementById('toggle-spatial').checked;
-  if (SPATIAL_ENABLED) scheduleSpatialPolygonLoad(50);
+  if (SPATIAL_ENABLED) renderSpatialPolygons(true);
   else {
     if (SPATIAL_UPLOAD_LAYER && mapObj) { try { mapObj.removeLayer(SPATIAL_UPLOAD_LAYER); } catch(e) {} }
     SPATIAL_UPLOAD_LAYER = null;
@@ -450,7 +704,7 @@ function parseSpatialFile(job, cb) {
 }
 
 /* ── Upload GeoJSON ke Backend GAS ── */
-function uploadSpatialToBackend(geojson, filename, done) {
+function uploadSpatialToBackendLegacy(geojson, filename, done) {
   // Ensure we remove any existing cached polygons with same filename to force re-fetch.
   // (Drive may return cached/forbidden responses for old IDs.)
 
@@ -491,6 +745,7 @@ function uploadSpatialToBackend(geojson, filename, done) {
         uploaded: res.uploaded,
         sizeKB: res.sizeKB,
         cdkTag: cdkTag,
+        kategori: typeof SPATIAL_ACTIVE_TAB !== 'undefined' ? SPATIAL_ACTIVE_TAB : 'Jaga Leuweung',
         geojson: geojson,
         bbox: bbox
       };
@@ -505,6 +760,161 @@ function uploadSpatialToBackend(geojson, filename, done) {
 }
 
 /* ── Fetch daftar file spasial dari backend ── */
+var SPATIAL_MAX_POST_BYTES = 3500000;
+
+function estimateJSONBytes(value) {
+  try {
+    var str = typeof value === 'string' ? value : JSON.stringify(value);
+    return new Blob([str]).size;
+  } catch (e) {
+    return String(value || '').length;
+  }
+}
+
+function getSpatialUploadBaseName(filename) {
+  var safeBase = String(filename || 'spasial').split(/[/\\]/).pop();
+  safeBase = safeBase.replace(/\.(shp|zip|rar|kmz|kml|json|geojson)$/i, '');
+  return safeBase.replace(/[^\w\s.-]/g, '_').trim() || 'spasial';
+}
+
+function buildSpatialFeatureCollection(features, sourceName, partIndex, partTotal) {
+  return {
+    type: 'FeatureCollection',
+    properties: {
+      uploadSource: sourceName,
+      uploadPart: partIndex,
+      uploadTotalParts: partTotal
+    },
+    features: features || []
+  };
+}
+
+function prepareSpatialGeoJSONForUpload(geojson) {
+  var normalized = normalizeGeoJSON(geojson);
+  if (!normalized || !Array.isArray(normalized.features)) return null;
+  try {
+    if (typeof turf !== 'undefined' && turf.truncate) {
+      normalized = turf.truncate(normalized, { precision: 6, coordinates: 2, mutate: false });
+    }
+  } catch (e) {}
+  try {
+    if (typeof turf !== 'undefined' && turf.flatten) {
+      normalized = turf.flatten(normalized);
+    }
+  } catch (e2) {}
+  return normalizeGeoJSON(normalized);
+}
+
+function splitGeoJSONForUpload(geojson, filename) {
+  var normalized = prepareSpatialGeoJSONForUpload(geojson);
+  if (!normalized || !Array.isArray(normalized.features)) return [];
+  var baseName = getSpatialUploadBaseName(filename);
+  if (estimateJSONBytes(normalized) <= SPATIAL_MAX_POST_BYTES) {
+    return [{ geojson: normalized, filename: baseName + '.geojson', part: 1, total: 1 }];
+  }
+
+  var chunks = [];
+  var current = [];
+  var currentBytes = estimateJSONBytes(buildSpatialFeatureCollection([], baseName, 1, 1));
+  normalized.features.forEach(function(feature) {
+    var featureBytes = estimateJSONBytes(feature) + 2;
+    if (current.length && currentBytes + featureBytes > SPATIAL_MAX_POST_BYTES) {
+      chunks.push(current);
+      current = [];
+      currentBytes = estimateJSONBytes(buildSpatialFeatureCollection([], baseName, 1, 1));
+    }
+    current.push(feature);
+    currentBytes += featureBytes;
+  });
+  if (current.length) chunks.push(current);
+
+  var total = chunks.length || 1;
+  return chunks.map(function(features, idx) {
+    var part = idx + 1;
+    var suffix = '_part' + String(part).padStart(3, '0') + 'of' + String(total).padStart(3, '0');
+    return {
+      geojson: buildSpatialFeatureCollection(features, baseName, part, total),
+      filename: baseName + suffix + '.geojson',
+      part: part,
+      total: total
+    };
+  });
+}
+
+function uploadSpatialToBackend(geojson, filename, done) {
+  if (!GAS_WEB_APP_URL || GAS_WEB_APP_URL.indexOf('script.google.com') === -1) {
+    showToast('Backend GAS belum dikonfigurasi!'); if (done) done(); return;
+  }
+  if (!getAuthToken()) {
+    showToast('Silakan login ulang sebelum upload polygon.', 'error');
+    lockDashboard('Sesi login diperlukan untuk upload.');
+    if (done) done();
+    return;
+  }
+
+  var chunks = splitGeoJSONForUpload(geojson, filename);
+  if (!chunks.length) { showToast('GeoJSON tidak valid atau kosong.', 'error'); if (done) done(); return; }
+
+  var cdkTag = FILTER.cdk && FILTER.cdk.length ? FILTER.cdk.join(',') : '';
+  var kategori = typeof SPATIAL_ACTIVE_TAB !== 'undefined' ? SPATIAL_ACTIVE_TAB : 'Jaga Leuweung';
+  var uploadedCount = 0;
+
+  function uploadNext(idx) {
+    if (idx >= chunks.length) {
+      if (SPATIAL_ENABLED) scheduleSpatialPolygonLoad(50);
+      showToast('Tersimpan: ' + filename + (chunks.length > 1 ? ' (' + chunks.length + ' bagian GeoJSON)' : ''), 'success');
+      if (done) done();
+      return;
+    }
+
+    var chunk = chunks[idx];
+    var bbox = computeGeoJSONBBox(chunk.geojson);
+    if (chunks.length > 1) {
+      showSpatialProgress(Math.round((idx / chunks.length) * 100), 'Mengupload bagian ' + chunk.part + '/' + chunk.total + ': ' + chunk.filename);
+    }
+
+    fetch(GAS_WEB_APP_URL, {
+      method: 'POST',
+      body: JSON.stringify(withAuthPayload({
+        action: 'uploadSpatial',
+        geojson: JSON.stringify(chunk.geojson),
+        filename: chunk.filename,
+        cdk_tag: cdkTag,
+        kategori: kategori,
+        bbox_w: bbox ? bbox.west : '',
+        bbox_s: bbox ? bbox.south : '',
+        bbox_e: bbox ? bbox.east : '',
+        bbox_n: bbox ? bbox.north : ''
+      }))
+    }).then(function(r) { return r.json(); })
+    .then(function(res) {
+      if (!res.success) throw new Error(res.error || 'Error backend');
+      uploadedCount++;
+      var entry = {
+        fileId: res.fileId,
+        filename: res.filename,
+        url: res.url,
+        uploaded: res.uploaded,
+        sizeKB: res.sizeKB,
+        cdkTag: cdkTag,
+        kategori: kategori,
+        geojson: chunk.geojson,
+        bbox: bbox
+      };
+      SPATIAL_FILES_CACHE.push(entry);
+      SPATIAL_GEOJSON_MEM[res.fileId] = chunk.geojson;
+      if (bbox) saveSpatialBBoxToLS(res.fileId, bbox);
+      uploadNext(idx + 1);
+    }).catch(function(err) {
+      showToast('Gagal upload bagian ' + (idx + 1) + '/' + chunks.length + ': ' + err.message, 'error');
+      if (uploadedCount > 0) fetchSpatialFileList();
+      if (done) done();
+    });
+  }
+
+  uploadNext(0);
+}
+
 function computeGeoJSONBBox(gj) {
   if (!gj) return null;
   try {
@@ -564,7 +974,7 @@ function bindSpatialMapEvents() {
 
 function fetchSpatialGeoJSONFromBackend(fileId) {
   var fileObj = SPATIAL_FILES_CACHE.find(function(c) { return c.fileId === fileId; });
-  return fetch(GAS_WEB_APP_URL + '?action=getSpatialGeoJSON&fileId=' + encodeURIComponent(fileId))
+  return fetch(appendAuthParam(GAS_WEB_APP_URL + '?action=getSpatialGeoJSON&fileId=' + encodeURIComponent(fileId)))
     .then(function(r) { return r.json(); })
     .then(function(res) {
       if (res.success && res.geojson) return res.geojson;
@@ -638,6 +1048,50 @@ var SPATIAL_ACTIVE_TAB = 'Jaga Leuweung';
 var SPATIAL_VISIBLE_CACHE = {};
 var RENDERED_SPATIAL_FILES = {};
 
+/* Warna polygon spasial per kategori upload */
+var SPATIAL_CATEGORY_STYLES = {
+  'Jaga Leuweung': {
+    polygon: { color: '#c62828', weight: 2, fillColor: '#ef5350', fillOpacity: 0.3 },
+    /* Hanya geometri garis murni (LineString) — tanpa isi/fill */
+    line: { color: '#A4C639', weight: 5, fillOpacity: 0, opacity: 0.95 },
+    popupColor: '#e53935'
+  },
+  'Kawasan Hutan': {
+    /* Biru telor asin cerah transparan + garis sisi hitam pudar */
+    polygon: { color: '#2e2e2e', weight: 1.5, opacity: 0.52, fillColor: '#EAF8FD', fillOpacity: 0.34 },
+    /* Hanya geometri LineString/MultiLineString — bukan greenbelt */
+    line: { color: '#6BBAD4', weight: 3.5, fillOpacity: 0, opacity: 0.88 },
+    popupColor: '#4A90A4'
+  },
+  'Lahan Kritis': {
+    polygon: { color: '#C9A045', weight: 1.5, fillColor: '#F5CA7A', fillOpacity: 0.78 },
+    line: { color: '#F5CA7A', weight: 3, fillOpacity: 0, opacity: 0.95 },
+    popupColor: '#C9A045'
+  }
+};
+
+function isSpatialLineGeometry(geom) {
+  return geom && (geom.type === 'LineString' || geom.type === 'MultiLineString');
+}
+
+function getSpatialFeatureStyle(feature, fileInfo) {
+  var kategori = (fileInfo && fileInfo.kategori) ? fileInfo.kategori : 'Jaga Leuweung';
+  var palette = SPATIAL_CATEGORY_STYLES[kategori] || SPATIAL_CATEGORY_STYLES['Jaga Leuweung'];
+  var geom = feature && feature.geometry;
+
+  /* Kuning kehijauan (#A4C639) hanya untuk garis murni tanpa isi — bukan polygon tipis */
+  if (isSpatialLineGeometry(geom)) {
+    return Object.assign({ dashArray: null }, palette.line || palette.polygon);
+  }
+  return Object.assign({ dashArray: null }, palette.polygon);
+}
+
+function getSpatialPopupAccent(fileInfo) {
+  var kategori = (fileInfo && fileInfo.kategori) ? fileInfo.kategori : 'Jaga Leuweung';
+  var palette = SPATIAL_CATEGORY_STYLES[kategori] || SPATIAL_CATEGORY_STYLES['Jaga Leuweung'];
+  return palette.popupColor || '#e53935';
+}
+
 function switchSpatialTab(tabName) {
   SPATIAL_ACTIVE_TAB = tabName;
   var tabs = document.querySelectorAll('.sp-tab');
@@ -661,6 +1115,10 @@ function toggleSpatialFile(fileId, checked) {
     SPATIAL_UPLOAD_LAYER.removeLayer(RENDERED_SPATIAL_FILES[fileId]);
     delete RENDERED_SPATIAL_FILES[fileId];
   } else if (checked) {
+    if (RENDERED_SPATIAL_FILES[fileId] && SPATIAL_UPLOAD_LAYER) {
+      SPATIAL_UPLOAD_LAYER.removeLayer(RENDERED_SPATIAL_FILES[fileId]);
+      delete RENDERED_SPATIAL_FILES[fileId];
+    }
     scheduleSpatialPolygonLoad(50);
   }
 }
@@ -694,11 +1152,16 @@ function spatialFileListSearch(val) {
 function fetchSpatialFileList() {
   var listEl = document.getElementById('spatial-file-list');
   var countEl = document.getElementById('sp-file-count');
+  if (!getAuthToken()) {
+    if (listEl) listEl.innerHTML = '<div class="sp-file-list-empty">Login diperlukan untuk memuat daftar polygon.</div>';
+    if (countEl) countEl.textContent = '';
+    return;
+  }
   if (!GAS_WEB_APP_URL || GAS_WEB_APP_URL.indexOf('script.google.com') === -1) {
     if (listEl) listEl.innerHTML = '<div class="sp-file-list-error">Backend GAS belum dikonfigurasi.</div>';
     return;
   }
-  fetch(GAS_WEB_APP_URL + '?action=getSpatialFiles')
+  fetch(appendAuthParam(GAS_WEB_APP_URL + '?action=getSpatialFiles'))
     .then(function(r) { return r.json(); })
     .then(function(res) {
       if (!res.success) { if (listEl) listEl.innerHTML = '<div class="sp-file-list-error">Gagal memuat: ' + (res.error||'') + '</div>'; return; }
@@ -884,9 +1347,10 @@ function addGeoJSONToSpatialLayer(gj, fileInfo, activeCDKs, activePJLPoints) {
     var isLarge = fileInfo && (fileInfo.sizeKB > 1500);
     var renderer = isLarge ? L.canvas({ padding: 0.5 }) : L.svg({ padding: 0.5 });
 
+    var popupAccent = getSpatialPopupAccent(fileInfo);
     var geojsonLayer = L.geoJSON(filteredGj, {
       renderer: renderer,
-      style: function() { return { color: '#e53935', weight: 2, fillColor: '#ef5350', fillOpacity: 0.3, dashArray: null }; },
+      style: function(feature) { return getSpatialFeatureStyle(feature, fileInfo); },
       pointToLayer: function(feature, latlng) {
         return L.marker(latlng, { icon: L.divIcon({ className: 'custom-diamond-icon', html: '<svg width="10" height="10" viewBox="0 0 100 100" style="overflow:visible;"><polygon points="50,0 100,50 50,100 0,50" fill="#ff9800" stroke="#d84315" stroke-width="10" stroke-linejoin="round"/></svg>', iconSize: [10, 10], iconAnchor: [5, 5] }) });
       },
@@ -898,7 +1362,7 @@ function addGeoJSONToSpatialLayer(gj, fileInfo, activeCDKs, activePJLPoints) {
           return '<tr><td style="padding:2px 8px 2px 0; font-weight:600; color:#43a047; white-space:nowrap;">' + k + '</td><td style="padding:2px 0;">' + props[k] + '</td></tr>';
         }).join('');
         var html = '<div style="font-size:11px; font-family:Inter; max-height:220px; overflow-y:auto;">' +
-          '<b style="font-size:12px; color:#e53935; display:block; margin-bottom:6px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:4px;">📄 ' + (fileInfo ? fileInfo.filename : '') + '</b>' +
+          '<b style="font-size:12px; color:' + popupAccent + '; display:block; margin-bottom:6px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:4px;">📄 ' + (fileInfo ? fileInfo.filename : '') + '</b>' +
           '<table>' + rows + '</table></div>';
         layer.bindPopup(html);
       }
@@ -928,7 +1392,7 @@ function deleteSpatialFile(fileId, filename) {
   if (itemEl) { itemEl.style.opacity = '0.4'; itemEl.style.pointerEvents = 'none'; }
   fetch(GAS_WEB_APP_URL, {
     method: 'POST',
-    body: JSON.stringify({ action: 'deleteSpatial', fileId: fileId })
+    body: JSON.stringify(withAuthPayload({ action: 'deleteSpatial', fileId: fileId }))
   }).then(function(r) { return r.json(); })
   .then(function(res) {
     if (res.success) {
@@ -958,8 +1422,9 @@ function hideSpatialProgress() {
 
 /* ── Auto-fetch saat halaman selesai dimuat ── */
 function initSpatialSystem() {
+  if (!getAuthToken()) return;
   if (GAS_WEB_APP_URL && GAS_WEB_APP_URL.indexOf('script.google.com') !== -1) {
-    fetch(GAS_WEB_APP_URL + '?action=getSpatialFiles')
+    fetch(appendAuthParam(GAS_WEB_APP_URL + '?action=getSpatialFiles'))
       .then(function(r) { return r.json(); })
       .then(function(res) {
         if (res.success && res.files) {
@@ -1529,12 +1994,17 @@ fetch('Jawa Barattt.geojson').then(res => res.json()).then(gj => {
 /* CSV Loader */
 function loadCSV(url, type) {
   try {
+    var gidMatch = String(url || '').match(/[?&]gid=([^&]+)/);
+    var sourceGid = gidMatch ? decodeURIComponent(gidMatch[1]) : '';
     Papa.parse(url, {
       download: true, header: true, skipEmptyLines: true,
       complete: function(res) {
         var rows = Array.isArray(res.data) ? res.data : [];
-        rows.forEach(function(r) {
+        rows.forEach(function(r, idx) {
           if (!r || typeof r !== 'object') return;
+          r._source_gid = sourceGid;
+          r._row_idx = idx + 2;
+          r._data_type = type;
           var c = getCoord(r);
           if (c) { r._lat = c.lat; r._lng = c.lng; r._kab = getKab(c.lat, c.lng); } else { r._lat = null; r._lng = null; r._kab = ''; }
         });
@@ -2342,7 +2812,7 @@ function refreshGalleryForYear(year) {
          wrap.innerHTML = '<div style="padding:40px;text-align:center;color:red;">Backend GAS belum disetting. Tidak bisa membaca folder.</div>';
          return;
       }
-      fetch(GAS_WEB_APP_URL + "?action=getFolder&folderId=" + folderId)
+      fetch(appendAuthParam(GAS_WEB_APP_URL + "?action=getFolder&folderId=" + encodeURIComponent(folderId)))
         .then(function(res) { return res.json(); })
         .then(function(data) {
            if (data.success) {
@@ -2820,12 +3290,14 @@ function deleteCurrentCarouselPhoto() {
     lat: coords.lat,
     lng: coords.lng,
     year: year,
-    category: context === 'pjl' ? 'pjl' : 'juna'
+    category: context === 'pjl' ? 'pjl' : 'juna',
+    rowIndex: r._row_idx || '',
+    sheetGid: r._source_gid || ''
   };
 
   fetch(GAS_WEB_APP_URL, {
     method: 'POST',
-    body: JSON.stringify(payload)
+    body: JSON.stringify(withAuthPayload(payload))
   })
   .then(function(res) { return res.json(); })
   .then(function(data) {
@@ -2886,6 +3358,60 @@ function openUploadModal(r) {
   m.classList.add('open');
 }
 
+function formatUploadDate(dateObj) {
+  var d = dateObj instanceof Date && !isNaN(dateObj.getTime()) ? dateObj : new Date();
+  return ('0' + d.getDate()).slice(-2) + '/' + ('0' + (d.getMonth() + 1)).slice(-2) + '/' + d.getFullYear();
+}
+
+function parseExifDateString(raw) {
+  if (!raw) return '';
+  if (raw instanceof Date && !isNaN(raw.getTime())) return formatUploadDate(raw);
+  var s = String(raw).trim();
+  var m = s.match(/^(\d{4}):(\d{2}):(\d{2})(?:\s+(\d{1,2}):(\d{2}))?/);
+  if (m) return m[3] + '/' + m[2] + '/' + m[1] + (m[4] ? ' ' + String(m[4]).padStart(2, '0') + ':' + m[5] : '');
+  m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{1,2}):(\d{2}))?/);
+  if (m) return m[3] + '/' + m[2] + '/' + m[1] + (m[4] ? ' ' + String(m[4]).padStart(2, '0') + ':' + m[5] : '');
+  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2}))?/);
+  if (m) return ('0' + m[1]).slice(-2) + '/' + ('0' + m[2]).slice(-2) + '/' + m[3] + (m[4] ? ' ' + String(m[4]).padStart(2, '0') + ':' + m[5] : '');
+  return '';
+}
+
+function getFileExifDate(file) {
+  return new Promise(function(resolve) {
+    var settled = false;
+    function finish(value) {
+      if (settled) return;
+      settled = true;
+      resolve(value || '');
+    }
+    var fallbackTimer = setTimeout(function() { finish(''); }, 1500);
+    try {
+      if (typeof EXIF === 'undefined' || !EXIF.getData) {
+        clearTimeout(fallbackTimer);
+        finish('');
+        return;
+      }
+      EXIF.getData(file, function() {
+        var raw = EXIF.getTag(this, "DateTimeOriginal") || EXIF.getTag(this, "DateTime") || EXIF.getTag(this, "DateTimeDigitized");
+        clearTimeout(fallbackTimer);
+        finish(parseExifDateString(raw));
+      });
+    } catch (e) {
+      clearTimeout(fallbackTimer);
+      finish('');
+    }
+  });
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise(function(resolve, reject) {
+    var reader = new FileReader();
+    reader.onload = function(e) { resolve(e.target.result); };
+    reader.onerror = function() { reject(new Error('Gagal membaca file foto.')); };
+    reader.readAsDataURL(file);
+  });
+}
+
 /** Upload foto ke GAS Backend (dengan EXIF otomatis) */
 function saveLocalPhoto() {
   var fileInput = document.getElementById('upload-files');
@@ -2910,99 +3436,63 @@ function saveLocalPhoto() {
   btn.disabled = true;
 
   var files = Array.from(fileInput.files);
-  var processed = 0;
   var successCount = 0;
+  var failedCount = 0;
 
-  files.forEach(function(file) {
-    // 1. Ekstrak EXIF Date
-      // Gunakan Promise atau langsung baca FileReader jika gagal
-      var proceedWithUpload = function(finalDateStr) {
-        if (!finalDateStr) {
-          var d = new Date(file.lastModified || Date.now());
-          finalDateStr = ('0'+d.getDate()).slice(-2) + '/' + ('0'+(d.getMonth()+1)).slice(-2) + '/' + d.getFullYear();
-        }
-
-        var reader = new FileReader();
-        reader.onload = function(e) {
-          var base64Full = e.target.result;
-          var base64Clean = base64Full.split(',')[1];
-          btn.innerHTML = 'Mengupload (' + (processed+1) + '/' + files.length + ')...';
+  function uploadOne(file, index) {
+    btn.innerHTML = 'Menyiapkan foto (' + (index + 1) + '/' + files.length + ')...';
+    return getFileExifDate(file)
+      .then(function(exifDate) {
+        var finalDateStr = exifDate || formatUploadDate(new Date());
+        return readFileAsDataUrl(file).then(function(base64Full) {
+          var base64Clean = String(base64Full).split(',')[1] || '';
+          btn.innerHTML = 'Mengupload (' + (index + 1) + '/' + files.length + ')...';
           var payload = {
             action: "upload",
             base64: base64Clean,
-            mimeType: file.type,
+            mimeType: file.type || "image/jpeg",
             lat: coords.lat,
             lng: coords.lng,
             year: year,
             date: finalDateStr,
-            category: context === 'pjl' ? 'pjl' : 'juna'
+            category: context === 'pjl' ? 'pjl' : 'juna',
+            rowIndex: r._row_idx || '',
+            sheetGid: r._source_gid || ''
           };
 
-          fetch(GAS_WEB_APP_URL, {
+          return fetch(GAS_WEB_APP_URL, {
             method: 'POST',
-            body: JSON.stringify(payload)
-          })
-          .then(function(response) { return response.json(); })
-          .then(function(data) {
-            processed++;
-            if (data.success) {
-              successCount++;
-              var locals = getLocalPhotos(r, year, context);
-              locals.push({ url: data.url, date: data.date });
-              saveLocalPhotosToStorage(r, year, locals, context);
-            } else {
-              console.error("Upload Error:", data.error);
-            }
-            checkFinish();
-          })
-          .catch(function(err) {
-            console.error("Fetch Error:", err);
-            processed++;
-            checkFinish();
+            body: JSON.stringify(withAuthPayload(payload))
+          }).then(function(response) {
+            return response.json();
+          }).then(function(data) {
+            if (!data.success) throw new Error(data.error || 'Upload gagal.');
+            successCount++;
+            var locals = getLocalPhotos(r, year, context);
+            locals.push({ url: data.url, date: data.date || finalDateStr });
+            saveLocalPhotosToStorage(r, year, locals, context);
           });
-        };
-        reader.onerror = function() {
-          processed++;
-          checkFinish();
-        };
-        reader.readAsDataURL(file);
-      };
-
-      try {
-        EXIF.getData(file, function() {
-          var exifDateStr = EXIF.getTag(this, "DateTimeOriginal") || EXIF.getTag(this, "DateTime") || EXIF.getTag(this, "DateTimeDigitized");
-          var fDate = "";
-          if (exifDateStr) {
-            var parts = exifDateStr.split(" ");
-            if (parts.length > 0) {
-              var ymd = parts[0].split(":");
-              if (ymd.length === 3) {
-                fDate = ymd[2] + "/" + ymd[1] + "/" + ymd[0];
-                if (parts[1]) fDate += " " + parts[1].substring(0, 5);
-              }
-            }
-          }
-          proceedWithUpload(fDate);
         });
-      } catch (exifErr) {
-        console.warn("EXIF read failed, using current date.", exifErr);
-        proceedWithUpload("");
-      }
-  });
-
-  function checkFinish() {
-    if (processed === files.length) {
-      closeUploadModal();
-      if (successCount > 0) {
-        showToast(successCount + ' Foto berhasil diupload ke Spreadsheet!', 'success');
-        refreshGalleryForYear(year);
-      } else {
-        showToast('Gagal mengupload foto. Cek console.', 'error');
-      }
-      btn.innerHTML = oldText;
-      btn.disabled = false;
-    }
+      }).catch(function(err) {
+        failedCount++;
+        console.error("Upload Error:", err);
+      });
   }
+
+  files.reduce(function(chain, file, index) {
+    return chain.then(function() { return uploadOne(file, index); });
+  }, Promise.resolve()).then(function() {
+    closeUploadModal();
+    if (successCount > 0) {
+      showToast(successCount + ' Foto berhasil diupload ke Spreadsheet!' + (failedCount ? ' ' + failedCount + ' gagal.' : ''), successCount === files.length ? 'success' : 'warning');
+      refreshGalleryForYear(year);
+    } else {
+      showToast('Gagal mengupload foto. Cek console.', 'error');
+    }
+  }).finally(function() {
+    btn.innerHTML = oldText;
+    btn.disabled = false;
+  });
 }
 
 /** Extract Folder ID from URL */
