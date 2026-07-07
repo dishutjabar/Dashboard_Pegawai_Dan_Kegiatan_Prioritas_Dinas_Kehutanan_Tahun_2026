@@ -189,6 +189,8 @@
       <label><input type="checkbox" id="toggle-heatmap" onchange="toggleHeatmap()"> Tampilkan Heatmap</label>
       <label><input type="checkbox" id="toggle-pjl-polygon" onchange="togglePjlPolygons()"> Tampilkan Area Tanam 2 Ha (Petugas Jaga Leuweung)</label>
       <label><input type="checkbox" id="toggle-spatial" onchange="toggleSpatialPolygons()"> Tampilkan Polygon Spasial (Upload)</label>
+      <label><input type="checkbox" id="toggle-polygon-kegiatan" checked onchange="togglePolygonKegiatanLayer()"> Tampilkan Area Polygon Kegiatan</label>
+      <label><input type="checkbox" id="toggle-pohon-marker" checked onchange="togglePohonMarkerLayer()"> Tampilkan Marker Titik Kegiatan (Pohon)</label>
       <label><input type="checkbox" id="toggle-buffer" onchange="toggleBuffer()"> Buffer Zone Saat Diklik (10/20/30km)</label>
       <button class="btn-icon" style="margin-top:10px; width:100%; justify-content:center; background:var(--secondary); color:white;" onclick="downloadMap()">&#128247; Unduh Tampilan Peta (.png)</button>
     </div>
@@ -274,7 +276,20 @@
       <svg class="leg-icon-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 24"><path d="M10,24 L10,12 M10,16 C10,16 6,10 2,12 C4,16 8,16 10,16 M10,14 C10,14 15,8 18,10 C16,14 12,14 10,14" fill="#1e88e5" stroke="#fff" stroke-width="1"/><path d="M10,24 L10,12 M10,16 C10,16 6,10 2,12 C4,16 8,16 10,16 M10,14 C10,14 15,8 18,10 C16,14 12,14 10,14" fill="#1e88e5" stroke="#1565c0" stroke-width="1.5" stroke-linejoin="round"/></svg>
       <span class="leg-text">Lokasi Persemaian Jaga Leuweung</span>
     </div>
-    <div style="margin-top:14px; padding-top:10px; border-top:1px solid rgba(255,255,255,0.08);">
+    <div style="margin-top:10px; padding-top:10px; border-top:1px solid rgba(255,255,255,0.08);">
+      <div class="leg-text" style="font-weight:bold; margin-bottom:8px; font-size:11px; opacity:0.85;">Area Kegiatan Tanam &amp; Pelihara</div>
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <div class="leg-item" id="leg-polygon-kegiatan" onclick="togglePolygonKegiatanLayer()" style="padding:4px 0; border:none; background:none; gap:10px;">
+          <svg width="18" height="14" viewBox="0 0 18 14"><rect x="1" y="1" width="16" height="12" rx="2" fill="rgba(76,175,80,0.25)" stroke="#388e3c" stroke-width="1.8" stroke-dasharray="3,2"/></svg>
+          <span style="font-size:11px;">Area Polygon Kegiatan</span>
+        </div>
+        <div class="leg-item" id="leg-pohon-marker" onclick="togglePohonMarkerLayer()" style="padding:4px 0; border:none; background:none; gap:10px;">
+          <svg width="16" height="20" viewBox="0 0 20 24"><ellipse cx="10" cy="8" rx="6" ry="7" fill="#388e3c" stroke="#fff" stroke-width="1"/><ellipse cx="10" cy="13" rx="4.5" ry="5" fill="#43a047" stroke="#fff" stroke-width="0.8"/><rect x="8.5" y="18" width="3" height="5" rx="1" fill="#5d4037"/></svg>
+          <span style="font-size:11px;">Titik Kegiatan (Pohon)</span>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:10px; padding-top:10px; border-top:1px solid rgba(255,255,255,0.08);">
       <div class="leg-text" style="font-weight:bold; margin-bottom:8px; font-size:11px; opacity:0.85;">Polygon Spasial (Upload)</div>
       <div style="display:flex; flex-direction:column; gap:8px;">
         <div style="display:flex; align-items:center; gap:10px;">
@@ -406,6 +421,101 @@
       <div style="margin-top: 15px; text-align: right;">
         <button class="btn-apply" onclick="clearDrawnPolygons()" style="padding: 10px 20px; border-radius: 6px; cursor: pointer; border: none;">Hapus Polygon & Tutup</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- 8. Modal Form Polygon / Marker Pohon Kegiatan -->
+<div id="polygon-kegiatan-modal" class="modal-overlay" onclick="if(event.target===this) cancelPolygonForm()">
+  <div class="modal-content" style="max-width:680px; max-height:90vh;">
+    <div class="modal-head" style="background:linear-gradient(135deg,#2e7d32,#43a047); color:#fff;">
+      <h2 id="polygon-modal-title" style="color:#fff;">&#127807; Tambah Area / Titik Kegiatan</h2>
+      <button class="close-modal" style="color:#fff;" onclick="cancelPolygonForm()">&#215;</button>
+    </div>
+    <div class="modal-body" style="max-height:75vh; overflow-y:auto; padding:20px;">
+      <input type="hidden" id="pg-feature-id" value="">
+      <input type="hidden" id="pg-type" value="polygon">
+      <input type="hidden" id="pg-geojson" value="">
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+        <div class="filter-group" style="grid-column:1/-1;">
+          <label style="font-weight:600; color:#2e7d32;">CDK Wilayah</label>
+          <select id="pg-cdk" style="width:100%; padding:8px; border-radius:6px; border:1px solid #ccc;">
+            <option value="">-- Pilih CDK --</option>
+            <option>CDK WILAYAH I</option>
+            <option>CDK WILAYAH II</option>
+            <option>CDK WILAYAH III</option>
+            <option>CDK WILAYAH IV</option>
+            <option>CDK WILAYAH V</option>
+            <option>CDK WILAYAH VI</option>
+            <option>CDK WILAYAH VII</option>
+            <option>CDK WILAYAH VIII</option>
+            <option>CDK WILAYAH IX</option>
+            <option value="__custom__">Lainnya (Isi Manual)</option>
+          </select>
+          <input type="text" id="pg-cdk-custom" placeholder="Nama UPTD / Instansi / PT lain..." style="display:none; width:100%; padding:8px; border-radius:6px; border:1px solid #ccc; margin-top:6px;">
+        </div>
+        <div class="filter-group">
+          <label>Nama</label>
+          <input type="text" id="pg-nama" placeholder="Nama kegiatan / petugas" style="width:100%; padding:8px; border-radius:6px; border:1px solid #ccc;">
+        </div>
+        <div class="filter-group">
+          <label>Kabupaten</label>
+          <input type="text" id="pg-kabupaten" placeholder="Nama Kabupaten" style="width:100%; padding:8px; border-radius:6px; border:1px solid #ccc;">
+        </div>
+        <div class="filter-group">
+          <label>Kecamatan</label>
+          <input type="text" id="pg-kecamatan" placeholder="Nama Kecamatan" style="width:100%; padding:8px; border-radius:6px; border:1px solid #ccc;">
+        </div>
+        <div class="filter-group">
+          <label>Desa / Blok</label>
+          <input type="text" id="pg-desa" placeholder="Nama Desa atau Blok" style="width:100%; padding:8px; border-radius:6px; border:1px solid #ccc;">
+        </div>
+        <div class="filter-group" style="grid-column:1/-1;">
+          <label>Lokasi</label>
+          <input type="text" id="pg-lokasi" placeholder="Deskripsi lokasi" style="width:100%; padding:8px; border-radius:6px; border:1px solid #ccc;">
+        </div>
+        <div class="filter-group">
+          <label>Kegiatan</label>
+          <select id="pg-kegiatan" onchange="checkKegiatanCustom()" style="width:100%; padding:8px; border-radius:6px; border:1px solid #ccc;">
+            <option value="Penanaman">Penanaman</option>
+            <option value="Pemeliharaan">Pemeliharaan</option>
+            <option value="__custom__">Lainnya...</option>
+          </select>
+          <input type="text" id="pg-kegiatan-custom" placeholder="Tulis kegiatan lainnya..." style="display:none; width:100%; padding:8px; border-radius:6px; border:1px solid #ccc; margin-top:6px;">
+        </div>
+        <div class="filter-group">
+          <label>Luas (Ha)</label>
+          <input type="number" id="pg-luas" placeholder="0.00" step="0.01" style="width:100%; padding:8px; border-radius:6px; border:1px solid #ccc;">
+        </div>
+        <div class="filter-group" style="grid-column: 1 / -1;">
+          <label>Data Bibit (Bisa lebih dari 1 jenis)</label>
+          <div id="bibit-container">
+            <!-- Dynamic rows will be inserted here -->
+          </div>
+          <button type="button" class="btn-icon" onclick="addBibitRow()" style="background:#e8f5e9; color:#2e7d32; border:1px solid #43a047; margin-top:8px; padding:6px 12px; font-size:12px; border-radius:4px;">
+            + Tambah Jenis Bibit
+          </button>
+          <input type="hidden" id="pg-jenis-bibit">
+          <input type="hidden" id="pg-jumlah-bibit">
+        </div>
+        <div class="filter-group">
+          <label>&#128205; Latitude (otomatis dari marker/polygon)</label>
+          <input type="text" id="pg-lat" placeholder="-6.xxxxx" style="width:100%; padding:8px; border-radius:6px; border:1px solid #ddd; background:#f5f5f5;" readonly>
+        </div>
+        <div class="filter-group">
+          <label>&#128205; Longitude (otomatis dari marker/polygon)</label>
+          <input type="text" id="pg-lng" placeholder="107.xxxxx" style="width:100%; padding:8px; border-radius:6px; border:1px solid #ddd; background:#f5f5f5;" readonly>
+        </div>
+        <div class="filter-group" style="grid-column:1/-1;">
+          <label>Keterangan</label>
+          <textarea id="pg-keterangan" rows="3" placeholder="Keterangan tambahan..." style="width:100%; padding:8px; border-radius:6px; border:1px solid #ccc; resize:vertical;"></textarea>
+        </div>
+      </div>
+    </div>
+    <div style="padding:15px 20px; border-top:1px solid #eee; display:flex; justify-content:flex-end; gap:10px; background:#fafafa;">
+      <button class="btn-reset" onclick="cancelPolygonForm()">Batal</button>
+      <button class="btn-apply" onclick="savePolygonFeature()" style="background:linear-gradient(135deg,#2e7d32,#43a047); border-color:#2e7d32;">&#128190; Simpan Data</button>
     </div>
   </div>
 </div>

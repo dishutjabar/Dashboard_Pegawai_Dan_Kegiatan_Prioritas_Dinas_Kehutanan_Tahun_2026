@@ -73,10 +73,18 @@ function safe(v) {
   return s || 'Data tidak tersedia';
 }
 function toFloat(v) {
-  if (v === null || v === undefined || v === '') return null;
-  var n = parseFloat(String(v).trim().replace(',', '.'));
+  if (v === null || v === undefined) return null;
+  var s = String(v).trim();
+  if (!s) return null;
+  // Remove common wrapping quotes/backticks that may appear from spreadsheet strings
+  s = s.replace(/^['"`\s]+|['"`\s]+$/g, '');
+  // Also trim any leading/trailing spaces again
+  s = s.trim();
+  // Support comma decimal separator
+  var n = parseFloat(s.replace(',', '.'));
   return isNaN(n) ? null : n;
 }
+
 function getCDK(val) {
   if (!val) return '';
   var m = String(val).match(/CDK\s*(?:WILAYAH\s*)?([IVX]+)/i);

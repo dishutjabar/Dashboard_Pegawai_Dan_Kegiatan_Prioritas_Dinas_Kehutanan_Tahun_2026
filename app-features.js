@@ -1554,6 +1554,28 @@ function buildMarkerTipPanel(title, rows, titleColor) {
   return html + '</div>';
 }
 
+function buildFeatureHoverTooltip(feat, mode) {
+  if (!feat) return null;
+  var title = feat.Nama || feat['Nama'] || feat['Nama Lengkap'] || feat['Nama Petugas'] || 'Detail Kegiatan';
+  var rows = [];
+  if (mode === 'point') {
+    rows = [
+      ['Kegiatan', feat.Kegiatan || feat['Kegiatan'] || '-'],
+      ['Lokasi', feat.Lokasi || feat['Lokasi'] || '-'],
+      ['Kabupaten', feat.Kabupaten || feat['Kabupaten'] || '-'],
+      ['Koordinat', coordText(feat.Latitude || feat._lat || '', feat.Longitude || feat._lng || '')]
+    ];
+  } else {
+    rows = [
+      ['Kegiatan', feat.Kegiatan || feat['Kegiatan'] || '-'],
+      ['Luas (Ha)', feat.Luas_Ha || feat['Luas_Ha'] || feat.Luas || '-'],
+      ['Jenis Bibit', feat.Jenis_Bibit || feat['Jenis_Bibit'] || '-'],
+      ['Kabupaten', feat.Kabupaten || feat['Kabupaten'] || '-']
+    ];
+  }
+  return buildMarkerTipPanel(title, rows, '#2e7d32');
+}
+
 function buildPjlPopupRow(label, value) {
   var v = value == null || value === '' ? '-' : value;
   return '<div class="pjl-popup-row"><span class="pjl-popup-lbl">' + label + '</span><span class="pjl-popup-val">' + v + '</span></div>';
@@ -1630,6 +1652,27 @@ function openDrawer(type, r) {
       ['Alamat', r['Alamat'] || r['ALAMAT']],
       ['Koordinat', coordText(lat, lng)]
     ];
+    var _pegPhotoRow = r;
+  } else if (type === 'pohon' || type === 'polygon_kegiatan') {
+    var pgLat = toFloat(r['Latitude']) || lat;
+    var pgLng = toFloat(r['Longitude']) || lng;
+    config = [
+      ['CDK Wilayah', r['CDK_Wilayah'] || r['CDK Wilayah']],
+      ['Nama', r['Nama']],
+      ['Kabupaten', r['Kabupaten']],
+      ['Kecamatan', r['Kecamatan']],
+      ['Desa/Blok', r['Desa_Blok'] || r['Desa/Blok']],
+      ['Lokasi', r['Lokasi']],
+      ['Kegiatan', r['Kegiatan']],
+      ['Luas (Ha)', r['Luas_Ha'] || r['Luas']],
+      ['Jenis Bibit', r['Jenis_Bibit'] || r['Jenis Bibit']],
+      ['Jumlah Bibit', r['Jumlah_Bibit'] || r['Jumlah Bibit']],
+      ['Koordinat', coordText(pgLat, pgLng)],
+      ['Keterangan', r['Keterangan']],
+      ['Tanggal Input', formatDateIndo(r['Tanggal_Input'] || r['Tanggal Input'])]
+    ];
+    var _pohonPhotoRow = r;
+    cy = pgLat; cx = pgLng;
   } else if (type === 'jum' || type === 'jumat') {
     var cxx = toFloat(r['Titik Koordinat (x)'] || r['Titik Koordinat (X)'] || r['Titik Koordinat Penanaman (X)']); 
     var cyy = toFloat(r['Titik Koordinat (Y)'] || r['Titik Koordinat Penanaman (Y)']);
@@ -1667,12 +1710,25 @@ function openDrawer(type, r) {
   });
   if (cy && cx) html += '<div class="drawer-maps-wrap">' + mapsLink(cy, cx) + '</div>';
 
-  // Inject photo gallery for Jumat Menanam & PJL
+  if (type === 'pohon' || type === 'polygon_kegiatan') {
+    var featId = String(r['ID'] || r.featureId || r.id || '');
+    if (featId) {
+      html += '<div class="drawer-action-row"><button class="drawer-delete-btn" onclick="deletePolygonKegiatan(\'' + featId + '\')">Hapus Kegiatan</button></div>';
+    }
+  }
+
+  // Inject photo gallery for Jumat Menanam & PJL & Pegawai & Pohon
   if ((type === 'jum' || type === 'jumat') && typeof _jumPhotoRow !== 'undefined') {
     html += buildPhotoSection(_jumPhotoRow, 'juna');
   }
   if (type === 'pjl' && typeof _pjlPhotoRow !== 'undefined') {
     html += buildPhotoSection(_pjlPhotoRow, 'pjl');
+  }
+  if ((type === 'peg' || type === 'pegawai') && typeof _pegPhotoRow !== 'undefined') {
+    html += buildPhotoSection(_pegPhotoRow, 'pegawai');
+  }
+  if ((type === 'pohon' || type === 'polygon_kegiatan') && typeof _pohonPhotoRow !== 'undefined') {
+    html += buildPhotoSection(_pohonPhotoRow, 'polygon');
   }
 
   if (c) c.innerHTML = html;
@@ -1689,6 +1745,20 @@ function openDrawer(type, r) {
     PHOTO_GALLERY.context = 'pjl';
     PHOTO_GALLERY.row = _pjlPhotoRow;
     PHOTO_GALLERY.year = getCurrentPhotoYear(_pjlPhotoRow, 'pjl');
+    PHOTO_GALLERY.idx = 0;
+    refreshGalleryForYear(PHOTO_GALLERY.year);
+  }
+  if ((type === 'peg' || type === 'pegawai') && typeof _pegPhotoRow !== 'undefined') {
+    PHOTO_GALLERY.context = 'pegawai';
+    PHOTO_GALLERY.row = _pegPhotoRow;
+    PHOTO_GALLERY.year = getCurrentPhotoYear(_pegPhotoRow, 'pegawai');
+    PHOTO_GALLERY.idx = 0;
+    refreshGalleryForYear(PHOTO_GALLERY.year);
+  }
+  if ((type === 'pohon' || type === 'polygon_kegiatan') && typeof _pohonPhotoRow !== 'undefined') {
+    PHOTO_GALLERY.context = 'polygon';
+    PHOTO_GALLERY.row = _pohonPhotoRow;
+    PHOTO_GALLERY.year = getCurrentPhotoYear(_pohonPhotoRow, 'polygon');
     PHOTO_GALLERY.idx = 0;
     refreshGalleryForYear(PHOTO_GALLERY.year);
   }
@@ -2225,16 +2295,31 @@ function doRender() {
               '#1e88e5'
             );
           } else if (type === 'peg') {
-            hoverHTML = buildMarkerTipPanel(
-              name || 'Pegawai Dinas Kehutanan',
-              [
-                ['Unit Kerja', r['Unit Kerja'] || r['UNIT KERJA']],
-                ['Jabatan', r['Nama Jabatan'] || r['Jabatan'] || r['JABATAN']],
-                ['Alamat', r['Alamat'] || r['ALAMAT']],
-                ['Koordinat', coordText(r._lat, r._lng)]
-              ],
-              '#fb8c00'
-            );
+            var pegYear = getCurrentPhotoYear(r, 'pegawai');
+            var pegMerged = getMergedData(r, pegYear, 'pegawai');
+            var pegThumb = pegMerged.photos.length > 0 ? pegMerged.photos[0] : null;
+            var pegUnit = r['Unit Kerja'] || r['UNIT KERJA'] || '-';
+            var pegJabatan = r['Nama Jabatan'] || r['Jabatan'] || r['JABATAN'] || '-';
+            var pegAlamat = r['Alamat'] || r['ALAMAT'] || '-';
+            var pegInfo = '<div class="pjl-tooltip-info">' +
+              '<div class="pjl-tooltip-row"><span class="marker-tip-lbl">Unit</span><span class="marker-tip-val">' + pegUnit + '</span></div>' +
+              '<div class="pjl-tooltip-row"><span class="marker-tip-lbl">Jabatan</span><span class="marker-tip-val">' + pegJabatan + '</span></div>' +
+              '<div class="pjl-tooltip-row"><span class="marker-tip-lbl">Alamat</span><span class="marker-tip-val">' + String(pegAlamat).substring(0,50) + (pegAlamat.length>50?'...':'') + '</span></div>' +
+              '</div>';
+            if (pegThumb) {
+              hoverHTML = '<div class="jum-tooltip-thumb pjl-tooltip-thumb" style="border-top:2px solid #fb8c00;">' +
+                '<img src="' + pegThumb + '" alt="foto pegawai" onerror="handleDriveImageError(this);" />' +
+                '<div class="jum-tooltip-thumb-name">' + name + '</div>' +
+                '<div class="jum-tooltip-thumb-year" style="color:#fb8c00;">&#128247; ' + (pegMerged.dates[0] ? formatDateIndo(pegMerged.dates[0]) : 'Foto ' + pegYear) + '</div>' +
+                pegInfo +
+                '</div>';
+            } else {
+              hoverHTML = '<div class="jum-tooltip-no-img">' +
+                '<div style="font-weight:700;font-size:11px;margin-bottom:3px;">' + name + '</div>' +
+                '<div style="font-size:10px;color:#fb8c00;font-weight:600;">Pegawai Dinas Kehutanan</div>' +
+                pegInfo +
+                '</div>';
+            }
           }
           mk.bindTooltip(hoverHTML, { className: 'marker-tooltip', direction: 'top', offset: [0, -8], opacity: 0.95 });
         }
@@ -2639,7 +2724,10 @@ var JUM_GALLERY = PHOTO_GALLERY;
 var LB_STATE = { photos: [], dates: [], idx: 0, year: '2026', locName: '', context: 'juna' };
 
 function getPhotoContextPrefix(context) {
-  return context === 'pjl' ? 'pjl' : 'jum';
+  if (context === 'pjl') return 'pjl';
+  if (context === 'pegawai') return 'peg';
+  if (context === 'polygon') return 'poly';
+  return 'jum';
 }
 
 function getPhotoRowId(r) {
@@ -2647,8 +2735,10 @@ function getPhotoRowId(r) {
 }
 
 function getPhotoCoords(r) {
-  var lat = toFloat(r['Titik Koordinat Penanaman (Y)']) || toFloat(r['Titik Koordinat (Y)']) || r._lat;
-  var lng = toFloat(r['Titik Koordinat Penanaman (X)']) || toFloat(r['Titik Koordinat (x)']) || toFloat(r['Titik Koordinat (X)']) || r._lng;
+  var lat = toFloat(r['Titik Koordinat Penanaman (Y)']) || toFloat(r['Titik Koordinat (Y)']) ||
+            toFloat(r['latitude']) || toFloat(r['Latitude']) || toFloat(r['Latitude']) || r._lat;
+  var lng = toFloat(r['Titik Koordinat Penanaman (X)']) || toFloat(r['Titik Koordinat (x)']) ||
+            toFloat(r['Titik Koordinat (X)']) || toFloat(r['longitude']) || toFloat(r['Longitude']) || r._lng;
   return {
     lat: parseFloat(String(lat).replace(',', '.')),
     lng: parseFloat(String(lng).replace(',', '.'))
@@ -2735,16 +2825,23 @@ function getGalleryDomIds(context) {
   if (context === 'pjl') {
     return { section: 'pjl-photo-section', timeline: 'pjl-year-timeline', carousel: 'pjl-carousel-wrap' };
   }
+  if (context === 'pegawai') {
+    return { section: 'peg-photo-section', timeline: 'peg-year-timeline', carousel: 'peg-carousel-wrap' };
+  }
+  if (context === 'polygon') {
+    return { section: 'poly-photo-section', timeline: 'poly-year-timeline', carousel: 'poly-carousel-wrap' };
+  }
   return { section: 'jum-photo-section', timeline: 'jum-year-timeline', carousel: 'jum-carousel-wrap' };
 }
 
 function buildPhotoSection(r, context) {
   context = context || 'juna';
   var ids = getGalleryDomIds(context);
-  var title = context === 'pjl'
-    ? 'Dokumentasi Tanam & Pelihara Pohon (PJL)'
-    : 'Dokumentasi Foto Lokasi';
-  var accent = context === 'pjl' ? '#2e7d32' : '#8e24aa';
+  var title = 'Dokumentasi Foto Lokasi';
+  var accent = '#8e24aa';
+  if (context === 'pjl') { title = 'Dokumentasi Tanam & Pelihara Pohon (PJL)'; accent = '#2e7d32'; }
+  else if (context === 'pegawai') { title = 'Dokumentasi Foto Pegawai'; accent = '#fb8c00'; }
+  else if (context === 'polygon') { title = 'Dokumentasi Kegiatan (Tanam & Pelihara)'; accent = '#388e3c'; }
 
   var html = '<div class="jum-photo-section" id="' + ids.section + '">';
   html += '<div class="jum-photo-section-title">' +
@@ -2770,7 +2867,16 @@ function buildPhotoSection(r, context) {
     '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>' +
     '<span>Memuat foto...</span></div></div>';
 
+  var deleteBtnHtml = '';
+  if (context === 'polygon') {
+    var featId = r['ID'] || r.featureId || '';
+    deleteBtnHtml = '<button class="jum-upload-btn" style="background:#e53935; color:#fff; border-color:#c62828; margin-right:auto;" onclick="deletePolygonKegiatan(\'' + featId + '\')">' +
+      '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"></path></svg>' +
+      ' Hapus Kegiatan</button>';
+  }
+
   html += '<div style="margin-top:10px; display:flex; justify-content:flex-end;">' +
+    deleteBtnHtml +
     '<button class="jum-upload-btn" onclick="openUploadModal(PHOTO_GALLERY.row)">' +
     '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>' +
     ' Upload Foto Baru</button></div>';
@@ -3284,15 +3390,20 @@ function deleteCurrentCarouselPhoto() {
   if(btn) btn.style.opacity = '0.5';
 
   var coords = getPhotoCoords(r);
+  var catStr = 'juna';
+  if (context === 'pjl') catStr = 'pjl';
+  else if (context === 'pegawai') catStr = 'pegawai';
+  else if (context === 'polygon') catStr = 'polygon';
   var payload = {
     action: "delete",
     url: targetUrl,
     lat: coords.lat,
     lng: coords.lng,
     year: year,
-    category: context === 'pjl' ? 'pjl' : 'juna',
+    category: catStr,
     rowIndex: r._row_idx || '',
-    sheetGid: r._source_gid || ''
+    sheetGid: r._source_gid || '',
+    featureId: r['ID'] || r.featureId || ''
   };
 
   fetch(GAS_WEB_APP_URL, {
@@ -3326,6 +3437,10 @@ function openUploadModal(r) {
   if (locInfo) {
     if (context === 'pjl') {
       locInfo.innerHTML = '&#128205; ' + getName(r) + ' &bull; ' + (r['Unit Kerja'] || '');
+    } else if (context === 'pegawai') {
+      locInfo.innerHTML = '&#128205; ' + getName(r) + ' &bull; ' + (r['Unit Kerja'] || r['UNIT KERJA'] || '');
+    } else if (context === 'polygon') {
+      locInfo.innerHTML = '&#128205; ' + (r['Nama'] || 'Area Kegiatan') + ' &bull; ' + (r['Kegiatan'] || '');
     } else {
       locInfo.innerHTML = '&#128205; ' + getName(r) + ' &bull; ' + (r['Kabupaten/Kota'] || '');
     }
@@ -3333,9 +3448,10 @@ function openUploadModal(r) {
   
   var modalTitle = document.querySelector('#upload-modal .modal-head h2');
   if (modalTitle) {
-    modalTitle.textContent = context === 'pjl'
-      ? 'Upload Dokumentasi Tanam & Pelihara (PJL)'
-      : 'Upload Foto Dokumentasi';
+    if (context === 'pjl') modalTitle.textContent = 'Upload Dokumentasi Tanam & Pelihara (PJL)';
+    else if (context === 'pegawai') modalTitle.textContent = 'Upload Foto Pegawai Dinas Kehutanan';
+    else if (context === 'polygon') modalTitle.textContent = 'Upload Dokumentasi Kegiatan';
+    else modalTitle.textContent = 'Upload Foto Dokumentasi';
   }
   
   var pillsWrap = document.getElementById('upload-year-pills');
@@ -3447,6 +3563,10 @@ function saveLocalPhoto() {
         return readFileAsDataUrl(file).then(function(base64Full) {
           var base64Clean = String(base64Full).split(',')[1] || '';
           btn.innerHTML = 'Mengupload (' + (index + 1) + '/' + files.length + ')...';
+          var catUpload = 'juna';
+          if (context === 'pjl') catUpload = 'pjl';
+          else if (context === 'pegawai') catUpload = 'pegawai';
+          else if (context === 'polygon') catUpload = 'polygon';
           var payload = {
             action: "upload",
             base64: base64Clean,
@@ -3455,9 +3575,10 @@ function saveLocalPhoto() {
             lng: coords.lng,
             year: year,
             date: finalDateStr,
-            category: context === 'pjl' ? 'pjl' : 'juna',
+            category: catUpload,
             rowIndex: r._row_idx || '',
-            sheetGid: r._source_gid || ''
+            sheetGid: r._source_gid || '',
+            featureId: r['ID'] || r.featureId || ''
           };
 
           return fetch(GAS_WEB_APP_URL, {
@@ -3526,4 +3647,538 @@ function selectUploadYear(year) {
     p.classList.remove('active');
     if (p.getAttribute('data-year') === year) p.classList.add('active');
   });
+}
+/* ═══════════════════════════════════════════════════════════
+   🌲 POLYGON KEGIATAN & POHON MARKER
+   ═══════════════════════════════════════════════════════════ */
+
+// ===== Coordinate helpers (supaya render polygon/titik kegiatan tidak tergantung file lain) =====
+function toFloat(v) {
+  if (v === null || v === undefined) return null;
+  var s = String(v).trim();
+  if (!s) return null;
+  s = s.replace(/^['"`\s]+|['"`\s]+$/g, '');
+  s = s.trim();
+  var n = parseFloat(s.replace(',', '.'));
+  return isNaN(n) ? null : n;
+}
+
+var POLYGON_AREA_LAYER = new L.FeatureGroup();
+var POHON_MARKER_LAYER = new L.MarkerClusterGroup({
+  iconCreateFunction: function(cluster) {
+    return L.divIcon({ html: '<div><span>' + cluster.getChildCount() + '</span></div>', className: 'marker-cluster marker-cluster-small', iconSize: new L.Point(40, 40) });
+  }
+});
+
+mapObj.addLayer(POLYGON_AREA_LAYER);
+mapObj.addLayer(POHON_MARKER_LAYER);
+
+var SVG_POHON_KECIL = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="20" viewBox="0 0 20 24"><ellipse cx="10" cy="8" rx="6" ry="7" fill="#388e3c" stroke="#fff" stroke-width="1"/><ellipse cx="10" cy="13" rx="4.5" ry="5" fill="#43a047" stroke="#fff" stroke-width="0.8"/><rect x="8.5" y="18" width="3" height="5" rx="1" fill="#5d4037"/></svg>';
+var ICON_POHON = L.divIcon({ html: SVG_POHON_KECIL, iconSize: [16, 20], iconAnchor: [8, 20], className: '' });
+
+function togglePolygonKegiatanLayer() {
+  var cb = document.getElementById('toggle-polygon-kegiatan');
+  var leg = document.getElementById('leg-polygon-kegiatan');
+  // toggle from checkbox if ada, else derive from legend state
+  var isChecked = cb ? cb.checked : (leg ? leg.classList.contains('leg-hidden') ? false : true : true);
+
+  if (cb) cb.checked = isChecked;
+  if (leg) {
+    if (isChecked) leg.classList.remove('leg-hidden');
+    else leg.classList.add('leg-hidden');
+  }
+
+  if (isChecked) mapObj.addLayer(POLYGON_AREA_LAYER);
+  else mapObj.removeLayer(POLYGON_AREA_LAYER);
+
+  // ensure UI & marker/drawer state refresh
+  schedRender();
+}
+
+
+function togglePohonMarkerLayer() {
+  var cb = document.getElementById('toggle-pohon-marker');
+  var leg = document.getElementById('leg-pohon-marker');
+  // toggle from checkbox if ada, else derive from legend state
+  var isChecked = cb ? cb.checked : (leg ? leg.classList.contains('leg-hidden') ? false : true : true);
+
+  if (cb) cb.checked = isChecked;
+  if (leg) {
+    if (isChecked) leg.classList.remove('leg-hidden');
+    else leg.classList.add('leg-hidden');
+  }
+
+  if (isChecked) mapObj.addLayer(POHON_MARKER_LAYER);
+  else mapObj.removeLayer(POHON_MARKER_LAYER);
+
+  // ensure UI & marker/drawer state refresh
+  schedRender();
+}
+
+
+// Draw mode instances
+var drawPolygonKegiatan = new L.Draw.Polygon(mapObj, {
+  allowIntersection: false,
+  showArea: true,
+  shapeOptions: { color: '#388e3c', weight: 3, fillOpacity: 0.3 }
+});
+
+var drawGarisKegiatan = new L.Draw.Polyline(mapObj, {
+  shapeOptions: { color: '#388e3c', weight: 4 }
+});
+
+var drawPohonMarker = new L.Draw.Marker(mapObj, {
+  icon: ICON_POHON
+});
+
+// Create map buttons for Drawing
+var CustomDrawControl = L.Control.extend({
+  options: { position: 'topright' },
+  onAdd: function (map) {
+    var container = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
+    container.style.backgroundColor = 'white';
+    container.style.padding = '5px';
+    container.style.display = 'flex';
+    container.style.flexDirection = 'column';
+    container.style.gap = '5px';
+    container.style.border = '2px solid rgba(0,0,0,0.2)';
+    container.style.borderRadius = '5px';
+    
+    container.innerHTML = 
+      '<button type="button" class="btn-icon" style="background:#e8f5e9; border:1px solid #43a047; color:#2e7d32; border-radius:4px; padding:6px; cursor:pointer; font-size:12px; font-weight:bold; width:100%; text-align:left;" onclick="startDrawPolygonKegiatan()" title="Gambar Polygon Area">&#128308; Polygon</button>' +
+      '<button type="button" class="btn-icon" style="background:#e8f5e9; border:1px solid #43a047; color:#2e7d32; border-radius:4px; padding:6px; cursor:pointer; font-size:12px; font-weight:bold; width:100%; text-align:left;" onclick="startDrawGarisKegiatan()" title="Gambar Garis Jalur/Greenbelt">&#128312; Garis</button>' +
+      '<button type="button" class="btn-icon" style="background:#e8f5e9; border:1px solid #43a047; color:#2e7d32; border-radius:4px; padding:6px; cursor:pointer; font-size:12px; font-weight:bold; width:100%; text-align:left;" onclick="startDrawPohonMarker()" title="Taruh Pohon">&#127807; Taruh Pohon</button>';
+    
+    L.DomEvent.disableClickPropagation(container);
+    return container;
+  }
+});
+mapObj.addControl(new CustomDrawControl());
+
+function startDrawPolygonKegiatan() {
+  drawPohonMarker.disable();
+  drawGarisKegiatan.disable();
+  drawPolygonKegiatan.enable();
+  showToast('Silakan gambar area polygon di peta. Klik titik awal untuk selesai.', 'info');
+}
+
+function startDrawGarisKegiatan() {
+  drawPohonMarker.disable();
+  drawPolygonKegiatan.disable();
+  drawGarisKegiatan.enable();
+  showToast('Silakan gambar garis (jalur/greenbelt) di peta. Klik ganda titik terakhir untuk selesai.', 'info');
+}
+
+function startDrawPohonMarker() {
+  drawPolygonKegiatan.disable();
+  drawGarisKegiatan.disable();
+  drawPohonMarker.enable();
+  showToast('Silakan klik lokasi di peta untuk menaruh marker pohon kegiatan.', 'info');
+}
+
+// Listen to Draw Created Event
+mapObj.on(L.Draw.Event.CREATED, function (e) {
+  var type = e.layerType;
+  var layer = e.layer;
+  
+  // Deteksi jika dari custom draw (Polygon / Garis / Marker)
+  if (drawPolygonKegiatan._enabled || layer instanceof L.Polygon && layer.options.color === '#388e3c') {
+    var geojson = layer.toGeoJSON();
+    var area = turf.area(geojson) / 10000; // Ha
+    var latlngs = layer.getBounds().getCenter();
+    openPolygonForm('polygon', latlngs.lat, latlngs.lng, geojson, area);
+    drawPolygonKegiatan.disable();
+    return; // Cegah analyzePolygon
+  }
+
+  if (drawGarisKegiatan._enabled || layer instanceof L.Polyline && layer.options.color === '#388e3c') {
+    var geojson = layer.toGeoJSON();
+    var length = turf.length(geojson, {units: 'kilometers'}); // Panjang dalam km
+    var latlngs = layer.getBounds().getCenter();
+    // Kita anggap sebagai polygon di sistem form, tapi area diset 0 (atau bisa diinput manual)
+    openPolygonForm('polygon', latlngs.lat, latlngs.lng, geojson, 0); 
+    drawGarisKegiatan.disable();
+    return;
+  }
+  
+  if (drawPohonMarker._enabled || (layer instanceof L.Marker && layer.options.icon === ICON_POHON)) {
+    var latlng = layer.getLatLng();
+    openPolygonForm('marker', latlng.lat, latlng.lng, null, 0);
+    drawPohonMarker.disable();
+    return;
+  }
+
+  // Jika draw biasa (analisis area)
+  drawnItems.clearLayers();
+  drawnItems.addLayer(layer);
+  analyzePolygon(layer);
+});
+
+// Modal Form Handling
+function checkKegiatanCustom() {
+  var sel = document.getElementById('pg-kegiatan').value;
+  var cust = document.getElementById('pg-kegiatan-custom');
+  if (sel === '__custom__') { cust.style.display = 'block'; cust.focus(); }
+  else { cust.style.display = 'none'; }
+}
+
+document.getElementById('pg-cdk').addEventListener('change', function() {
+  var cust = document.getElementById('pg-cdk-custom');
+  if (this.value === '__custom__') { cust.style.display = 'block'; cust.focus(); }
+  else { cust.style.display = 'none'; }
+});
+
+function openPolygonForm(type, lat, lng, geojsonObj, areaHa) {
+  document.getElementById('polygon-kegiatan-modal').classList.add('open');
+  document.getElementById('pg-feature-id').value = '';
+  document.getElementById('pg-type').value = type;
+  document.getElementById('pg-geojson').value = geojsonObj ? JSON.stringify(geojsonObj) : '';
+  
+  // Auto-fill
+  document.getElementById('pg-lat').value = lat;
+  document.getElementById('pg-lng').value = lng;
+  document.getElementById('pg-kabupaten').value = getKab(lat, lng) || '';
+  if (type === 'polygon' && areaHa > 0) {
+    document.getElementById('pg-luas').value = areaHa.toFixed(2);
+  } else {
+    document.getElementById('pg-luas').value = '';
+  }
+
+  document.getElementById('polygon-modal-title').innerHTML = type === 'polygon' ? '&#128308; Tambah Area Kegiatan (Polygon/Garis)' : '&#127807; Taruh Pohon';
+  document.getElementById('pg-lokasi').value = '';
+  document.getElementById('pg-kegiatan').value = 'Penanaman';
+  document.getElementById('pg-kegiatan-custom').style.display = 'none';
+  document.getElementById('pg-kegiatan-custom').value = '';
+  document.getElementById('pg-cdk').value = '';
+  document.getElementById('pg-cdk-custom').style.display = 'none';
+  document.getElementById('pg-cdk-custom').value = '';
+  document.getElementById('pg-keterangan').value = '';
+  
+  // Reset dynamic bibit rows
+  document.getElementById('bibit-container').innerHTML = '';
+  addBibitRow();
+  
+  document.getElementById('polygon-modal-title').innerHTML = type === 'polygon' ? '&#128308; Tambah Area Kegiatan (Polygon/Garis)' : '&#127807; Tambah Titik Kegiatan (Marker)';
+}
+
+function addBibitRow() {
+  var c = document.getElementById('bibit-container');
+  var div = document.createElement('div');
+  div.className = 'bibit-row';
+  div.style.display = 'flex';
+  div.style.gap = '10px';
+  div.style.marginBottom = '5px';
+  div.innerHTML = '<input type="text" class="bibit-jenis" placeholder="Jenis Bibit (Mis: Mangga)" style="flex:2; padding:6px; border-radius:4px; border:1px solid #ccc;">' +
+                  '<input type="number" class="bibit-jumlah" placeholder="Jumlah (Mis: 100)" style="flex:1; padding:6px; border-radius:4px; border:1px solid #ccc;">' +
+                  '<button type="button" class="btn-icon" onclick="removeBibitRow(this)" style="color:red; font-size:16px; border:none; background:none;">✖</button>';
+  c.appendChild(div);
+}
+
+function removeBibitRow(btn) {
+  var row = btn.parentElement;
+  if (row.parentElement.children.length > 1) {
+    row.remove();
+  } else {
+    row.querySelector('.bibit-jenis').value = '';
+    row.querySelector('.bibit-jumlah').value = '';
+  }
+}
+
+function cancelPolygonForm() {
+  document.getElementById('polygon-kegiatan-modal').classList.remove('open');
+}
+
+function deletePolygonKegiatan(featureId) {
+  if (!confirm('HAPUS PERMANEN?\n\nMenghapus kegiatan ini juga akan menghapus:\n- Data di Spreadsheet\n- File Polygon GeoJSON di Google Drive\n- Semua Foto yang ter-upload untuk kegiatan ini.\n\nLanjutkan hapus?')) return;
+  
+  showToast('Memproses penghapusan (jangan tutup halaman)...', 'info');
+  var payload = { action: "deletePolygonFeature", featureId: featureId };
+  
+  fetch(GAS_WEB_APP_URL, {
+    method: 'POST',
+    body: JSON.stringify(withAuthPayload(payload))
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.success) {
+      showToast('Kegiatan berhasil dihapus sepenuhnya!', 'success');
+      document.querySelector('.drawer-backdrop').click(); // Tutup drawer
+      fetchPolygonFeatures(); // Reload data
+    } else {
+      showToast('Gagal menghapus: ' + data.error, 'error');
+    }
+  })
+  .catch(err => {
+    showToast('Terjadi kesalahan saat menghapus', 'error');
+  });
+}
+
+function savePolygonFeature() {
+  var cdk = document.getElementById('pg-cdk').value;
+  if (cdk === '__custom__') cdk = document.getElementById('pg-cdk-custom').value;
+  var keg = document.getElementById('pg-kegiatan').value;
+  if (keg === '__custom__') keg = document.getElementById('pg-kegiatan-custom').value;
+  
+  var bibitArr = [];
+  var totalBibit = 0;
+  document.querySelectorAll('#bibit-container .bibit-row').forEach(function(row) {
+    var j = row.querySelector('.bibit-jenis').value.trim();
+    var n = parseInt(row.querySelector('.bibit-jumlah').value) || 0;
+    if (j) {
+      bibitArr.push(j + (n > 0 ? ' (' + n + ')' : ''));
+      totalBibit += n;
+    }
+  });
+  
+  var payload = {
+    action: "savePolygonFeature",
+    type: document.getElementById('pg-type').value,
+    cdk_wilayah: cdk,
+    nama: document.getElementById('pg-nama').value,
+    kabupaten: document.getElementById('pg-kabupaten').value,
+    kecamatan: document.getElementById('pg-kecamatan').value,
+    desa_blok: document.getElementById('pg-desa').value,
+    lokasi: document.getElementById('pg-lokasi').value,
+    kegiatan: keg,
+    luas: document.getElementById('pg-luas').value,
+    jenis_bibit: bibitArr.join(', '),
+    jumlah_bibit: totalBibit,
+    latitude: document.getElementById('pg-lat').value,
+    longitude: document.getElementById('pg-lng').value,
+    keterangan: document.getElementById('pg-keterangan').value
+  };
+  
+  var gjStr = document.getElementById('pg-geojson').value;
+  if (gjStr) {
+    try { payload.geojson = JSON.parse(gjStr); } catch(e) {}
+  }
+  
+  var btn = document.querySelector('#polygon-kegiatan-modal .btn-apply');
+  var oldHtml = btn.innerHTML;
+  btn.innerHTML = 'Menyimpan...';
+  btn.disabled = true;
+  
+  fetch(GAS_WEB_APP_URL, {
+    method: 'POST',
+    body: JSON.stringify(withAuthPayload(payload))
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.success) {
+      showToast('Data berhasil disimpan!', 'success');
+      cancelPolygonForm();
+      fetchPolygonFeatures(); // Reload data
+    } else {
+      showToast('Gagal: ' + data.error, 'error');
+    }
+  })
+  .catch(err => {
+    showToast('Terjadi kesalahan jaringan', 'error');
+  })
+  .finally(() => {
+    btn.innerHTML = oldHtml;
+    btn.disabled = false;
+  });
+}
+
+function initSpatialSystem() {
+  fetchPolygonFeatures();
+}
+
+function fetchPolygonFeatures() {
+  fetch(appendAuthParam(GAS_WEB_APP_URL + '?action=getPolygonFeatures'))
+  .then(res => res.json())
+  .then(data => {
+    if (data.success) {
+      renderPolygonFeatures(data.features);
+    }
+  })
+  .catch(err => console.error(err));
+}
+
+function renderPolygonFeatures(features) {
+  // Debug cepat biar bisa cek apakah data polygon memang ter-load dan bisa dirender.
+  // (Tidak mengganggu UX karena hanya tampil toast singkat saat render dipanggil.)
+  try {
+    showToast('Memuat polygon/kegiatan & titik/pohon: ' + (features ? features.length : 0) + ' item...', false);
+  } catch(e) {}
+
+
+  POLYGON_AREA_LAYER.clearLayers();
+  POHON_MARKER_LAYER.clearLayers();
+
+  function clearLayersForFeatureId(featId) {
+    try {
+      if (!featId) return;
+      // Hapus marker pohon/overlay polygon yang terkait
+      POLYGON_AREA_LAYER.eachLayer(function(l) {
+        try {
+          if (l && l.featureData && String(l.featureData.ID) === String(featId)) {
+            POLYGON_AREA_LAYER.removeLayer(l);
+          }
+        } catch (e) {}
+      });
+      POHON_MARKER_LAYER.eachLayer(function(l) {
+        try {
+          if (l && l.featureData && String(l.featureData.ID) === String(featId)) {
+            POHON_MARKER_LAYER.removeLayer(l);
+          }
+        } catch (e) {}
+      });
+    } catch (e) {}
+  }
+
+  function detectGeoType(geojson) {
+    try {
+      if (!geojson) return '';
+      if (geojson.type === 'FeatureCollection' && Array.isArray(geojson.features) && geojson.features.length) {
+        for (var i = 0; i < geojson.features.length; i++) {
+          var g = geojson.features[i];
+          if (g && g.geometry && g.geometry.type) return g.geometry.type;
+        }
+        return 'FeatureCollection';
+      }
+      if (geojson.geometry && geojson.geometry.type) return geojson.geometry.type;
+      if (geojson.type) return geojson.type;
+      return '';
+    } catch (e) { return ''; }
+  }
+
+  function addPolygonOrLineLayer(gjGeojson, feat, lat, lng, popHtml) {
+    if (!gjGeojson) return;
+
+    var typeGeo = detectGeoType(gjGeojson);
+    var isLine = (typeGeo === 'LineString' || typeGeo === 'MultiLineString');
+
+    var polyLayer = L.geoJSON(gjGeojson, {
+      style: function(feature) {
+        if (isLine) {
+          return { color: '#388e3c', weight: 4, opacity: 0.95, fillOpacity: 0 };
+        }
+        return { color: '#388e3c', weight: 2, opacity: 0.95, fillColor: '#388e3c', fillOpacity: 0.3 };
+      },
+      pointToLayer: function(feature, latlng) {
+        return L.marker(latlng, { icon: ICON_POHON });
+      }
+    });
+
+    if (popHtml) polyLayer.bindPopup(popHtml);
+    var hoverHtml = buildFeatureHoverTooltip(feat, 'polygon');
+    if (hoverHtml) polyLayer.bindTooltip(hoverHtml, {sticky: true, direction: 'top', opacity: 0.95, className: 'feature-hover-tooltip'});
+    polyLayer.on('click', function() { openDrawer('polygon_kegiatan', feat); });
+    // Tag featureData agar clear bisa tepat
+    polyLayer.getLayers().forEach(function(l) { try { l.featureData = feat; } catch (e) {} });
+
+    polyLayer.addTo(POLYGON_AREA_LAYER);
+  }
+
+  features.forEach(function(feat) {
+    var featId = feat && feat.ID ? String(feat.ID) : '';
+    if (!featId) return;
+
+    var lat = toFloat(feat.Latitude);
+    var lng = toFloat(feat.Longitude);
+
+    // Bersihkan layer lama untuk featureId ini (aman bila render dipanggil ulang)
+    clearLayersForFeatureId(featId);
+
+    var hasGeo = !!(feat.GeoJSON_URL || feat.GeoJSON_FileID);
+
+    // Build popup HTML (dipakai utk polygon/line)
+    var pop = '<div style="font-size:12px; line-height:1.4;">' +
+      '<b style="font-size:14px; color:#2e7d32;">' + (feat.Nama || 'Area Kegiatan') + '</b><br>' +
+      '<b>Kegiatan:</b> ' + (feat.Kegiatan || '-') + '<br>' +
+      '<b>Luas:</b> ' + (feat.Luas_Ha || '0') + ' Ha<br>' +
+      '<b>Jenis Bibit:</b> ' + (feat.Jenis_Bibit || '-') + '<br>' +
+      '<button class="btn-apply" style="margin-top:8px; padding:4px 8px; font-size:11px;" onclick="openDrawerFromFeature(\'' + featId + '\', \'polygon_kegiatan\')">Lihat Detail & Foto</button>' +
+      '</div>';
+
+    // Kasus: marker pohon/ titik
+    // Frontend sebelumnya pakai else, tapi untuk kasus 'Type=polygon' yang sebenarnya garis/polygon, kita tetap
+    // render via GeoJSON fetch jika ada.
+    if (!hasGeo || (feat.Type !== 'polygon' && feat.Type !== 'marker')) {
+      if (lat && lng) {
+        var mk = L.marker([lat, lng], { icon: ICON_POHON }).bindPopup(pop);
+        mk.featureData = feat;
+        mk.on('click', function() { openDrawer('polygon_kegiatan', feat); });
+        POHON_MARKER_LAYER.addLayer(mk);
+      }
+      return;
+    }
+
+    // Jika lat/lng valid, tampilkan marker placeholder dulu agar user lihat titiknya
+    if (lat && lng) {
+      var hoverHtml = buildFeatureHoverTooltip(feat, 'point');
+      var placeholderMarker = L.marker([lat, lng], { icon: ICON_POHON });
+      if (hoverHtml) placeholderMarker.bindTooltip(hoverHtml, {sticky: true, direction: 'top', opacity: 0.95, className: 'feature-hover-tooltip'});
+      placeholderMarker.featureData = feat;
+      placeholderMarker.on('click', function() { openDrawer('polygon_kegiatan', feat); });
+      POLYGON_AREA_LAYER.addLayer(placeholderMarker);
+    }
+
+    // Async fetch GeoJSON (sumber kebenaran bentuk polygon/garis)
+    var fileId = feat.GeoJSON_FileID;
+    if (!fileId) {
+      // fallback: tidak ada fileId, jadi marker placeholder saja
+      return;
+    }
+
+    // Pakai auth yang benar: getSpatialGeoJSON sudah memanggil requireAuth_ di backend.
+    // Di frontend ini token login tersimpan di localStorage key geohutan_auth_token.
+      fetch(GAS_WEB_APP_URL + '?action=getSpatialGeoJSON&fileId=' + encodeURIComponent(fileId) + '&token=' + (localStorage.getItem('geohutan_auth_token') || localStorage.getItem('gh_token') || ''))
+      .then(function(r) { return r.json(); })
+      .then(function(res) {
+        try {
+          if (!res || !res.success || !res.geojson) return;
+
+          // Jika ternyata geojson adalah Point/Multiple points, render jadi marker, bukan polygon/line.
+          var typeGeo = detectGeoType(res.geojson);
+          var isPoint = (typeGeo === 'Point' || typeGeo === 'MultiPoint');
+
+          // Hapus placeholder marker lama utk featureId ini agar tidak dobel
+          clearLayersForFeatureId(featId);
+
+          if (isPoint) {
+            // render point -> marker pohon cluster (atau layer polygon area)
+            var pointLayer = L.geoJSON(res.geojson, {
+              pointToLayer: function(feature, latlng) {
+                var m = L.marker(latlng, { icon: ICON_POHON });
+                var hoverHtml = buildFeatureHoverTooltip(feat, 'point');
+                if (hoverHtml) m.bindTooltip(hoverHtml, {sticky: true, direction: 'top', opacity: 0.95, className: 'feature-hover-tooltip'});
+                m.featureData = feat;
+                m.on('click', function() { openDrawer('polygon_kegiatan', feat); });
+                return m;
+              }
+            });
+            pointLayer.eachLayer(function(l) {
+              try {
+                POHON_MARKER_LAYER.addLayer(l);
+              } catch (e) {}
+            });
+          } else {
+            addPolygonOrLineLayer(res.geojson, feat, lat, lng, pop);
+          }
+
+          // Invalidate size biar layer langsung kelihatan (kasus overlay baru saja)
+          try { mapObj && mapObj.invalidateSize(); } catch (e) {}
+        } catch (e) {}
+      })
+      .catch(function() {
+        // jika gagal fetch, placeholderMarker dibiarkan
+      });
+  });
+
+  // invalidate size sekali setelah render
+  try { mapObj && mapObj.invalidateSize(); } catch (e) {}
+}
+
+
+function openDrawerFromFeature(featId, type) {
+  var feat = null;
+  POHON_MARKER_LAYER.eachLayer(function(l) { if(l.featureData && String(l.featureData.ID) === String(featId)) feat = l.featureData; });
+  if(!feat) POLYGON_AREA_LAYER.eachLayer(function(l) { if(l.featureData && String(l.featureData.ID) === String(featId)) feat = l.featureData; });
+  
+  if(feat) {
+    openDrawer(type, feat);
+  }
 }
