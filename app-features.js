@@ -1352,7 +1352,7 @@ function addGeoJSONToSpatialLayer(gj, fileInfo, activeCDKs, activePJLPoints) {
       renderer: renderer,
       style: function(feature) { return getSpatialFeatureStyle(feature, fileInfo); },
       pointToLayer: function(feature, latlng) {
-        return L.marker(latlng, { icon: L.divIcon({ className: 'custom-diamond-icon', html: '<svg width="10" height="10" viewBox="0 0 100 100" style="overflow:visible;"><polygon points="50,0 100,50 50,100 0,50" fill="#ff9800" stroke="#d84315" stroke-width="10" stroke-linejoin="round"/></svg>', iconSize: [10, 10], iconAnchor: [5, 5] }) });
+        return L.marker(latlng, { icon: L.divIcon({ className: 'custom-diamond-icon', html: '<svg width="10" height="10" viewBox="0 0 100 100" style="overflow:visible;"><polygon points="50,0 100,50 50,100 0,50" fill="transparent" stroke="transparent" stroke-width="10" stroke-linejoin="round"/></svg>', iconSize: [10, 10], iconAnchor: [5, 5] }) });
       },
       onEachFeature: function(feature, layer) {
         var props = feature.properties || {};
