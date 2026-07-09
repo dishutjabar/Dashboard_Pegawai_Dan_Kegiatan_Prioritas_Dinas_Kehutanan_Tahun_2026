@@ -1052,14 +1052,11 @@ var RENDERED_SPATIAL_FILES = {};
 var SPATIAL_CATEGORY_STYLES = {
   'Jaga Leuweung': {
     polygon: { color: '#c62828', weight: 2, fillColor: '#ef5350', fillOpacity: 0.3 },
-    /* Hanya geometri garis murni (LineString) — tanpa isi/fill */
     line: { color: '#A4C639', weight: 5, fillOpacity: 0, opacity: 0.95 },
     popupColor: '#e53935'
   },
   'Kawasan Hutan': {
-    /* Biru telor asin cerah transparan + garis sisi hitam pudar */
     polygon: { color: '#2e2e2e', weight: 1.5, opacity: 0.52, fillColor: '#EAF8FD', fillOpacity: 0.34 },
-    /* Hanya geometri LineString/MultiLineString — bukan greenbelt */
     line: { color: '#6BBAD4', weight: 3.5, fillOpacity: 0, opacity: 0.88 },
     popupColor: '#4A90A4'
   },
@@ -1067,6 +1064,56 @@ var SPATIAL_CATEGORY_STYLES = {
     polygon: { color: '#C9A045', weight: 1.5, fillColor: '#F5CA7A', fillOpacity: 0.78 },
     line: { color: '#F5CA7A', weight: 3, fillOpacity: 0, opacity: 0.95 },
     popupColor: '#C9A045'
+  },
+  'Luasan Agroforestry': {
+    polygon: { color: '#737300', weight: 2, fillColor: '#737300', fillOpacity: 0.5 },
+    line: { color: '#737300', weight: 3, fillOpacity: 0, opacity: 0.95 },
+    popupColor: '#737300'
+  },
+  'Luasan Bambu': {
+    polygon: { color: '#E69800', weight: 2, fillColor: '#E69800', fillOpacity: 0.5 },
+    line: { color: '#E69800', weight: 3, fillOpacity: 0, opacity: 0.95 },
+    popupColor: '#E69800'
+  },
+  'Luasan Bencana (BTT)': {
+    polygon: { color: '#E69800', weight: 2, fillColor: '#E69800', fillOpacity: 0.5 },
+    line: { color: '#E69800', weight: 3, fillOpacity: 0, opacity: 0.95 },
+    popupColor: '#E69800'
+  },
+  'Luasan CSR': {
+    polygon: { color: '#E69800', weight: 2, fillColor: '#E69800', fillOpacity: 0.5 },
+    line: { color: '#E69800', weight: 3, fillOpacity: 0, opacity: 0.95 },
+    popupColor: '#E69800'
+  },
+  'Luasan Jalur Permanen': {
+    polygon: { color: '#228B22', weight: 2, fillColor: '#228B22', fillOpacity: 0.5 },
+    line: { color: '#228B22', weight: 3, fillOpacity: 0, opacity: 0.95 },
+    popupColor: '#228B22'
+  },
+  'Luasan Aset': {
+    polygon: { color: '#CCCCCC', weight: 2, fillColor: '#CCCCCC', fillOpacity: 0.5 },
+    line: { color: '#CCCCCC', weight: 3, fillOpacity: 0, opacity: 0.95 },
+    popupColor: '#CCCCCC'
+  },
+  'Luasan KH Produksi': {
+    polygon: { color: '#FFD966', weight: 2, fillColor: '#FFD966', fillOpacity: 0.5 },
+    line: { color: '#FFD966', weight: 3, fillOpacity: 0, opacity: 0.95 },
+    popupColor: '#FFD966'
+  },
+  'Luasan KH Lindung': {
+    polygon: { color: '#228B22', weight: 2, fillColor: '#228B22', fillOpacity: 0.5 },
+    line: { color: '#228B22', weight: 3, fillOpacity: 0, opacity: 0.95 },
+    popupColor: '#228B22'
+  },
+  'Luasan Konversi': {
+    polygon: { color: '#FFBEBE', weight: 2, fillColor: '#FFBEBE', fillOpacity: 0.5 },
+    line: { color: '#FFBEBE', weight: 3, fillOpacity: 0, opacity: 0.95 },
+    popupColor: '#FFBEBE'
+  },
+  'Luasan APL': {
+    polygon: { color: '#CCCCCC', weight: 2, fillColor: '#CCCCCC', fillOpacity: 0.5 },
+    line: { color: '#CCCCCC', weight: 3, fillOpacity: 0, opacity: 0.95 },
+    popupColor: '#CCCCCC'
   }
 };
 
@@ -1097,13 +1144,10 @@ function switchSpatialTab(tabName) {
   var tabs = document.querySelectorAll('.sp-tab');
   for (var i = 0; i < tabs.length; i++) {
     tabs[i].classList.remove('active');
+    if (tabs[i].innerText.trim() === tabName) {
+      tabs[i].classList.add('active');
+    }
   }
-  var jl = document.getElementById('sptab-jl');
-  var kh = document.getElementById('sptab-kh');
-  var lk = document.getElementById('sptab-lk');
-  if (tabName === 'Jaga Leuweung' && jl) jl.classList.add('active');
-  if (tabName === 'Kawasan Hutan' && kh) kh.classList.add('active');
-  if (tabName === 'Lahan Kritis' && lk) lk.classList.add('active');
   SPATIAL_LIST_PAGE = 0;
   if (typeof renderSpatialFileListPage === 'function') renderSpatialFileListPage();
   if (typeof updateSpatialFileCount === 'function') updateSpatialFileCount();
@@ -1352,7 +1396,7 @@ function addGeoJSONToSpatialLayer(gj, fileInfo, activeCDKs, activePJLPoints) {
       renderer: renderer,
       style: function(feature) { return getSpatialFeatureStyle(feature, fileInfo); },
       pointToLayer: function(feature, latlng) {
-        return L.marker(latlng, { icon: L.divIcon({ className: 'custom-diamond-icon', html: '<svg width="10" height="10" viewBox="0 0 100 100" style="overflow:visible;"><polygon points="50,0 100,50 50,100 0,50" fill="transparent" stroke="transparent" stroke-width="10" stroke-linejoin="round"/></svg>', iconSize: [10, 10], iconAnchor: [5, 5] }) });
+        return L.marker(latlng, { icon: L.divIcon({ className: 'custom-diamond-icon', html: '<svg width="6" height="6" viewBox="0 0 100 100" style="overflow:visible;"><circle cx="50" cy="50" r="35" fill="#ef5350" stroke="#c62828" stroke-width="15"/></svg>', iconSize: [6, 6], iconAnchor: [3, 3] }) });
       },
       onEachFeature: function(feature, layer) {
         var props = feature.properties || {};
