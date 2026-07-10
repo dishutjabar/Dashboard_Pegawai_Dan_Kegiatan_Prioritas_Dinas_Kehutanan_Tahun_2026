@@ -1056,14 +1056,15 @@ var SPATIAL_CATEGORY_STYLES = {
     popupColor: '#e53935'
   },
   'Kawasan Hutan': {
-    polygon: { color: '#2e2e2e', weight: 1.5, opacity: 0.52, fillColor: '#EAF8FD', fillOpacity: 0.34 },
-    line: { color: '#6BBAD4', weight: 3.5, fillOpacity: 0, opacity: 0.88 },
-    popupColor: '#4A90A4'
+    /* Updated as requested */
+    polygon: { color: '#FFD700', weight: 2.5, opacity: 1, fillColor: '#38A800', fillOpacity: 0.20 },
+    line: { color: '#FFD700', weight: 3.5, fillOpacity: 0, opacity: 1 },
+    popupColor: '#38A800'
   },
   'Lahan Kritis': {
-    polygon: { color: '#C9A045', weight: 1.5, fillColor: '#F5CA7A', fillOpacity: 0.78 },
-    line: { color: '#F5CA7A', weight: 3, fillOpacity: 0, opacity: 0.95 },
-    popupColor: '#C9A045'
+    polygon: { color: '#E69800', weight: 1.5, fillColor: '#E69800', fillOpacity: 0.78 },
+    line: { color: '#E69800', weight: 3, fillOpacity: 0, opacity: 0.95 },
+    popupColor: '#E69800'
   },
   'Luasan Agroforestry': {
     polygon: { color: '#737300', weight: 2, fillColor: '#737300', fillOpacity: 0.5 },
@@ -1076,6 +1077,11 @@ var SPATIAL_CATEGORY_STYLES = {
     popupColor: '#E69800'
   },
   'Luasan Bencana (BTT)': {
+    polygon: { color: '#E69800', weight: 2, fillColor: '#E69800', fillOpacity: 0.5 },
+    line: { color: '#E69800', weight: 3, fillOpacity: 0, opacity: 0.95 },
+    popupColor: '#E69800'
+  },
+  'Luasan RHL': {
     polygon: { color: '#E69800', weight: 2, fillColor: '#E69800', fillOpacity: 0.5 },
     line: { color: '#E69800', weight: 3, fillOpacity: 0, opacity: 0.95 },
     popupColor: '#E69800'
@@ -1212,7 +1218,7 @@ function fetchSpatialFileList() {
       var files = res.files || [];
       files.forEach(function(f) {
         if (typeof SPATIAL_VISIBLE_CACHE[f.fileId] === 'undefined') {
-          SPATIAL_VISIBLE_CACHE[f.fileId] = (f.kategori === 'Kawasan Hutan' || f.kategori === 'Lahan Kritis') ? false : true;
+          SPATIAL_VISIBLE_CACHE[f.fileId] = (f.kategori === 'Jaga Leuweung') ? true : false;
         }
         var existing = SPATIAL_FILES_CACHE.find(function(c) { return c.fileId === f.fileId; });
         if (existing && existing.geojson) f.geojson = existing.geojson;

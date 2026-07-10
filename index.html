@@ -292,18 +292,52 @@
     <div style="margin-top:10px; padding-top:10px; border-top:1px solid rgba(255,255,255,0.08);">
       <div class="leg-text" style="font-weight:bold; margin-bottom:8px; font-size:11px; opacity:0.85;">Polygon Spasial (Upload)</div>
       <div style="display:flex; flex-direction:column; gap:8px;">
+        
         <div style="display:flex; align-items:center; gap:10px;">
-          <svg width="18" height="14" viewBox="0 0 18 14"><rect x="1" y="1" width="16" height="12" rx="2" fill="#EAF8FD" fill-opacity="0.55" stroke="#2e2e2e" stroke-opacity="0.52" stroke-width="1.5"/></svg>
-          <span style="font-size:11px;">Kawasan Hutan</span>
+          <svg width="18" height="14" viewBox="0 0 18 14"><rect x="1" y="1" width="16" height="12" rx="2" fill="#ef5350" fill-opacity="0.3" stroke="#c62828" stroke-width="1.5"/></svg>
+          <span style="font-size:11px;">Jaga Leuweung</span>
         </div>
+        
         <div style="display:flex; align-items:center; gap:10px;">
           <svg width="18" height="14" viewBox="0 0 18 14"><line x1="1" y1="7" x2="17" y2="7" stroke="#A4C639" stroke-width="4" stroke-linecap="round"/></svg>
-          <span style="font-size:11px;">Greenbelt / Sabuk Leuweung (Hutan)</span>
+          <span style="font-size:11px;">Greenbelt / Sabuk Leuweung (Garis)</span>
         </div>
+
         <div style="display:flex; align-items:center; gap:10px;">
-          <svg width="18" height="14" viewBox="0 0 18 14"><rect x="1" y="1" width="16" height="12" rx="2" fill="#F5CA7A" stroke="#C9A045" stroke-width="1.2"/></svg>
-          <span style="font-size:11px;">Lahan Kritis</span>
+          <svg width="18" height="14" viewBox="0 0 18 14"><rect x="1" y="1" width="16" height="12" rx="2" fill="#38A800" fill-opacity="0.2" stroke="#FFD700" stroke-width="2"/></svg>
+          <span style="font-size:11px;">Kawasan Hutan</span>
         </div>
+        
+        <div style="display:flex; align-items:center; gap:10px;">
+          <svg width="18" height="14" viewBox="0 0 18 14"><rect x="1" y="1" width="16" height="12" rx="2" fill="#E69800" fill-opacity="0.5" stroke="#E69800" stroke-width="1.5"/></svg>
+          <span style="font-size:11px;">Lahan Kritis, Bambu, Bencana, CSR, RHL</span>
+        </div>
+        
+        <div style="display:flex; align-items:center; gap:10px;">
+          <svg width="18" height="14" viewBox="0 0 18 14"><rect x="1" y="1" width="16" height="12" rx="2" fill="#737300" fill-opacity="0.5" stroke="#737300" stroke-width="1.5"/></svg>
+          <span style="font-size:11px;">Luasan Agroforestry</span>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:10px;">
+          <svg width="18" height="14" viewBox="0 0 18 14"><rect x="1" y="1" width="16" height="12" rx="2" fill="#228B22" fill-opacity="0.5" stroke="#228B22" stroke-width="1.5"/></svg>
+          <span style="font-size:11px;">Luasan Jalur Permanen, KH Lindung</span>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:10px;">
+          <svg width="18" height="14" viewBox="0 0 18 14"><rect x="1" y="1" width="16" height="12" rx="2" fill="#CCCCCC" fill-opacity="0.5" stroke="#CCCCCC" stroke-width="1.5"/></svg>
+          <span style="font-size:11px;">Luasan Aset, APL</span>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:10px;">
+          <svg width="18" height="14" viewBox="0 0 18 14"><rect x="1" y="1" width="16" height="12" rx="2" fill="#FFD966" fill-opacity="0.5" stroke="#FFD966" stroke-width="1.5"/></svg>
+          <span style="font-size:11px;">Luasan KH Produksi</span>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:10px;">
+          <svg width="18" height="14" viewBox="0 0 18 14"><rect x="1" y="1" width="16" height="12" rx="2" fill="#FFBEBE" fill-opacity="0.5" stroke="#FFBEBE" stroke-width="1.5"/></svg>
+          <span style="font-size:11px;">Luasan Konversi</span>
+        </div>
+
       </div>
     </div>
   </div>
@@ -641,6 +675,7 @@
         <button class="sp-tab" id="sptab-bm" onclick="switchSpatialTab('Luasan Bambu')">Luasan Bambu</button>
         <button class="sp-tab" id="sptab-bn" onclick="switchSpatialTab('Luasan Bencana (BTT)')">Luasan Bencana (BTT)</button>
         <button class="sp-tab" id="sptab-cr" onclick="switchSpatialTab('Luasan CSR')">Luasan CSR</button>
+        <button class="sp-tab" id="sptab-rhl" onclick="switchSpatialTab('Luasan RHL')">Luasan RHL</button>
         <button class="sp-tab" id="sptab-jp" onclick="switchSpatialTab('Luasan Jalur Permanen')">Luasan Jalur Permanen</button>
         <button class="sp-tab" id="sptab-as" onclick="switchSpatialTab('Luasan Aset')">Luasan Aset</button>
         <button class="sp-tab" id="sptab-kp" onclick="switchSpatialTab('Luasan KH Produksi')">Luasan KH Produksi</button>
