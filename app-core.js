@@ -1,10 +1,10 @@
 /* ═══ GeoHutan Jabar – Core ═══ */
 
 /* 0. Globals */
-var mapObj, GEO = null, LOADED = 0, TOTAL = 20, CHARTS = {}, RTIMER = null;
-var DATA = { pjl: [], persemaian: [], pegawai: [], jumat: [] };
-var FILTER = { cdk: [], pegawaiUnit: [], kab: [], status: [], kawasan: [], jabatan: [], nama_pegawai: [], penyuluh: [], kategori_lojuna: [] };
-var LAYER_VISIBLE = { pjl: true, per: true, peg: true, jum: true };
+var mapObj, GEO = null, LOADED = 0, TOTAL = 21, CHARTS = {}, RTIMER = null;
+var DATA = { pjl: [], persemaian: [], pegawai: [], jumat: [], pegawaiBinaan: [] };
+var FILTER = { cdk: [], pegawaiUnit: [], kab: [], status: [], kawasan: [], jabatan: [], nama_pegawai: [], penyuluh: [], kategori_lojuna: [], binaan_unit: [], binaan_kab: [], binaan_kegiatan: [], binaan_jabatan: [], binaan_pembina: [] };
+var LAYER_VISIBLE = { pjl: true, per: true, peg: true, jum: true, pegb: true };
 var AUTOPOLY_ENABLED = true;
 var LAYERS = {}; // Will hold either LayerGroup or MarkerClusterGroup
 var BASEMAPS = {};
@@ -18,12 +18,13 @@ var HEATMAP_LAYER = null;
 var BUFFER_LAYERS = null;
 var DYNAMIC_SOURCES = [];
 
-var POP_COLOR = { pjl: '#43a047', per: '#1e88e5', peg: '#fb8c00', jum: '#8e24aa' };
+var POP_COLOR = { pjl: '#43a047', per: '#1e88e5', peg: '#fb8c00', jum: '#8e24aa', pegb: '#00897b' };
 var POP_LABEL = {
   pjl: 'Petugas Jaga Leuweung',
   per: 'Lokasi Persemaian Jaga Leuweung',
   peg: 'Pegawai Dinas Kehutanan',
-  jum: 'Lokasi Permanen Jum\'at Menanam'
+  jum: 'Lokasi Permanen Jum\'at Menanam',
+  pegb: 'Pegawai Wilayah Hutan Binaan'
 };
 
 /* 1. Map Init */
@@ -49,6 +50,14 @@ var SVG_PEG = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="22" vi
               '        fill="#fb8c00" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/>' +
               '  <path d="M9 14 L12 16 L15 14" fill="none" stroke="#fff" stroke-width="1" stroke-linejoin="round"/>' +
               '</svg>';
+// Icon untuk Pegawai Wilayah Hutan Binaan - teal diamond/forest shape
+var SVG_PEGB = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="22" viewBox="0 0 24 28">' +
+               '  <circle cx="12" cy="8.5" r="4.8" fill="#00897b" stroke="#fff" stroke-width="1.4"/>' +
+               '  <path d="M6.5 14.5 C6.5 19 4.8 23.5 4.8 24.5 L19.2 24.5 C19.2 23.5 17.5 19 17.5 14.5 C17.5 12 15.2 10.5 12 10.5 C8.8 10.5 6.5 12 6.5 14.5 Z" ' +
+               '        fill="#00897b" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/>' +
+               '  <path d="M9 14 L12 17 L15 14" fill="none" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/>' +
+               '  <path d="M10 11 L12 9 L14 11" fill="none" stroke="#fff" stroke-width="1" stroke-linejoin="round"/>' +
+               '</svg>';
 var SVG_JUM_TEMPLATE = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="20" viewBox="0 0 20 24"><polygon points="10,2 18,14 14,14 16,20 4,20 6,14 2,14" fill="{COLOR}" stroke="#fff" stroke-width="1.2" stroke-linejoin="round"/><rect x="8" y="20" width="4" height="4" rx="1" fill="#5d4037"/></svg>';
 
 function makeIcon(svg) {
@@ -61,6 +70,7 @@ var ICONS = {
   pjl: makeIcon(SVG_PJL), 
   per: makeIcon(SVG_PER), 
   peg: makeIcon(SVG_PEG), 
+  pegb: L.divIcon({ html: SVG_PEGB, iconSize: [16, 22], iconAnchor: [8, 22], className: '' }),
   jum_unggulan: makeJumIcon('#8e24aa'), 
   jum_biasa: makeJumIcon('#1e88e5'), 
   jum_permanen: makeJumIcon('#8e24aa') 

@@ -7,6 +7,10 @@ var JUNA_SPREADSHEET_ID = "1p7-7pSKtNCc58eC-tXJsXNKk3QSSswI68Gl6fNsZhSE";
 var PEGAWAI_SPREADSHEET_ID = "1K_rijLYh_sdVmNzSgs7TIdjVslBYeQ31";
 var PEGAWAI_SHEET_NAME = "DATAPEGAWAIFORMATSISTEM";
 
+/** Spreadsheet & Sheet Pegawai Wilayah Hutan Binaan */
+var PEGAWAI_BINAAN_SPREADSHEET_ID = "1xrl3W7DZs8SsYZIWiLgHYvi_89V7NismK-G9YDu9NdM";
+var PEGAWAI_BINAAN_SHEET_NAME = "DATAPEGAWAIBINAANFORMATSISTEM";
+
 var POLYGON_SPREADSHEET_ID = "1z-hF_yyWlsWjgK6Xwu9eypIJZOX9n5l5F87WPYZPnmE";
 var POLYGON_SHEET_NAME = "datapolygon_tanam_pelihara";
 var POLYGON_PHOTO_FOLDER_ID = "1IqopqD0cu0mE7egxFCHAedBBNXVd-wvI";
@@ -88,6 +92,15 @@ var PJL_DRIVE_FOLDERS = {
 
 /** Folder Google Drive Pegawai per tahun linimasa */
 var PEG_DRIVE_FOLDERS = {
+  "2026": "1tb6X5GNhuZ1JmQRwxuJ9cxDhLVAP2tLm",
+  "2027": "1-D2Nw8fMyFebCYfApSDibk4cAlGvrOCb",
+  "2028": "1-MGOwGFAFtHz9lLfQ0vrwCSkAvhSJHgf",
+  "2029": "11SutxAecGOm3EhV69sJaAnzWQ6VkMLWj",
+  "2030": "1gkI4LM7mGk39wcSEqBUAd5JUR2n7ASlU",
+};
+
+/** Folder Google Drive Pegawai Wilayah Hutan Binaan per tahun (sama dengan PEG) */
+var PEG_BINAAN_DRIVE_FOLDERS = {
   "2026": "1tb6X5GNhuZ1JmQRwxuJ9cxDhLVAP2tLm",
   "2027": "1-D2Nw8fMyFebCYfApSDibk4cAlGvrOCb",
   "2028": "1-MGOwGFAFtHz9lLfQ0vrwCSkAvhSJHgf",
@@ -386,6 +399,7 @@ function findCoordColumnIndices_(headers) {
 function getSpreadsheetIdForCategory_(category) {
   if (category === "juna") return JUNA_SPREADSHEET_ID;
   if (category === "pegawai") return PEGAWAI_SPREADSHEET_ID;
+  if (category === "pegawaibinaanformatsistem") return PEGAWAI_BINAAN_SPREADSHEET_ID;
   if (category === "polygon") return POLYGON_SPREADSHEET_ID;
   return SPREADSHEET_ID;
 }
@@ -463,6 +477,13 @@ function findSheetByCoordinates_(ss, reqLat, reqLng, category, options) {
     return pegSheet;
   }
 
+  // Untuk pegawai binaan: pakai sheet DATAPEGAWAIBINAANFORMATSISTEM langsung
+  if (category === "pegawaibinaanformatsistem") {
+    var binaanSheet = ss.getSheetByName(PEGAWAI_BINAAN_SHEET_NAME);
+    if (!binaanSheet) binaanSheet = ss.getSheets()[0];
+    return binaanSheet;
+  }
+
   var sheets = preferredSheet ? [preferredSheet] : ss.getSheets();
   for (var i = 0; i < sheets.length; i++) {
     var sheet = sheets[i];
@@ -506,6 +527,13 @@ function getUploadFolder_(category, year) {
       throw new Error("Folder Drive Pegawai untuk tahun " + year + " belum dikonfigurasi.");
     }
     return DriveApp.getFolderById(pegFolderId);
+  }
+  if (category === "pegawaibinaanformatsistem") {
+    var binaanFolderId = PEG_BINAAN_DRIVE_FOLDERS[String(year)];
+    if (!binaanFolderId) {
+      throw new Error("Folder Drive Pegawai Binaan untuk tahun " + year + " belum dikonfigurasi.");
+    }
+    return DriveApp.getFolderById(binaanFolderId);
   }
   if (category === "polygon") {
     return DriveApp.getFolderById(POLYGON_PHOTO_FOLDER_ID);
@@ -910,6 +938,7 @@ function doPost(e) {
       var prefix = "Juna_";
       if (category === "pjl") prefix = "PJL_";
       else if (category === "pegawai") prefix = "Peg_";
+      else if (category === "pegawaibinaanformatsistem") prefix = "PegBinaan_";
       else if (category === "polygon") prefix = "Poly_";
 
       var filename = prefix + year + "_" + new Date().getTime() + ".jpg";
@@ -942,6 +971,8 @@ function doPost(e) {
           var targetSheet;
           if (category === "pegawai") {
             targetSheet = ss.getSheetByName(PEGAWAI_SHEET_NAME);
+          } else if (category === "pegawaibinaanformatsistem") {
+            targetSheet = ss.getSheetByName(PEGAWAI_BINAAN_SHEET_NAME);
           } else {
             targetSheet = findSheetByCoordinates_(ss, reqLat, reqLng, category, {
               sheetGid: sheetGid,
@@ -995,6 +1026,8 @@ function doPost(e) {
           var targetSheetDel;
           if (categoryDel === "pegawai") {
             targetSheetDel = ssDel.getSheetByName(PEGAWAI_SHEET_NAME);
+          } else if (categoryDel === "pegawaibinaanformatsistem") {
+            targetSheetDel = ssDel.getSheetByName(PEGAWAI_BINAAN_SHEET_NAME);
           } else {
             targetSheetDel = findSheetByCoordinates_(
               ssDel,

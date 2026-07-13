@@ -1554,6 +1554,7 @@ function importLocalFile() {
         rows.forEach(r => {
           var c = getCoord(r);
           if (c) { r._lat = c.lat; r._lng = c.lng; r._kab = getKab(c.lat, c.lng); }
+          if (type === 'pegawaiBinaan') normalizeBinaanRow(r);
         });
         DATA[type] = DATA[type].concat(rows);
         fillDropdown(); schedRender();
@@ -1631,6 +1632,111 @@ function buildPjlPopupRow(label, value) {
   return '<div class="pjl-popup-row"><span class="pjl-popup-lbl">' + label + '</span><span class="pjl-popup-val">' + v + '</span></div>';
 }
 
+function hasSheetValue(v) {
+  return v !== null && v !== undefined && String(v).trim() !== '';
+}
+
+function normalizeSheetKey(key) {
+  return String(key || '')
+    .replace(/^\uFEFF/, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+}
+
+function getSheetValue(row, aliases) {
+  if (!row || typeof row !== 'object') return '';
+  aliases = aliases || [];
+  for (var i = 0; i < aliases.length; i++) {
+    if (Object.prototype.hasOwnProperty.call(row, aliases[i]) && hasSheetValue(row[aliases[i]])) {
+      return row[aliases[i]];
+    }
+  }
+  var wanted = {};
+  aliases.forEach(function(alias) { wanted[normalizeSheetKey(alias)] = true; });
+  var keys = Object.keys(row);
+  for (var j = 0; j < keys.length; j++) {
+    if (wanted[normalizeSheetKey(keys[j])] && hasSheetValue(row[keys[j]])) {
+      return row[keys[j]];
+    }
+  }
+  return '';
+}
+
+function parseLuasHa(value) {
+  if (!hasSheetValue(value)) return 0;
+  var s = String(value).trim().replace(/\s+/g, '').replace(/[^\d,.\-]/g, '');
+  if (!s) return 0;
+  var lastComma = s.lastIndexOf(',');
+  var lastDot = s.lastIndexOf('.');
+  if (lastComma > -1 && lastDot > -1) {
+    if (lastComma > lastDot) s = s.replace(/\./g, '').replace(',', '.');
+    else s = s.replace(/,/g, '');
+  } else if (lastComma > -1) {
+    s = s.replace(',', '.');
+  } else if (/^\d{1,3}(\.\d{3})+$/.test(s)) {
+    s = s.replace(/\./g, '');
+  }
+  var n = parseFloat(s);
+  return isNaN(n) ? 0 : n;
+}
+
+function getBinaanLuasRaw(row) {
+  return getSheetValue(row, [
+    'Luas (Ha)', 'Luasan (Ha)', 'Luas_Ha', 'Luasan_Ha',
+    'Luas Ha', 'Luasan Ha', 'Luas', 'Luasan',
+    'luas', 'luasan', 'luas_ha', 'luasan_ha'
+  ]);
+}
+
+function getBinaanLuas(row) {
+  return parseLuasHa(getBinaanLuasRaw(row));
+}
+
+function formatLuasHa(value) {
+  var n = typeof value === 'number' ? value : parseLuasHa(value);
+  return n.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function getBinaanKabupaten(row) {
+  return getSheetValue(row, ['Kabupaten', 'Kabupaten/Kota', 'Kab/Kota', 'KABUPATEN', 'KAB_KOTA']) || (row && row._kab) || '';
+}
+
+function getBinaanField(row, field) {
+  var aliases = {
+    kecamatan: ['Kecamatan', 'KECAMATAN'],
+    desa: ['Desa', 'Desa/Kelurahan', 'Desa / Kelurahan', 'DESA'],
+    kegiatan: ['Kegiatan', 'KEGIATAN'],
+    tahun: ['Tahun Kegiatan', 'Tahun_Kegiatan', 'TAHUN KEGIATAN'],
+    pembina: ['Pembina/Pengampu', 'Pembina / Pengampu', 'Pembina', 'Pengampu'],
+    unit: ['Unit Kerja', 'UNIT KERJA', 'Unit_Kerja', 'Unit'],
+    jabatan: ['Jabatan', 'JABATAN', 'Nama Jabatan'],
+    nip: ['NIP', 'Nip']
+  };
+  return getSheetValue(row, aliases[field] || [field]);
+}
+
+function normalizeBinaanRow(row) {
+  if (!row || typeof row !== 'object') return row;
+  var luasRaw = getBinaanLuasRaw(row);
+  if (hasSheetValue(luasRaw)) {
+    if (!hasSheetValue(row['Luas (Ha)'])) row['Luas (Ha)'] = luasRaw;
+    if (!hasSheetValue(row['Luasan (Ha)'])) row['Luasan (Ha)'] = luasRaw;
+    if (!hasSheetValue(row.Luas_Ha)) row.Luas_Ha = luasRaw;
+    if (!hasSheetValue(row.Luas)) row.Luas = luasRaw;
+  }
+  var kab = getBinaanKabupaten(row);
+  if (hasSheetValue(kab) && !hasSheetValue(row._kab)) row._kab = kab;
+  var pembina = getBinaanField(row, 'pembina');
+  if (hasSheetValue(pembina) && !hasSheetValue(row['Pembina/Pengampu'])) row['Pembina/Pengampu'] = pembina;
+  var kegiatan = getBinaanField(row, 'kegiatan');
+  if (hasSheetValue(kegiatan) && !hasSheetValue(row.Kegiatan)) row.Kegiatan = kegiatan;
+  var jabatan = getBinaanField(row, 'jabatan');
+  if (hasSheetValue(jabatan) && !hasSheetValue(row.Jabatan)) row.Jabatan = jabatan;
+  var unit = getBinaanField(row, 'unit');
+  if (hasSheetValue(unit) && !hasSheetValue(row['Unit Kerja'])) row['Unit Kerja'] = unit;
+  return row;
+}
+
 /* Drawer */
 function openDrawer(type, r) {
   var dr = document.getElementById('detail-drawer');
@@ -1703,6 +1809,23 @@ function openDrawer(type, r) {
       ['Koordinat', coordText(lat, lng)]
     ];
     var _pegPhotoRow = r;
+  } else if (type === 'pegb' || type === 'pegawaiBinaan') {
+    normalizeBinaanRow(r);
+    var kabupatenBinaan = getBinaanKabupaten(r);
+    config = [
+      ['Kabupaten', kabupatenBinaan],
+      ['Kecamatan', getBinaanField(r, 'kecamatan')],
+      ['Desa', getBinaanField(r, 'desa')],
+      ['Kegiatan', getBinaanField(r, 'kegiatan')],
+      ['Tahun Kegiatan', getBinaanField(r, 'tahun')],
+      ['Luas (Ha)', formatLuasHa(getBinaanLuas(r)) + ' Ha'],
+      ['Pembina/Pengampu', getBinaanField(r, 'pembina')],
+      ['Unit Kerja', getBinaanField(r, 'unit')],
+      ['Jabatan', getBinaanField(r, 'jabatan')],
+      ['NIP', getBinaanField(r, 'nip')],
+      ['Koordinat', coordText(lat, lng)]
+    ];
+    var _pegbPhotoRow = r;
   } else if (type === 'pohon' || type === 'polygon_kegiatan') {
     var pgLat = toFloat(r['Latitude']) || lat;
     var pgLng = toFloat(r['Longitude']) || lng;
@@ -1777,6 +1900,9 @@ function openDrawer(type, r) {
   if ((type === 'peg' || type === 'pegawai') && typeof _pegPhotoRow !== 'undefined') {
     html += buildPhotoSection(_pegPhotoRow, 'pegawai');
   }
+  if ((type === 'pegb' || type === 'pegawaiBinaan') && typeof _pegbPhotoRow !== 'undefined') {
+    html += buildPhotoSection(_pegbPhotoRow, 'pegawaiBinaan');
+  }
   if ((type === 'pohon' || type === 'polygon_kegiatan') && typeof _pohonPhotoRow !== 'undefined') {
     html += buildPhotoSection(_pohonPhotoRow, 'polygon');
   }
@@ -1809,6 +1935,13 @@ function openDrawer(type, r) {
     PHOTO_GALLERY.context = 'polygon';
     PHOTO_GALLERY.row = _pohonPhotoRow;
     PHOTO_GALLERY.year = getCurrentPhotoYear(_pohonPhotoRow, 'polygon');
+    PHOTO_GALLERY.idx = 0;
+    refreshGalleryForYear(PHOTO_GALLERY.year);
+  }
+  if ((type === 'pegb' || type === 'pegawaiBinaan') && typeof _pegbPhotoRow !== 'undefined') {
+    PHOTO_GALLERY.context = 'pegawaiBinaan';
+    PHOTO_GALLERY.row = _pegbPhotoRow;
+    PHOTO_GALLERY.year = getCurrentPhotoYear(_pegbPhotoRow, 'pegawaiBinaan');
     PHOTO_GALLERY.idx = 0;
     refreshGalleryForYear(PHOTO_GALLERY.year);
   }
@@ -2044,11 +2177,15 @@ function applyFilter() {
   FILTER.nama_pegawai = getVals('f_nama_pegawai');
   FILTER.penyuluh = getVals('f_penyuluh');
   FILTER.kategori_lojuna = getVals('f_kategori_lojuna');
+  
+  FILTER.binaan_kegiatan = getVals('f_binaan_kegiatan');
+  FILTER.binaan_jabatan = getVals('f_binaan_jabatan');
+  FILTER.binaan_pembina = getVals('f_binaan_pembina');
   schedRender();
 }
 function resetFilter() {
-  FILTER = { cdk: [], pegawaiUnit: [], kab: [], status: [], kawasan: [], jabatan: [], nama_pegawai: [], penyuluh: [], kategori_lojuna: [] };
-  ['f_cdk','f_pegawai','f_kab','f_status','f_kawasan','f_jabatan', 'f_nama_pegawai', 'f_penyuluh', 'f_kategori_lojuna'].forEach(function(id) {
+  FILTER = { cdk: [], pegawaiUnit: [], kab: [], status: [], kawasan: [], jabatan: [], nama_pegawai: [], penyuluh: [], kategori_lojuna: [], binaan_kegiatan: [], binaan_jabatan: [], binaan_pembina: [] };
+  ['f_cdk','f_pegawai','f_kab','f_status','f_kawasan','f_jabatan', 'f_nama_pegawai', 'f_penyuluh', 'f_kategori_lojuna', 'f_binaan_kegiatan', 'f_binaan_jabatan', 'f_binaan_pembina'].forEach(function(id) {
     try { 
       var el = document.getElementById(id);
       if (el) {
@@ -2063,18 +2200,56 @@ function resetFilter() {
   schedRender();
 }
 function forceRefresh() { try { mapObj.invalidateSize(); } catch(e) {} schedRender(); showToast('Tampilan disegarkan'); }
+
+function getCDKExtended(unitKerja) {
+  var u = String(unitKerja || '').toUpperCase().trim();
+  if (!u) return null;
+  if (u.includes('SPTH')) return 'SPTH';
+  if (u.includes('P2HH')) return 'P2HH';
+  if (u.includes('TAHURA') || u.includes('TAMAN HUTAN RAYA')) return 'TAHURA';
+  return getCDK(u);
+}
+
+function normalizeFilterType(type) {
+  if (type === 'per') return 'persemaian';
+  if (type === 'peg') return 'pegawai';
+  if (type === 'jum') return 'jumat';
+  if (type === 'pegb') return 'pegawaiBinaan';
+  return type;
+}
+
+function filterHasValue(selectedValues, value) {
+  if (!selectedValues || !selectedValues.length) return true;
+  var target = String(value || '').trim().toLowerCase();
+  return selectedValues.some(function(v) {
+    return String(v || '').trim().toLowerCase() === target;
+  });
+}
+
 function passFilter(r, type) {
+  type = normalizeFilterType(type);
   if (!r || typeof r !== 'object') return false;
-  var cdk = getCDK(r['Unit Kerja'] || r['UNIT KERJA'] || ''); var unit = String(r['Unit Kerja'] || r['UNIT KERJA'] || '').trim(); var kab = String(r._kab || '');
+  if (type === 'pegawaiBinaan') normalizeBinaanRow(r);
+  var unitKerja = String(type === 'pegawaiBinaan' ? getBinaanField(r, 'unit') : (r['Unit Kerja'] || r['UNIT KERJA'] || '')).trim();
+  var cdk = getCDKExtended(unitKerja); 
+  var kab = String(r._kab || '');
+  
   if (FILTER.cdk && FILTER.cdk.length > 0 && !FILTER.cdk.includes(cdk)) return false;
-  if (FILTER.kab && FILTER.kab.length > 0 && !FILTER.kab.includes(kab)) return false;
+  if (FILTER.kab && FILTER.kab.length > 0 && !filterHasValue(FILTER.kab, kab)) return false;
   
   if (type === 'pegawai') {
-    if (FILTER.pegawaiUnit && FILTER.pegawaiUnit.length > 0 && !FILTER.pegawaiUnit.includes(unit)) return false;
+    if (FILTER.pegawaiUnit && FILTER.pegawaiUnit.length > 0 && !FILTER.pegawaiUnit.includes(unitKerja)) return false;
     var jabatan = String(r['Nama Jabatan'] || r['Jabatan'] || r['JABATAN'] || '').trim();
     if (FILTER.jabatan && FILTER.jabatan.length > 0 && !FILTER.jabatan.includes(jabatan)) return false;
     var nama_peg = String(r['Nama'] || r['NAMA'] || '').trim();
     if (FILTER.nama_pegawai && FILTER.nama_pegawai.length > 0 && !FILTER.nama_pegawai.includes(nama_peg)) return false;
+  }
+  
+  if (type === 'pegawaiBinaan') {
+    normalizeBinaanRow(r);
+    if (!filterHasValue(FILTER.binaan_kegiatan, getBinaanField(r, 'kegiatan'))) return false;
+    if (!filterHasValue(FILTER.binaan_jabatan, getBinaanField(r, 'jabatan'))) return false;
+    if (!filterHasValue(FILTER.binaan_pembina, getBinaanField(r, 'pembina'))) return false;
   }
   
   if (type === 'persemaian' && FILTER.status && FILTER.status.length > 0 && !FILTER.status.includes(String(r['Status Persemaian'] || '').trim())) return false;
@@ -2105,8 +2280,12 @@ function toggleBuffer() {
 fetch('Jawa Barattt.geojson').then(res => res.json()).then(gj => {
   GEO = gj;
   try { L.geoJSON(gj, { style: { color: '#222222', weight: 1.5, fillOpacity: 0.02, fillColor: '#43a047', opacity: 0.8, dashArray: '' } }).addTo(mapObj); } catch(e) {}
-  ['pjl','persemaian','pegawai','jumat'].forEach(function(t) {
-    DATA[t].forEach(function(r) { if (r._lat && r._lng && !r._kab) r._kab = getKab(r._lat, r._lng); });
+  ['pjl','persemaian','pegawai','jumat','pegawaiBinaan'].forEach(function(t) {
+    DATA[t].forEach(function(r) {
+      if (t === 'pegawaiBinaan') normalizeBinaanRow(r);
+      if (r._lat && r._lng && !r._kab) r._kab = getKab(r._lat, r._lng) || (t === 'pegawaiBinaan' ? getBinaanKabupaten(r) : '');
+      if (t === 'pegawaiBinaan') normalizeBinaanRow(r);
+    });
   });
   fillDropdown(); schedRender();
 }).catch(e => console.warn('GeoJSON:', e));
@@ -2127,6 +2306,7 @@ function loadCSV(url, type) {
           r._data_type = type;
           var c = getCoord(r);
           if (c) { r._lat = c.lat; r._lng = c.lng; r._kab = getKab(c.lat, c.lng); } else { r._lat = null; r._lng = null; r._kab = ''; }
+          if (type === 'pegawaiBinaan') normalizeBinaanRow(r);
         });
         DATA[type] = DATA[type].concat(rows);
         onLoaded();
@@ -2157,11 +2337,11 @@ function onLoaded() {
 
 /* Dropdown setup */
 function fillDropdown() {
-  var S = { cdk: new Set(), unit: new Set(), kab: new Set(), status: new Set(), kawasan: new Set(), jabatan: new Set(), nama_pegawai: new Set(), penyuluh: new Set(), kategori_lojuna: new Set() };
-  ['pjl','persemaian','pegawai','jumat'].forEach(t => {
+  var S = { cdk: new Set(), unit: new Set(), kab: new Set(), status: new Set(), kawasan: new Set(), jabatan: new Set(), nama_pegawai: new Set(), penyuluh: new Set(), kategori_lojuna: new Set(), binaan_kegiatan: new Set(), binaan_jabatan: new Set(), binaan_pembina: new Set() };
+  ['pjl','persemaian','pegawai','jumat', 'pegawaiBinaan'].forEach(t => {
     DATA[t].forEach(r => {
       if(!r) return;
-      var c = getCDK(r['Unit Kerja']); if(c) S.cdk.add(c);
+      var c = getCDKExtended(r['Unit Kerja'] || r['UNIT KERJA']); if(c) S.cdk.add(c);
       if(r._kab) S.kab.add(r._kab);
       if(t==='pjl') { 
         var kw=r['Kawasan Leuweung/ Gunung']; if(kw) S.kawasan.add(kw.trim()); 
@@ -2175,6 +2355,15 @@ function fillDropdown() {
       }
       if(t==='jumat') {
         var kl=r['Kategori Lojuna']; if(kl) S.kategori_lojuna.add(kl.trim());
+      }
+      if(t==='pegawaiBinaan') {
+        normalizeBinaanRow(r);
+        var kegBinaan = getBinaanField(r, 'kegiatan');
+        var jabBinaan = getBinaanField(r, 'jabatan');
+        var pembinaBinaan = getBinaanField(r, 'pembina');
+        if(kegBinaan) S.binaan_kegiatan.add(String(kegBinaan).trim());
+        if(jabBinaan) S.binaan_jabatan.add(String(jabBinaan).trim());
+        if(pembinaBinaan) S.binaan_pembina.add(String(pembinaBinaan).trim());
       }
     });
   });
@@ -2208,13 +2397,14 @@ function fillDropdown() {
   pop('f_status', S.status, 'Semua Status'); pop('f_kawasan', S.kawasan, 'Semua Kawasan');
   pop('f_jabatan', S.jabatan, 'Semua Jabatan'); pop('f_nama_pegawai', S.nama_pegawai, 'Semua Nama Pegawai');
   pop('f_penyuluh', S.penyuluh, 'Semua Petugas Lapangan'); pop('f_kategori_lojuna', S.kategori_lojuna, 'Semua Kategori');
+  pop('f_binaan_kegiatan', S.binaan_kegiatan, 'Semua Kegiatan'); pop('f_binaan_jabatan', S.binaan_jabatan, 'Semua Jabatan'); pop('f_binaan_pembina', S.binaan_pembina, 'Semua Pembina');
 }
 
 var GLOBAL_POLY_COORDS = {};
 /* Render Engine */
 function schedRender() { clearTimeout(RTIMER); RTIMER = setTimeout(doRender, 100); }
 function doRender() {
-  var cnt = { pjl: 0, per: 0, peg: 0, jum: 0 };
+  var cnt = { pjl: 0, per: 0, peg: 0, jum: 0, pegb: 0 };
   
   if (HEATMAP_LAYER) { mapObj.removeLayer(HEATMAP_LAYER); HEATMAP_LAYER = null; }
   var heatData = [];
@@ -2224,12 +2414,13 @@ function doRender() {
   GLOBAL_POLY_COORDS = {};
   var isFilterActive = Object.values(FILTER).some(arr => arr.length > 0);
 
-  ['pjl', 'per', 'peg', 'jum'].forEach(type => {
-    if(LAYERS[type]) mapObj.removeLayer(LAYERS[type]);
+  ['pjl', 'per', 'peg', 'jum', 'pegawaiBinaan'].forEach(type => {
+    var layerKey = (type === 'pegawaiBinaan') ? 'pegb' : type;
+    if(LAYERS[layerKey]) mapObj.removeLayer(LAYERS[layerKey]);
     if(CLUSTER_ENABLED && typeof L.markerClusterGroup !== 'undefined') {
-      LAYERS[type] = L.markerClusterGroup({ disableClusteringAtZoom: 16, maxClusterRadius: 50 });
+      LAYERS[layerKey] = L.markerClusterGroup({ disableClusteringAtZoom: 16, maxClusterRadius: 50 });
     } else {
-      LAYERS[type] = L.layerGroup();
+      LAYERS[layerKey] = L.layerGroup();
     }
   });
   
@@ -2239,7 +2430,8 @@ function doRender() {
   function addMarkers(arr, type, defaultIcon) {
     if (!LAYER_VISIBLE[type]) return;
     arr.forEach(function(r) {
-      if (!r || !passFilter(r, type === 'per' ? 'persemaian' : (type === 'jum' ? 'jumat' : (type === 'peg' ? 'pegawai' : type))) || !r._lat || !r._lng) return;
+      if (type === 'pegb') normalizeBinaanRow(r);
+      if (!r || !passFilter(r, type) || !r._lat || !r._lng) return;
       cnt[type]++;
       if (HEATMAP_ENABLED) heatData.push([r._lat, r._lng, 1]);
       try {
@@ -2370,6 +2562,43 @@ function doRender() {
                 pegInfo +
                 '</div>';
             }
+          } else if (type === 'pegb') {
+            normalizeBinaanRow(r);
+            var pegbYear = getCurrentPhotoYear(r, 'pegawaiBinaan');
+            var pegbMerged = getMergedData(r, pegbYear, 'pegawaiBinaan');
+            var pegbThumb = pegbMerged.photos.length > 0 ? pegbMerged.photos[0] : null;
+            var pegbUnit = getBinaanField(r, 'unit') || '-';
+            var pegbJabatan = getBinaanField(r, 'jabatan') || '-';
+            var pegbKeg = getBinaanField(r, 'kegiatan') || '-';
+            var pegbKab = getBinaanKabupaten(r) || '-';
+            var pegbKec = getBinaanField(r, 'kecamatan') || '-';
+            var pegbDesa = getBinaanField(r, 'desa') || '-';
+            var pegbPembina = getBinaanField(r, 'pembina') || '-';
+            var pegbLuas = formatLuasHa(getBinaanLuas(r)) + ' Ha';
+            var pegbInfo = '<div class="pjl-tooltip-info">' +
+              '<div class="pjl-tooltip-row"><span class="marker-tip-lbl">Kabupaten</span><span class="marker-tip-val">' + pegbKab + '</span></div>' +
+              '<div class="pjl-tooltip-row"><span class="marker-tip-lbl">Kecamatan</span><span class="marker-tip-val">' + pegbKec + '</span></div>' +
+              '<div class="pjl-tooltip-row"><span class="marker-tip-lbl">Desa</span><span class="marker-tip-val">' + pegbDesa + '</span></div>' +
+              '<div class="pjl-tooltip-row"><span class="marker-tip-lbl">Pembina</span><span class="marker-tip-val">' + pegbPembina + '</span></div>' +
+              '<div class="pjl-tooltip-row"><span class="marker-tip-lbl">Luasan</span><span class="marker-tip-val">' + pegbLuas + '</span></div>' +
+              '<div class="pjl-tooltip-row"><span class="marker-tip-lbl">Kegiatan</span><span class="marker-tip-val">' + pegbKeg + '</span></div>' +
+              '<div class="pjl-tooltip-row"><span class="marker-tip-lbl">Unit</span><span class="marker-tip-val">' + pegbUnit + '</span></div>' +
+              '<div class="pjl-tooltip-row"><span class="marker-tip-lbl">Jabatan</span><span class="marker-tip-val">' + pegbJabatan + '</span></div>' +
+              '</div>';
+            if (pegbThumb) {
+              hoverHTML = '<div class="jum-tooltip-thumb pjl-tooltip-thumb" style="border-top:2px solid #00897b;">' +
+                '<img src="' + pegbThumb + '" alt="foto pegawai binaan" onerror="handleDriveImageError(this);" />' +
+                '<div class="jum-tooltip-thumb-name">' + name + '</div>' +
+                '<div class="jum-tooltip-thumb-year" style="color:#00897b;">&#128247; ' + (pegbMerged.dates[0] ? formatDateIndo(pegbMerged.dates[0]) : 'Foto ' + pegbYear) + '</div>' +
+                pegbInfo +
+                '</div>';
+            } else {
+              hoverHTML = '<div class="jum-tooltip-no-img">' +
+                '<div style="font-weight:700;font-size:11px;margin-bottom:3px;">' + name + '</div>' +
+                '<div style="font-size:10px;color:#00897b;font-weight:600;">Pegawai Wilayah Hutan Binaan</div>' +
+                pegbInfo +
+                '</div>';
+            }
           }
           mk.bindTooltip(hoverHTML, { className: 'marker-tooltip', direction: 'top', offset: [0, -8], opacity: 0.95 });
         }
@@ -2434,6 +2663,7 @@ function doRender() {
   addMarkers(DATA.persemaian, 'per', ICONS.per);
   addMarkers(DATA.pegawai, 'peg', ICONS.peg);
   addMarkers(DATA.jumat, 'jum', null);
+  addMarkers(DATA.pegawaiBinaan, 'pegb', ICONS.pegb);
 
   if (HEATMAP_ENABLED && typeof L.heatLayer !== 'undefined') {
     HEATMAP_LAYER = L.heatLayer(heatData, { radius: 25, blur: 15, maxZoom: 14 }).addTo(mapObj);
@@ -2462,6 +2692,19 @@ function doRender() {
     document.getElementById('cnt-per').textContent = cnt.per;
     document.getElementById('cnt-peg').textContent = cnt.peg;
     document.getElementById('cnt-jum').textContent = cnt.jum;
+    
+    var cntPegb = 0;
+    var luasPegb = 0;
+    DATA.pegawaiBinaan.forEach(function(r) {
+      normalizeBinaanRow(r);
+      if (r && passFilter(r, 'pegawaiBinaan')) {
+        cntPegb++;
+        var luas = getBinaanLuas(r);
+        luasPegb += luas;
+      }
+    });
+    var elPegb = document.getElementById('cnt-pegb'); if (elPegb) elPegb.textContent = cntPegb;
+    var elPegbLuas = document.getElementById('cnt-pegb-luas'); if (elPegbLuas) elPegbLuas.textContent = formatLuasHa(luasPegb);
   } catch(e) {}
   updateCharts(cnt);
   if (typeof renderSpatialPolygons === 'function') renderSpatialPolygons(true);
@@ -2475,9 +2718,10 @@ function mkChart(id, cfg) { killChart(id); var el = document.getElementById(id);
 function updateCharts(cnt) {
   if (typeof Chart === 'undefined') return;
   cnt = cnt || { pjl: 0, per: 0, peg: 0, jum: 0 };
+  var cntPegb = document.getElementById('cnt-pegb') ? parseInt(document.getElementById('cnt-pegb').textContent) || 0 : 0;
   Chart.defaults.color = '#7f8c8d'; Chart.defaults.font.family = 'Inter';
   
-  mkChart('c-layer', { type: 'bar', data: { labels: ['Petugas Jaga Leuweung','Lokasi Persemaian Jaga Leuweung','Pegawai Dinas Kehutanan','Lokasi Permanen Jum\'at Menanam'], datasets: [{ data: [cnt.pjl, cnt.per, cnt.peg, cnt.jum], backgroundColor: ['#43a047','#1e88e5','#fb8c00','#8e24aa'], borderRadius: 4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: {display:false}, ticks: { font: { size: 9 }, maxRotation: 45, minRotation: 45 } }, y: { beginAtZero: true, grid: {color:'rgba(0,0,0,0.05)'}, ticks: { font: { size: 10 } } } } } });
+  mkChart('c-layer', { type: 'bar', data: { labels: ['Petugas Jaga Leuweung','Lokasi Persemaian','Pegawai Dinas Kehutanan','Jum\'at Menanam','Pegawai Wilayah Binaan'], datasets: [{ data: [cnt.pjl, cnt.per, cnt.peg, cnt.jum, cntPegb], backgroundColor: ['#43a047','#1e88e5','#fb8c00','#8e24aa','#00897b'], borderRadius: 4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: {display:false}, ticks: { font: { size: 9 }, maxRotation: 45, minRotation: 45 } }, y: { beginAtZero: true, grid: {color:'rgba(0,0,0,0.05)'}, ticks: { font: { size: 10 } } } } } });
 
   var sc = {};
   DATA.persemaian.forEach(function(r) { if (!r || !passFilter(r, 'persemaian')) return; var s = String(r['Status Persemaian'] || 'Tidak Diketahui').trim() || 'Tidak Diketahui'; sc[s] = (sc[s] || 0) + 1; });
@@ -2488,6 +2732,35 @@ function updateCharts(cnt) {
   DATA.pjl.forEach(function(r) { if (!r || !passFilter(r, 'pjl')) return; var c = getCDK(r['Unit Kerja']) || 'Lainnya'; cc[c] = (cc[c] || 0) + 1; });
   var ck = Object.keys(cc); if (!ck.length) { ck = ['(kosong)']; cc['(kosong)'] = 0; }
   mkChart('c-cdk', { type: 'bar', data: { labels: ck, datasets: [{ data: ck.map(k=>cc[k]), backgroundColor: '#43a047', borderRadius: 4 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, grid: {color:'rgba(0,0,0,0.05)'}, ticks: { font: { size: 10 } } }, y: { grid: {display:false}, ticks: { font: { size: 9 } } } } } });
+
+  // Charts for Pegawai Binaan
+  var luUnit = {}, luKab = {}, cntKeg = {}, luKeg = {};
+  DATA.pegawaiBinaan.forEach(function(r) {
+    normalizeBinaanRow(r);
+    if (!r || !passFilter(r, 'pegawaiBinaan')) return;
+    var unitBinaan = getBinaanField(r, 'unit');
+    var u = getCDKExtended(unitBinaan) || unitBinaan || 'Lainnya';
+    var k = getBinaanKabupaten(r) || 'Lainnya';
+    var keg = getBinaanField(r, 'kegiatan') || 'Lainnya';
+    var luas = getBinaanLuas(r);
+    
+    luUnit[u] = (luUnit[u] || 0) + luas;
+    luKab[k] = (luKab[k] || 0) + luas;
+    cntKeg[keg] = (cntKeg[keg] || 0) + 1;
+    luKeg[keg] = (luKeg[keg] || 0) + luas;
+  });
+  
+  var lUk = Object.keys(luUnit); if (!lUk.length) { lUk = ['(kosong)']; luUnit['(kosong)'] = 0; }
+  mkChart('c-binaan-unit', { type: 'bar', data: { labels: lUk, datasets: [{ data: lUk.map(k=>luUnit[k]), backgroundColor: '#00897b', borderRadius: 4 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(c) { return c.raw.toLocaleString('id-ID', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' Ha'; } } } }, scales: { x: { beginAtZero: true, grid: {color:'rgba(0,0,0,0.05)'}, ticks: { font: { size: 10 } } }, y: { grid: {display:false}, ticks: { font: { size: 9 } } } } } });
+  
+  var lKk = Object.keys(luKab); if (!lKk.length) { lKk = ['(kosong)']; luKab['(kosong)'] = 0; }
+  mkChart('c-binaan-kab', { type: 'bar', data: { labels: lKk, datasets: [{ data: lKk.map(k=>luKab[k]), backgroundColor: '#26a69a', borderRadius: 4 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(c) { return c.raw.toLocaleString('id-ID', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' Ha'; } } } }, scales: { x: { beginAtZero: true, grid: {color:'rgba(0,0,0,0.05)'}, ticks: { font: { size: 10 } } }, y: { grid: {display:false}, ticks: { font: { size: 9 } } } } } });
+
+  var cKk = Object.keys(cntKeg); if (!cKk.length) { cKk = ['(kosong)']; cntKeg['(kosong)'] = 0; }
+  mkChart('c-binaan-kegiatan', { type: 'doughnut', data: { labels: cKk, datasets: [{ data: cKk.map(k=>cntKeg[k]), backgroundColor: ['#00897b','#4db6ac','#80cbc4','#b2dfdb','#00695c'], borderWidth:2 }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '65%', plugins: { legend: { position: 'right', labels: { font: { size: 10 }, boxWidth: 10, padding: 8 } } } } });
+
+  var lKek = Object.keys(luKeg); if (!lKek.length) { lKek = ['(kosong)']; luKeg['(kosong)'] = 0; }
+  mkChart('c-binaan-luas-kegiatan', { type: 'pie', data: { labels: lKek, datasets: [{ data: lKek.map(k=>luKeg[k]), backgroundColor: ['#1b5e20','#388e3c','#4caf50','#81c784','#c8e6c9'], borderWidth:2 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { font: { size: 10 }, boxWidth: 10, padding: 8 } }, tooltip: { callbacks: { label: function(c) { return c.label + ': ' + c.raw.toLocaleString('id-ID', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' Ha'; } } } } } });
 }
 
 /* Data Table Modal rendering */
@@ -2502,6 +2775,7 @@ function renderTable() {
   if(type === 'all' || type === 'persemaian') allData = allData.concat(DATA.persemaian.map(r=>({t:'per',r:r})));
   if(type === 'all' || type === 'pegawai') allData = allData.concat(DATA.pegawai.map(r=>({t:'peg',r:r})));
   if(type === 'all' || type === 'jumat') allData = allData.concat(DATA.jumat.map(r=>({t:'jum',r:r})));
+  if(type === 'all' || type === 'pegawaiBinaan') allData = allData.concat(DATA.pegawaiBinaan.map(r=>({t:'pegb',r:r})));
 
   var count = 0;
   var html = '';
@@ -2574,6 +2848,7 @@ function exportCSV(type) {
   if (type === 'pjl') { dataToExport = DATA.pjl; filename = 'Petugas_Jaga_Leuweung.csv'; lbl = 'Petugas Jaga Leuweung'; }
   else if (type === 'per') { dataToExport = DATA.persemaian; filename = 'Lokasi_Persemaian_Jaga_Leuweung.csv'; lbl = 'Lokasi Persemaian Jaga Leuweung'; }
   else if (type === 'peg') { dataToExport = DATA.pegawai; filename = 'Pegawai_Dinas_Kehutanan.csv'; lbl = 'Pegawai Dinas Kehutanan'; }
+  else if (type === 'pegb') { dataToExport = DATA.pegawaiBinaan; filename = 'Pegawai_Wilayah_Hutan_Binaan.csv'; lbl = 'Pegawai Wilayah Hutan Binaan'; }
   else if (type === 'jum') { dataToExport = DATA.jumat; filename = 'Lokasi_Unggulan_Jumat_Menanam.csv'; lbl = 'Lokasi Permanen Jum\'at Menanam'; }
   else return;
 
@@ -2599,6 +2874,7 @@ function exportAllFiltered() {
     { k: 'pjl', label: 'Petugas Jaga Leuweung', data: DATA.pjl, filterType: 'pjl' },
     { k: 'per', label: 'Persemaian Jaga Leuweung', data: DATA.persemaian, filterType: 'persemaian' },
     { k: 'peg', label: 'Pegawai Dinas Kehutanan', data: DATA.pegawai, filterType: 'pegawai' },
+    { k: 'pegb', label: 'Pegawai Wilayah Hutan Binaan', data: DATA.pegawaiBinaan, filterType: 'pegawaiBinaan' },
     { k: 'jum', label: 'Lokasi Permanen Jumat Menanam', data: DATA.jumat, filterType: 'jumat' }
   ];
   
@@ -2647,6 +2923,7 @@ var PER_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS5Zmpk0bJdGg7tyv
 ['1149553688','1364517698','144675684','1843729244','1981250821','1159710704','1142124495','420074128','1536834083'].forEach(function(g) { loadCSV(PER_URL.replace('{G}', g), 'persemaian'); });
 
 loadCSV('https://docs.google.com/spreadsheets/d/e/2PACX-1vSEHhDs2n0UKFjZlPcM4TrWQD9alaw1esFLVxjnKAD9isJ5vbKEQwhXFGYtyp8D2g/pub?gid=738073883&single=true&output=csv', 'pegawai');
+loadCSV('https://docs.google.com/spreadsheets/d/1xrl3W7DZs8SsYZIWiLgHYvi_89V7NismK-G9YDu9NdM/export?format=csv', 'pegawaiBinaan');
 loadCSV('https://docs.google.com/spreadsheets/d/e/2PACX-1vSPtxo38ft9es4Mt0xn1oqPJQCVmYZcmyYN1GKTUBYz8b4wRX34jbQa5odSjVLwvB-yxuUnDGAV9Pou/pub?gid=2039375183&single=true&output=csv', 'jumat');
 
 /* ── LEAFLET DRAW & POLYGON ANALYSIS ── */
@@ -2776,6 +3053,7 @@ var LB_STATE = { photos: [], dates: [], idx: 0, year: '2026', locName: '', conte
 function getPhotoContextPrefix(context) {
   if (context === 'pjl') return 'pjl';
   if (context === 'pegawai') return 'peg';
+  if (context === 'pegawaiBinaan') return 'pegb';
   if (context === 'polygon') return 'poly';
   return 'jum';
 }
@@ -2878,6 +3156,9 @@ function getGalleryDomIds(context) {
   if (context === 'pegawai') {
     return { section: 'peg-photo-section', timeline: 'peg-year-timeline', carousel: 'peg-carousel-wrap' };
   }
+  if (context === 'pegawaiBinaan') {
+    return { section: 'pegb-photo-section', timeline: 'pegb-year-timeline', carousel: 'pegb-carousel-wrap' };
+  }
   if (context === 'polygon') {
     return { section: 'poly-photo-section', timeline: 'poly-year-timeline', carousel: 'poly-carousel-wrap' };
   }
@@ -2891,6 +3172,7 @@ function buildPhotoSection(r, context) {
   var accent = '#8e24aa';
   if (context === 'pjl') { title = 'Dokumentasi Tanam & Pelihara Pohon (PJL)'; accent = '#2e7d32'; }
   else if (context === 'pegawai') { title = 'Dokumentasi Foto Pegawai'; accent = '#fb8c00'; }
+  else if (context === 'pegawaiBinaan') { title = 'Dokumentasi Foto Pegawai Binaan'; accent = '#00897b'; }
   else if (context === 'polygon') { title = 'Dokumentasi Kegiatan (Tanam & Pelihara)'; accent = '#388e3c'; }
 
   var html = '<div class="jum-photo-section" id="' + ids.section + '">';
@@ -3443,6 +3725,7 @@ function deleteCurrentCarouselPhoto() {
   var catStr = 'juna';
   if (context === 'pjl') catStr = 'pjl';
   else if (context === 'pegawai') catStr = 'pegawai';
+  else if (context === 'pegawaiBinaan') catStr = 'pegawaibinaanformatsistem';
   else if (context === 'polygon') catStr = 'polygon';
   var payload = {
     action: "delete",
@@ -3489,6 +3772,8 @@ function openUploadModal(r) {
       locInfo.innerHTML = '&#128205; ' + getName(r) + ' &bull; ' + (r['Unit Kerja'] || '');
     } else if (context === 'pegawai') {
       locInfo.innerHTML = '&#128205; ' + getName(r) + ' &bull; ' + (r['Unit Kerja'] || r['UNIT KERJA'] || '');
+    } else if (context === 'pegawaiBinaan') {
+      locInfo.innerHTML = '&#128205; ' + getName(r) + ' &bull; ' + (r['Unit Kerja'] || r['UNIT KERJA'] || '') + ' - ' + (r['Kegiatan'] || '');
     } else if (context === 'polygon') {
       locInfo.innerHTML = '&#128205; ' + (r['Nama'] || 'Area Kegiatan') + ' &bull; ' + (r['Kegiatan'] || '');
     } else {
@@ -3500,6 +3785,7 @@ function openUploadModal(r) {
   if (modalTitle) {
     if (context === 'pjl') modalTitle.textContent = 'Upload Dokumentasi Tanam & Pelihara (PJL)';
     else if (context === 'pegawai') modalTitle.textContent = 'Upload Foto Pegawai Dinas Kehutanan';
+    else if (context === 'pegawaiBinaan') modalTitle.textContent = 'Upload Foto Pegawai Wilayah Binaan';
     else if (context === 'polygon') modalTitle.textContent = 'Upload Dokumentasi Kegiatan';
     else modalTitle.textContent = 'Upload Foto Dokumentasi';
   }
@@ -3616,6 +3902,7 @@ function saveLocalPhoto() {
           var catUpload = 'juna';
           if (context === 'pjl') catUpload = 'pjl';
           else if (context === 'pegawai') catUpload = 'pegawai';
+          else if (context === 'pegawaiBinaan') catUpload = 'pegawaibinaanformatsistem';
           else if (context === 'polygon') catUpload = 'polygon';
           var payload = {
             action: "upload",
