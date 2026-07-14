@@ -2210,6 +2210,15 @@ function getCDKExtended(unitKerja) {
   return getCDK(u);
 }
 
+function formatCDKChartLabel(label) {
+  var s = String(label || '').trim();
+  var m = s.match(/^CDK\s*(?:WILAYAH\s*)?([IVX]+|\d+)$/i);
+  if (!m) return s;
+  var n = m[1].toUpperCase();
+  var romanMap = { I: 1, II: 2, III: 3, IV: 4, V: 5, VI: 6, VII: 7, VIII: 8, IX: 9, X: 10 };
+  return 'CDK Wilayah ' + (romanMap[n] || n);
+}
+
 function normalizeFilterType(type) {
   if (type === 'per') return 'persemaian';
   if (type === 'peg') return 'pegawai';
@@ -2731,7 +2740,7 @@ function updateCharts(cnt) {
   var cc = {};
   DATA.pjl.forEach(function(r) { if (!r || !passFilter(r, 'pjl')) return; var c = getCDK(r['Unit Kerja']) || 'Lainnya'; cc[c] = (cc[c] || 0) + 1; });
   var ck = Object.keys(cc); if (!ck.length) { ck = ['(kosong)']; cc['(kosong)'] = 0; }
-  mkChart('c-cdk', { type: 'bar', data: { labels: ck, datasets: [{ data: ck.map(k=>cc[k]), backgroundColor: '#43a047', borderRadius: 4 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, grid: {color:'rgba(0,0,0,0.05)'}, ticks: { font: { size: 10 } } }, y: { grid: {display:false}, ticks: { font: { size: 9 } } } } } });
+  mkChart('c-cdk', { type: 'bar', data: { labels: ck.map(formatCDKChartLabel), datasets: [{ data: ck.map(k=>cc[k]), backgroundColor: '#43a047', borderRadius: 4 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, grid: {color:'rgba(0,0,0,0.05)'}, ticks: { font: { size: 10 } } }, y: { grid: {display:false}, ticks: { font: { size: 9 } } } } } });
 
   // Charts for Pegawai Binaan
   var luUnit = {}, luKab = {}, cntKeg = {}, luKeg = {};
@@ -2751,10 +2760,10 @@ function updateCharts(cnt) {
   });
   
   var lUk = Object.keys(luUnit); if (!lUk.length) { lUk = ['(kosong)']; luUnit['(kosong)'] = 0; }
-  mkChart('c-binaan-unit', { type: 'bar', data: { labels: lUk, datasets: [{ data: lUk.map(k=>luUnit[k]), backgroundColor: '#00897b', borderRadius: 4 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(c) { return c.raw.toLocaleString('id-ID', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' Ha'; } } } }, scales: { x: { beginAtZero: true, grid: {color:'rgba(0,0,0,0.05)'}, ticks: { font: { size: 10 } } }, y: { grid: {display:false}, ticks: { font: { size: 9 } } } } } });
+  mkChart('c-binaan-unit', { type: 'bar', data: { labels: lUk.map(formatCDKChartLabel), datasets: [{ data: lUk.map(k=>luUnit[k]), backgroundColor: '#00897b', borderRadius: 4 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(c) { return c.raw.toLocaleString('id-ID', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' Ha'; } } } }, scales: { x: { beginAtZero: true, grid: {color:'rgba(0,0,0,0.05)'}, ticks: { font: { size: 10 } } }, y: { grid: {display:false}, ticks: { font: { size: 9 } } } } } });
   
   var lKk = Object.keys(luKab); if (!lKk.length) { lKk = ['(kosong)']; luKab['(kosong)'] = 0; }
-  mkChart('c-binaan-kab', { type: 'bar', data: { labels: lKk, datasets: [{ data: lKk.map(k=>luKab[k]), backgroundColor: '#26a69a', borderRadius: 4 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(c) { return c.raw.toLocaleString('id-ID', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' Ha'; } } } }, scales: { x: { beginAtZero: true, grid: {color:'rgba(0,0,0,0.05)'}, ticks: { font: { size: 10 } } }, y: { grid: {display:false}, ticks: { font: { size: 9 } } } } } });
+  mkChart('c-binaan-kab', { type: 'bar', data: { labels: lKk.map(formatCDKChartLabel), datasets: [{ data: lKk.map(k=>luKab[k]), backgroundColor: '#26a69a', borderRadius: 4 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(c) { return c.raw.toLocaleString('id-ID', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' Ha'; } } } }, scales: { x: { beginAtZero: true, grid: {color:'rgba(0,0,0,0.05)'}, ticks: { font: { size: 10 } } }, y: { grid: {display:false}, ticks: { font: { size: 9 } } } } } });
 
   var cKk = Object.keys(cntKeg); if (!cKk.length) { cKk = ['(kosong)']; cntKeg['(kosong)'] = 0; }
   mkChart('c-binaan-kegiatan', { type: 'doughnut', data: { labels: cKk, datasets: [{ data: cKk.map(k=>cntKeg[k]), backgroundColor: ['#00897b','#4db6ac','#80cbc4','#b2dfdb','#00695c'], borderWidth:2 }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '65%', plugins: { legend: { position: 'right', labels: { font: { size: 10 }, boxWidth: 10, padding: 8 } } } } });
