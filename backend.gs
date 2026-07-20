@@ -16,6 +16,8 @@ var POLYGON_SHEET_NAME = "datapolygon_tanam_pelihara";
 var POLYGON_PHOTO_FOLDER_ID = "1IqopqD0cu0mE7egxFCHAedBBNXVd-wvI";
 var POLYGON_GEOJSON_FOLDER_ID = "1aN0yj7EefSsDzGgHH5w2KW7itsx8lWnj";
 
+var PERSEMAIAN_SPREADSHEET_ID = "1Q4kzpbXWkpDRfzvUeVa2RYnwSba0BMOcv3jAUDh_9lE";
+
 var UPLOAD_FOLDER_NAME = "GeoHutan_Uploads";
 var SPATIAL_FOLDER_ID = "1YJGN6B0mGblMuSWLOTjgWQv9CQe9rfYr";
 var SPATIAL_SHEET_NAME = "Data_Spasial";
@@ -24,6 +26,7 @@ var ACCESS_SHEET_NAME = "Users_Akses";
 var AUTH_CACHE_PREFIX = "geohutan_auth_";
 var AUTH_ATTEMPT_PREFIX = "geohutan_attempt_";
 var AUTH_TOKEN_TTL_SECONDS = 21600;
+var AUTO_SEED_DEFAULT_ACCESS_USERS_ = false;
 
 var ACCESS_HEADERS_ = [
   "Username",
@@ -83,6 +86,7 @@ var DEFAULT_ACCESS_USERS_ = [
 
 /** Folder Google Drive PJL per tahun linimasa */
 var PJL_DRIVE_FOLDERS = {
+  "2025": "1ijQeqL5cjI0U2mfgnBZFcrdx-hoZ-ZNf",
   "2026": "13hX-UoxyNB5BZWTNKQ9IbmMru0-7CZ2s",
   "2027": "1B3aSMrmrEODaPNF6k4e5Rkz1WaIMGCa1",
   "2028": "1qOgMrvOjEDypalpfFqigI5SQ7tjNULTB",
@@ -92,6 +96,7 @@ var PJL_DRIVE_FOLDERS = {
 
 /** Folder Google Drive Pegawai per tahun linimasa */
 var PEG_DRIVE_FOLDERS = {
+  "2025": "1JT1CQVg8TvFV7VZbqP-mncJ-FZ7A0yBA",
   "2026": "1tb6X5GNhuZ1JmQRwxuJ9cxDhLVAP2tLm",
   "2027": "1-D2Nw8fMyFebCYfApSDibk4cAlGvrOCb",
   "2028": "1-MGOwGFAFtHz9lLfQ0vrwCSkAvhSJHgf",
@@ -101,11 +106,32 @@ var PEG_DRIVE_FOLDERS = {
 
 /** Folder Google Drive Pegawai Wilayah Hutan Binaan per tahun (sama dengan PEG) */
 var PEG_BINAAN_DRIVE_FOLDERS = {
+  "2025": "1JT1CQVg8TvFV7VZbqP-mncJ-FZ7A0yBA",
   "2026": "1tb6X5GNhuZ1JmQRwxuJ9cxDhLVAP2tLm",
   "2027": "1-D2Nw8fMyFebCYfApSDibk4cAlGvrOCb",
   "2028": "1-MGOwGFAFtHz9lLfQ0vrwCSkAvhSJHgf",
   "2029": "11SutxAecGOm3EhV69sJaAnzWQ6VkMLWj",
   "2030": "1gkI4LM7mGk39wcSEqBUAd5JUR2n7ASlU",
+};
+
+/** Folder Google Drive Persemaian per tahun linimasa */
+var PER_DRIVE_FOLDERS = {
+  "2025": "1XsIuOvcYW8Cea11SWtEhOu-XHEbCd3Tw",
+  "2026": "1HAumKRbvYWPxtWrqP6sTjIFlDJKNLcUO",
+  "2027": "11SlYV5g--9IR_KH5mQUSJLhzxTAw2glf",
+  "2028": "12zrMKPOZNFeNNfdjV2x-VRcVBbap6w_B",
+  "2029": "1q0JByloD7-pnfgkRx5843LHx3nofiSfd",
+  "2030": "18DfAI68e71r4Dof4ZB_2KxXu4cwkyLNe",
+};
+
+/** Folder Google Drive Juna Permanen per tahun linimasa */
+var JUNA_DRIVE_FOLDERS = {
+  "2025": "1tGtp8AJmrtV3WHP3ejjm8xFUYlpodyqz",
+  "2026": "",
+  "2027": "",
+  "2028": "",
+  "2029": "",
+  "2030": "",
 };
 
 // ─── Header kolom untuk spreadsheet polygon ───
@@ -128,6 +154,8 @@ var POLYGON_HEADERS_ = [
   "GeoJSON_URL",
   "GeoJSON_FileID",
   "Tanggal_Input",
+  "Foto_2025",
+  "Tanggal_2025",
   "Foto_2026",
   "Tanggal_2026",
   "Foto_2027",
@@ -216,20 +244,22 @@ function getOrCreateAccessSheet_() {
   }
 
   var now = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "dd/MM/yyyy HH:mm");
-  DEFAULT_ACCESS_USERS_.forEach(function (u) {
-    if (!existing[String(u.username).toLowerCase()]) {
-      sheet.appendRow([
-        u.username,
-        sha256Hex_(u.password),
-        u.nama,
-        u.jabatan,
-        u.role,
-        true,
-        "",
-        now,
-      ]);
-    }
-  });
+  if (AUTO_SEED_DEFAULT_ACCESS_USERS_) {
+    DEFAULT_ACCESS_USERS_.forEach(function (u) {
+      if (!existing[String(u.username).toLowerCase()]) {
+        sheet.appendRow([
+          u.username,
+          sha256Hex_(u.password),
+          u.nama,
+          u.jabatan,
+          u.role,
+          true,
+          "",
+          now,
+        ]);
+      }
+    });
+  }
   return sheet;
 }
 
@@ -285,6 +315,70 @@ function requireAuth_(payload) {
   return username;
 }
 
+function getRoleGroup_(role) {
+  var r = String(role || "").toLowerCase().trim().replace(/\s+/g, " ");
+  r = r.replace(/\bcdk\s*([1-9])\b/g, "cdk $1");
+  var g1 = ["admin", "kadis", "sekdis", "kabid pdas"];
+  var g2 = ["kabid ppkh", "kabid bupm", "kabid pksdae"];
+  var g3 = [
+    "kepala tahura", "kepala spth", "kepala pphh",
+    "kepala cdk 1", "kepala cdk 2", "kepala cdk 3", "kepala cdk 4", "kepala cdk 5",
+    "kepala cdk 6", "kepala cdk 7", "kepala cdk 8", "kepala cdk 9",
+    "pegwai madya", "pegawai madya"
+  ];
+  if (g1.indexOf(r) !== -1) return 1;
+  if (g2.indexOf(r) !== -1) return 2;
+  if (g3.indexOf(r) !== -1) return 3;
+  return 4;
+}
+
+function getAuthContext_(payload) {
+  var username = requireAuth_(payload);
+  var user = findAccessUser_(username);
+  if (!user || !isActiveUserRow_(user.row)) throw new Error("Akun tidak aktif.");
+  return {
+    username: String(user.row[0] || ""),
+    nip: String(user.row[0] || ""),
+    role: String(user.row[4] || "user"),
+    group: getRoleGroup_(user.row[4])
+  };
+}
+
+function canUploadCategory_(auth, category) {
+  category = String(category || "juna");
+  if (!auth) return false;
+  if (auth.group === 1) return true;
+  if (auth.group === 2) return false;
+  if (auth.group === 3) {
+    return category === "juna" || category === "pegawai" || category === "pegawaibinaanformatsistem";
+  }
+  return category === "pegawai" || category === "pegawaibinaanformatsistem";
+}
+
+function requireAdminMutation_(auth) {
+  if (!auth || auth.group !== 1) throw new Error("Akun ini tidak memiliki izin mengubah data spasial/polygon.");
+}
+
+function findNipColumnIndex_(headers) {
+  for (var i = 0; i < headers.length; i++) {
+    var h = String(headers[i] || "").trim().toLowerCase();
+    if (h === "nip") return i;
+  }
+  return -1;
+}
+
+function assertOwnRowIfRequired_(headers, rowValues, options) {
+  options = options || {};
+  if (!options.requireOwnNip) return;
+  var nipIdx = findNipColumnIndex_(headers);
+  if (nipIdx === -1) throw new Error("Kolom NIP tidak ditemukan untuk validasi hak akses.");
+  var rowNip = String(rowValues[nipIdx] || "").trim();
+  var authNip = String(options.authNip || "").trim();
+  if (!authNip || rowNip !== authNip) {
+    throw new Error("Akun ini hanya dapat mengubah data miliknya sendiri.");
+  }
+}
+
 function loginAccessUser_(data) {
   var username = String(data.username || "").trim();
   var password = String(data.password || "");
@@ -314,6 +408,7 @@ function loginAccessUser_(data) {
     expiresIn: AUTH_TOKEN_TTL_SECONDS,
     user: {
       username: String(user.row[0]),
+      nip: String(user.row[0]),
       nama: String(user.row[2] || ""),
       jabatan: String(user.row[3] || ""),
       role: String(user.row[4] || "user"),
@@ -401,6 +496,7 @@ function getSpreadsheetIdForCategory_(category) {
   if (category === "pegawai") return PEGAWAI_SPREADSHEET_ID;
   if (category === "pegawaibinaanformatsistem") return PEGAWAI_BINAAN_SPREADSHEET_ID;
   if (category === "polygon") return POLYGON_SPREADSHEET_ID;
+  if (category === "per" || category === "persemaian") return PERSEMAIAN_SPREADSHEET_ID;
   return SPREADSHEET_ID;
 }
 
@@ -489,7 +585,7 @@ function findSheetByCoordinates_(ss, reqLat, reqLng, category, options) {
     var sheet = sheets[i];
     if (!preferredSheet && !sheetHasPhotoColumns_(sheet)) continue;
     var sheetName = String(sheet.getName());
-    var isPjlTab = /^CDK\d+_FORMATSISTEM$/i.test(sheetName);
+    var isPjlTab = /^CDK\d+_?FORMATSISTEM$/i.test(sheetName);
     if (category === "pjl" && !isPjlTab) continue;
     if (category === "juna" && isPjlTab) continue;
 
@@ -538,6 +634,18 @@ function getUploadFolder_(category, year) {
   if (category === "polygon") {
     return DriveApp.getFolderById(POLYGON_PHOTO_FOLDER_ID);
   }
+  if (category === "per" || category === "persemaian") {
+    var perFolderId = PER_DRIVE_FOLDERS[String(year)];
+    if (!perFolderId) {
+      throw new Error("Folder Drive Persemaian untuk tahun " + year + " belum dikonfigurasi.");
+    }
+    return DriveApp.getFolderById(perFolderId);
+  }
+  // Default: Juna Permanen - use JUNA_DRIVE_FOLDERS if configured
+  var junaFolderId = JUNA_DRIVE_FOLDERS[String(year)];
+  if (junaFolderId) {
+    return DriveApp.getFolderById(junaFolderId);
+  }
   return getOrCreateFolder_("Juna Permanen Tahun " + year);
 }
 
@@ -561,7 +669,41 @@ function updateRowData_(sheet, reqLat, reqLng, year, newUrl, newDate, options) {
     );
   }
 
+  var monMap = {};
+  if (options.monitoring) {
+    monMap["Tutupan_" + year] = options.monitoring.tutupan || "";
+    monMap["Jenis_" + year] = options.monitoring.jenis || "";
+    monMap["Kerapatan_" + year] = options.monitoring.kerapatan || "";
+    monMap["Lereng_" + year] = options.monitoring.lereng || "";
+    monMap["Umur_" + year] = options.monitoring.umur || "";
+    monMap["Pengelolaan_" + year] = options.monitoring.pengelolaan || "";
+    monMap["Ekosistem_" + year] = options.monitoring.ekosistem || "";
+    monMap["Usulan_" + year] = options.monitoring.usulan || "";
+  }
+  
+  var monitoringColIdx = {};
+  
+  if (options.monitoring) {
+    for (var field in monMap) {
+      var idx = -1;
+      for (var h = 0; h < headers.length; h++) {
+        if (String(headers[h]).trim() === field) {
+          idx = h; break;
+        }
+      }
+      if (idx === -1) {
+        var nextCol = sheet.getLastColumn() + 1;
+        sheet.getRange(1, nextCol).setValue(field);
+        idx = nextCol - 1;
+        headers[idx] = field;
+      }
+      monitoringColIdx[field] = idx;
+    }
+  }
+
   function appendToRow_(rowNumber, rowValues) {
+    assertOwnRowIfRequired_(headers, rowValues, options);
+
     var currentFotos = rowValues[fotoColIdx]
       ? String(rowValues[fotoColIdx]).trim()
       : "";
@@ -574,6 +716,16 @@ function updateRowData_(sheet, reqLat, reqLng, year, newUrl, newDate, options) {
 
     sheet.getRange(rowNumber, fotoColIdx + 1).setValue(nextFotos);
     sheet.getRange(rowNumber, tglColIdx + 1).setValue(nextTgls);
+    
+    if (options.monitoring) {
+      for (var field in monitoringColIdx) {
+        var curVal = rowValues[monitoringColIdx[field]] ? String(rowValues[monitoringColIdx[field]]).trim() : "";
+        var appendVal = monMap[field] || "-";
+        var nextVal = curVal ? curVal + "|" + appendVal : appendVal;
+        sheet.getRange(rowNumber, monitoringColIdx[field] + 1).setValue(nextVal);
+      }
+    }
+    
     return true;
   }
 
@@ -656,6 +808,7 @@ function deleteRowData_(sheet, reqLat, reqLng, year, targetUrl, options) {
       Math.abs(sheetLat - reqLat) < 0.0025 &&
       Math.abs(sheetLng - reqLng) < 0.0025
     ) {
+      assertOwnRowIfRequired_(headers, data[i], options);
       var currentFotos = data[i][fotoColIdx]
         ? String(data[i][fotoColIdx]).trim()
         : "";
@@ -704,6 +857,24 @@ function deleteRowData_(sheet, reqLat, reqLng, year, targetUrl, options) {
         }
         sheet.getRange(i + 1, fotoColIdx + 1).setValue(fotosArr.join("|"));
         sheet.getRange(i + 1, tglColIdx + 1).setValue(tglsArr.join("|"));
+
+        var monMapKeys = ["Tutupan_", "Jenis_", "Kerapatan_", "Lereng_", "Umur_", "Pengelolaan_", "Ekosistem_", "Usulan_"];
+        for (var m = 0; m < monMapKeys.length; m++) {
+           var mIdx = -1;
+           for(var mh = 0; mh < headers.length; mh++) {
+             if (String(headers[mh]).trim() === monMapKeys[m] + year) { mIdx = mh; break; }
+           }
+           if (mIdx !== -1) {
+             var mStr = String(data[i][mIdx] || "").trim();
+             if (mStr) {
+               var mArr = mStr.split("|").map(function(s){return s.trim();});
+               if (delIdx < mArr.length) {
+                  mArr.splice(delIdx, 1);
+                  sheet.getRange(i + 1, mIdx + 1).setValue(mArr.join("|"));
+               }
+             }
+           }
+        }
         return true;
       } else {
         throw new Error("URL Foto tidak ditemukan di baris ini.");
@@ -803,7 +974,8 @@ function getOrCreatePolygonSheet_() {
 }
 
 // ─── Helper: Update foto polygon berdasarkan ID row ───
-function updatePolygonPhotoById_(featureId, year, newUrl, newDate) {
+function updatePolygonPhotoById_(featureId, year, newUrl, newDate, options) {
+  options = options || {};
   var sheet = getOrCreatePolygonSheet_();
   var data = sheet.getDataRange().getValues();
   var headers = data[0];
@@ -825,6 +997,37 @@ function updatePolygonPhotoById_(featureId, year, newUrl, newDate) {
     sheet.getRange(1, nextCol).setValue("Tanggal_" + year);
     tglIdx = nextCol - 1;
   }
+  
+  var monMap = {};
+  if (options.monitoring) {
+    monMap["Tutupan_" + year] = options.monitoring.tutupan || "";
+    monMap["Jenis_" + year] = options.monitoring.jenis || "";
+    monMap["Kerapatan_" + year] = options.monitoring.kerapatan || "";
+    monMap["Lereng_" + year] = options.monitoring.lereng || "";
+    monMap["Umur_" + year] = options.monitoring.umur || "";
+    monMap["Pengelolaan_" + year] = options.monitoring.pengelolaan || "";
+    monMap["Ekosistem_" + year] = options.monitoring.ekosistem || "";
+    monMap["Usulan_" + year] = options.monitoring.usulan || "";
+  }
+  
+  var monitoringColIdx = {};
+  if (options.monitoring) {
+    for (var field in monMap) {
+      var idx = -1;
+      for (var mh = 0; mh < headers.length; mh++) {
+        if (String(headers[mh]).trim() === field) {
+          idx = mh; break;
+        }
+      }
+      if (idx === -1) {
+        var nCol = sheet.getLastColumn() + 1;
+        sheet.getRange(1, nCol).setValue(field);
+        idx = nCol - 1;
+        headers[idx] = field;
+      }
+      monitoringColIdx[field] = idx;
+    }
+  }
 
   for (var i = 1; i < data.length; i++) {
     if (String(data[i][idIdx]).trim() === String(featureId).trim()) {
@@ -834,6 +1037,15 @@ function updatePolygonPhotoById_(featureId, year, newUrl, newDate) {
       var newTgls = curTgls ? curTgls + "|" + newDate : newDate;
       sheet.getRange(i + 1, fotoIdx + 1).setValue(newFotos);
       sheet.getRange(i + 1, tglIdx + 1).setValue(newTgls);
+      
+      if (options.monitoring) {
+        for (var field in monitoringColIdx) {
+          var curVal = String(data[i][monitoringColIdx[field]] || "").trim();
+          var appendVal = monMap[field] || "-";
+          var nextVal = curVal ? curVal + "|" + appendVal : appendVal;
+          sheet.getRange(i + 1, monitoringColIdx[field] + 1).setValue(nextVal);
+        }
+      }
       return true;
     }
   }
@@ -876,6 +1088,24 @@ function deletePolygonPhotoById_(featureId, year, targetUrl) {
         if (delIdx < tglsArr.length) tglsArr.splice(delIdx, 1);
         sheet.getRange(i + 1, fotoIdx + 1).setValue(fotosArr.join("|"));
         sheet.getRange(i + 1, tglIdx + 1).setValue(tglsArr.join("|"));
+
+        var monMapKeys = ["Tutupan_", "Jenis_", "Kerapatan_", "Lereng_", "Umur_", "Pengelolaan_", "Ekosistem_", "Usulan_"];
+        for (var m = 0; m < monMapKeys.length; m++) {
+           var mIdx = -1;
+           for(var mh = 0; mh < headers.length; mh++) {
+             if (String(headers[mh]).trim() === monMapKeys[m] + year) { mIdx = mh; break; }
+           }
+           if (mIdx !== -1) {
+             var mStr = String(data[i][mIdx] || "").trim();
+             if (mStr) {
+               var mArr = mStr.split("|").map(function(s){return s.trim();});
+               if (delIdx < mArr.length) {
+                  mArr.splice(delIdx, 1);
+                  sheet.getRange(i + 1, mIdx + 1).setValue(mArr.join("|"));
+               }
+             }
+           }
+        }
         return true;
       }
       throw new Error("URL Foto tidak ditemukan.");
@@ -913,6 +1143,7 @@ function doPost(e) {
         success: true,
         user: {
           username: String(sessionUser.row[0]),
+          nip: String(sessionUser.row[0]),
           nama: String(sessionUser.row[2] || ""),
           jabatan: String(sessionUser.row[3] || ""),
           role: String(sessionUser.row[4] || "user"),
@@ -920,7 +1151,7 @@ function doPost(e) {
       });
     }
 
-    requireAuth_(data);
+    var auth = getAuthContext_(data);
 
     // ─── ACTION: upload foto ───
     if (data.action === "upload") {
@@ -935,11 +1166,16 @@ function doPost(e) {
       var sheetGid = data.sheetGid || "";
       var featureId = data.featureId || "";
 
+      if (!canUploadCategory_(auth, category)) {
+        return jsonOutput_({ success: false, error: "Akun ini tidak memiliki izin upload pada kategori ini." });
+      }
+
       var prefix = "Juna_";
       if (category === "pjl") prefix = "PJL_";
       else if (category === "pegawai") prefix = "Peg_";
       else if (category === "pegawaibinaanformatsistem") prefix = "PegBinaan_";
       else if (category === "polygon") prefix = "Poly_";
+      else if (category === "per" || category === "persemaian") prefix = "Per_";
 
       var filename = prefix + year + "_" + new Date().getTime() + ".jpg";
 
@@ -965,7 +1201,10 @@ function doPost(e) {
         if (category === "polygon") {
           // Update spreadsheet polygon berdasarkan featureId
           if (!featureId) throw new Error("featureId diperlukan untuk upload foto polygon.");
-          updatePolygonPhotoById_(featureId, year, imgUrl, date);
+          requireAdminMutation_(auth);
+          updatePolygonPhotoById_(featureId, year, imgUrl, date, {
+            monitoring: data.monitoring
+          });
         } else {
           var ss = SpreadsheetApp.openById(getSpreadsheetIdForCategory_(category));
           var targetSheet;
@@ -988,6 +1227,9 @@ function doPost(e) {
           }
           updateRowData_(targetSheet, reqLat, reqLng, year, imgUrl, date, {
             rowIndex: rowIndex,
+            authNip: auth.nip,
+            requireOwnNip: auth.group >= 3 && (category === "pegawai" || category === "pegawaibinaanformatsistem"),
+            monitoring: data.monitoring
           });
         }
       } catch (rowErr) {
@@ -1014,11 +1256,16 @@ function doPost(e) {
       var sheetGidDel = data.sheetGid || "";
       var featureIdDel = data.featureId || "";
 
+      if (!canUploadCategory_(auth, categoryDel)) {
+        return jsonOutput_({ success: false, error: "Akun ini tidak memiliki izin menghapus foto pada kategori ini." });
+      }
+
       var deleteLock = LockService.getScriptLock();
       try {
         deleteLock.waitLock(30000);
 
         if (categoryDel === "polygon") {
+          requireAdminMutation_(auth);
           if (!featureIdDel) throw new Error("featureId diperlukan.");
           deletePolygonPhotoById_(featureIdDel, yearDel, urlToDelete);
         } else {
@@ -1049,7 +1296,11 @@ function doPost(e) {
             reqLngDel,
             yearDel,
             urlToDelete,
-            { rowIndex: rowIndexDel },
+            {
+              rowIndex: rowIndexDel,
+              authNip: auth.nip,
+              requireOwnNip: auth.group >= 3 && (categoryDel === "pegawai" || categoryDel === "pegawaibinaanformatsistem")
+            },
           );
         }
       } finally {
@@ -1077,6 +1328,7 @@ function doPost(e) {
 
     // ─── ACTION: simpan data polygon / marker pohon ───
     } else if (data.action === "savePolygonFeature") {
+      requireAdminMutation_(auth);
       var sheet = getOrCreatePolygonSheet_();
       var now = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "dd/MM/yyyy HH:mm");
 
@@ -1136,25 +1388,35 @@ String(data.latitude || ""),
 
     // ─── ACTION: hapus data polygon / marker pohon ───
     } else if (data.action === "deletePolygonFeature") {
+      requireAdminMutation_(auth);
       var sheetPoly = getOrCreatePolygonSheet_();
       var rowsPoly = sheetPoly.getDataRange().getValues();
       var featureIdDel = data.featureId;
       var rowIndexDel = -1;
       var geojsonFileId = "";
       var fileIdsToTrash = [];
+      var headersPolyDel = rowsPoly[0] || [];
+      var idIdxDel = 0;
+      var geojsonIdxDel = 16;
+      var photoIndices = [];
+
+      for (var hp = 0; hp < headersPolyDel.length; hp++) {
+        var hdrDel = String(headersPolyDel[hp]).trim();
+        if (hdrDel === "ID") idIdxDel = hp;
+        if (hdrDel === "GeoJSON_FileID") geojsonIdxDel = hp;
+        if (/^Foto_20\d{2}$/.test(hdrDel)) photoIndices.push(hp);
+      }
+      if (photoIndices.length === 0) photoIndices = [18, 20, 22, 24, 26];
 
       // Cari baris berdasarkan ID
       for (var r = 1; r < rowsPoly.length; r++) {
-        if (rowsPoly[r][0] === featureIdDel) {
+        if (String(rowsPoly[r][idIdxDel]).trim() === String(featureIdDel).trim()) {
           rowIndexDel = r + 1; // 1-based index
-          geojsonFileId = rowsPoly[r][16]; // GeoJSON_FileID ada di kolom 17 (index 16)
-          // Cari foto di kolom Foto_2026 s/d Foto_2030 (index 18, 20, 22, 24, 26)
-          var photoIndices = [18, 20, 22, 24, 26];
+          geojsonFileId = rowsPoly[r][geojsonIdxDel];
           for (var i = 0; i < photoIndices.length; i++) {
              var photoStr = rowsPoly[r][photoIndices[i]];
              if (photoStr) {
-               // fotoStr bisa koma terpisah
-               var urls = photoStr.split(",");
+               var urls = String(photoStr).split(/[|,]/);
                for (var j = 0; j < urls.length; j++) {
                  var match = urls[j].match(/id=([a-zA-Z0-9_-]+)/) || urls[j].match(/\/d\/([a-zA-Z0-9_-]+)/);
                  if (match) fileIdsToTrash.push(match[1]);
@@ -1201,6 +1463,7 @@ String(data.latitude || ""),
 
     // ─── ACTION: delete polygon / marker pohon ───
     } else if (data.action === "deletePolygonFeature") {
+      requireAdminMutation_(auth);
       var delFeatId = String(data.featureId || "");
       if (!delFeatId) return jsonOutput_({ success: false, error: "featureId kosong." });
 
@@ -1234,6 +1497,7 @@ String(data.latitude || ""),
 
     // ─── ACTION: upload polygon spasial ───
     } else if (data.action === "uploadSpatial") {
+      requireAdminMutation_(auth);
       var geoJsonStr = data.geojson;
       var spFileName = String(
         data.filename || "spasial_" + new Date().getTime() + ".geojson",
@@ -1297,6 +1561,7 @@ String(data.latitude || ""),
 
     // ─── ACTION: delete polygon spasial ───
     } else if (data.action === "deleteSpatial") {
+      requireAdminMutation_(auth);
       var delFileId = String(data.fileId || "");
       if (!delFileId) {
         return jsonOutput_({

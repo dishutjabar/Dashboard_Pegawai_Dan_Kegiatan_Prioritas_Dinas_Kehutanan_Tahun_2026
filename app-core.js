@@ -180,6 +180,8 @@ function getCoord(r) {
   return null;
 }
 
+
+
 function getKab(lat, lng) {
   if (!GEO || !GEO.features) return '';
   try {
