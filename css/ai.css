@@ -1,0 +1,810 @@
+/* ═══════════════════════════════════════════════════════════════════
+   GeoHutan AI Assistant – ai.css
+   Styling untuk card AI Assistant di dalam detail-drawer
+   Dark mode mengikuti glassmorphism theme dashboard
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── Wrapper card utama ── */
+.ai-assistant-card {
+  margin-top: 18px;
+  border-radius: 16px;
+  background: linear-gradient(135deg,
+    rgba(20, 30, 22, 0.92) 0%,
+    rgba(10, 26, 12, 0.95) 100%);
+  border: 1px solid rgba(67, 160, 71, 0.35);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(67, 160, 71, 0.1) inset,
+    0 1px 0 rgba(255, 255, 255, 0.06) inset;
+  overflow: hidden;
+  position: relative;
+  animation: ai-card-in 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes ai-card-in {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0)   scale(1); }
+}
+
+/* Glowing accent border top */
+.ai-assistant-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    #43a047 20%,
+    #00e676 50%,
+    #43a047 80%,
+    transparent 100%);
+  animation: ai-shimmer 3s linear infinite;
+}
+
+@keyframes ai-shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+/* ── Header card ── */
+.ai-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid rgba(67, 160, 71, 0.18);
+}
+
+.ai-icon-pulse {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #1b5e20, #43a047);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+  position: relative;
+  box-shadow: 0 0 0 0 rgba(67, 160, 71, 0.6);
+  animation: ai-icon-pulse 2.5s ease-in-out infinite;
+}
+
+@keyframes ai-icon-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(67, 160, 71, 0.4); }
+  50%       { box-shadow: 0 0 0 8px rgba(67, 160, 71, 0); }
+}
+
+.ai-card-title {
+  flex: 1;
+}
+
+.ai-card-title h4 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #e8f5e9;
+  letter-spacing: 0.3px;
+  line-height: 1.2;
+}
+
+.ai-card-title span {
+  font-size: 10px;
+  color: rgba(200, 230, 201, 0.65);
+  letter-spacing: 0.5px;
+}
+
+.ai-badge {
+  background: linear-gradient(135deg, #1b5e20, #2e7d32);
+  color: #a5d6a7;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  padding: 3px 8px;
+  border-radius: 20px;
+  border: 1px solid rgba(165, 214, 167, 0.3);
+  text-transform: uppercase;
+}
+
+/* ── Body card ── */
+.ai-card-body {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* ── Chat history area ── */
+.ai-chat-history {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(67, 160, 71, 0.4) transparent;
+}
+
+.ai-chat-history::-webkit-scrollbar {
+  width: 4px;
+}
+.ai-chat-history::-webkit-scrollbar-track {
+  background: transparent;
+}
+.ai-chat-history::-webkit-scrollbar-thumb {
+  background: rgba(67, 160, 71, 0.4);
+  border-radius: 2px;
+}
+
+/* ── Chat bubble ── */
+.ai-bubble {
+  border-radius: 12px;
+  padding: 10px 13px;
+  font-size: 12px;
+  line-height: 1.6;
+  animation: ai-bubble-in 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes ai-bubble-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.ai-bubble-user {
+  background: rgba(46, 125, 50, 0.25);
+  border: 1px solid rgba(67, 160, 71, 0.3);
+  color: #c8e6c9;
+  align-self: flex-end;
+  max-width: 92%;
+  border-bottom-right-radius: 4px;
+}
+
+.ai-bubble-user .ai-bubble-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(165, 214, 167, 0.7);
+  margin-bottom: 4px;
+  letter-spacing: 0.5px;
+}
+
+.ai-bubble-ai {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #e8f5e9;
+  align-self: flex-start;
+  max-width: 100%;
+  border-bottom-left-radius: 4px;
+}
+
+.ai-bubble-ai .ai-bubble-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(165, 214, 167, 0.8);
+  margin-bottom: 6px;
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* ── AI Response formatted text ── */
+.ai-response-content {
+  font-size: 12px;
+  line-height: 1.7;
+  color: #dcedc8;
+}
+
+.ai-response-content h5 {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #a5d6a7;
+  margin: 10px 0 4px;
+  padding-bottom: 3px;
+  border-bottom: 1px solid rgba(67, 160, 71, 0.2);
+  letter-spacing: 0.3px;
+}
+
+.ai-response-content h5:first-child {
+  margin-top: 0;
+}
+
+.ai-response-content ul,
+.ai-response-content ol {
+  margin: 4px 0 6px;
+  padding-left: 16px;
+}
+
+.ai-response-content li {
+  margin-bottom: 3px;
+  font-size: 11.5px;
+}
+
+.ai-response-content strong {
+  color: #b9f6ca;
+  font-weight: 600;
+}
+
+.ai-response-content em {
+  color: #c8e6c9;
+  font-style: italic;
+}
+
+.ai-response-content p {
+  margin: 4px 0 6px;
+}
+
+/* ── Confidence badge dalam response ── */
+.ai-confidence-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  margin-top: 8px;
+}
+
+.ai-confidence-high {
+  background: rgba(76, 175, 80, 0.2);
+  border: 1px solid rgba(76, 175, 80, 0.4);
+  color: #a5d6a7;
+}
+
+.ai-confidence-medium {
+  background: rgba(255, 193, 7, 0.15);
+  border: 1px solid rgba(255, 193, 7, 0.35);
+  color: #fff9c4;
+}
+
+.ai-confidence-low {
+  background: rgba(244, 67, 54, 0.15);
+  border: 1px solid rgba(244, 67, 54, 0.35);
+  color: #ffcdd2;
+}
+
+/* ── Loading / Thinking animation ── */
+.ai-thinking {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 13px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(67, 160, 71, 0.2);
+  border-radius: 12px;
+  border-bottom-left-radius: 4px;
+  color: rgba(165, 214, 167, 0.8);
+  font-size: 12px;
+  animation: ai-bubble-in 0.3s ease;
+}
+
+.ai-thinking-dots {
+  display: flex;
+  gap: 4px;
+}
+
+.ai-thinking-dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #43a047;
+  animation: ai-dot-bounce 1.4s ease-in-out infinite;
+}
+
+.ai-thinking-dots span:nth-child(1) { animation-delay: 0s; }
+.ai-thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
+.ai-thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes ai-dot-bounce {
+  0%, 60%, 100% { transform: translateY(0);    opacity: 0.4; }
+  30%           { transform: translateY(-5px); opacity: 1; }
+}
+
+/* ── Typing animation untuk teks ── */
+.ai-typing-cursor::after {
+  content: '▋';
+  animation: ai-cursor-blink 0.8s step-end infinite;
+  color: #43a047;
+  font-size: 13px;
+}
+
+@keyframes ai-cursor-blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
+/* ── Input area ── */
+.ai-input-wrapper {
+  position: relative;
+}
+
+.ai-textarea {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(67, 160, 71, 0.25);
+  border-radius: 10px;
+  color: #e8f5e9;
+  font-size: 12px;
+  font-family: 'Inter', sans-serif;
+  padding: 10px 12px;
+  resize: vertical;
+  min-height: 72px;
+  max-height: 140px;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+  box-sizing: border-box;
+  line-height: 1.5;
+}
+
+.ai-textarea::placeholder {
+  color: rgba(165, 214, 167, 0.4);
+  font-size: 11.5px;
+}
+
+.ai-textarea:focus {
+  border-color: rgba(67, 160, 71, 0.6);
+  box-shadow: 0 0 0 3px rgba(67, 160, 71, 0.12);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.ai-textarea:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Action buttons ── */
+.ai-action-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.ai-btn-send {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 16px;
+  background: linear-gradient(135deg, #2e7d32, #43a047);
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+  letter-spacing: 0.3px;
+  box-shadow: 0 2px 8px rgba(46, 125, 50, 0.4);
+}
+
+.ai-btn-send:hover:not(:disabled) {
+  background: linear-gradient(135deg, #388e3c, #4caf50);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(46, 125, 50, 0.5);
+}
+
+.ai-btn-send:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.ai-btn-send:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.ai-btn-clear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 9px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  color: rgba(200, 230, 201, 0.7);
+  font-size: 11px;
+  font-weight: 500;
+  font-family: 'Inter', sans-serif;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.ai-btn-clear:hover {
+  background: rgba(244, 67, 54, 0.15);
+  border-color: rgba(244, 67, 54, 0.35);
+  color: #ffcdd2;
+}
+
+.ai-btn-clear:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ── Error state ── */
+.ai-error-msg {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 13px;
+  background: rgba(244, 67, 54, 0.1);
+  border: 1px solid rgba(244, 67, 54, 0.3);
+  border-radius: 10px;
+  color: #ffcdd2;
+  font-size: 11.5px;
+  animation: ai-bubble-in 0.3s ease;
+}
+
+.ai-error-msg .ai-error-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.ai-error-msg .ai-error-text {
+  flex: 1;
+}
+
+.ai-btn-retry {
+  margin-top: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: rgba(244, 67, 54, 0.2);
+  border: 1px solid rgba(244, 67, 54, 0.4);
+  border-radius: 6px;
+  color: #ffcdd2;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.ai-btn-retry:hover {
+  background: rgba(244, 67, 54, 0.3);
+}
+
+/* ── Hint chips (contoh pertanyaan) ── */
+.ai-hints {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 2px;
+}
+
+.ai-hint-chip {
+  padding: 4px 9px;
+  background: rgba(67, 160, 71, 0.1);
+  border: 1px solid rgba(67, 160, 71, 0.25);
+  border-radius: 20px;
+  color: rgba(165, 214, 167, 0.8);
+  font-size: 10.5px;
+  cursor: pointer;
+  transition: all 0.18s;
+  white-space: nowrap;
+  font-family: 'Inter', sans-serif;
+}
+
+.ai-hint-chip:hover {
+  background: rgba(67, 160, 71, 0.22);
+  border-color: rgba(67, 160, 71, 0.5);
+  color: #c8e6c9;
+  transform: translateY(-1px);
+}
+
+/* ── Info marker context ── */
+.ai-context-info {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 10px;
+  background: rgba(67, 160, 71, 0.08);
+  border-radius: 8px;
+  border-left: 3px solid rgba(67, 160, 71, 0.5);
+  font-size: 10.5px;
+  color: rgba(165, 214, 167, 0.75);
+  line-height: 1.4;
+}
+
+/* ── Divider ── */
+.ai-divider {
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent,
+    rgba(67, 160, 71, 0.2) 30%,
+    rgba(67, 160, 71, 0.2) 70%,
+    transparent);
+  margin: 4px 0;
+}
+
+/* ── Section label dalam response ── */
+.ai-section-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #81c784;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  margin-bottom: 3px;
+}
+
+/* ── Scrollbar untuk drawer body ── */
+#drawer-content {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(67, 160, 71, 0.3) transparent;
+}
+#drawer-content::-webkit-scrollbar { width: 5px; }
+#drawer-content::-webkit-scrollbar-track { background: transparent; }
+#drawer-content::-webkit-scrollbar-thumb {
+  background: rgba(67, 160, 71, 0.35);
+  border-radius: 3px;
+}
+
+/* ══════════════════════════════════════════════════════════
+   TOMBOL EXPAND (PERBESAR) di bubble AI
+══════════════════════════════════════════════════════════ */
+.ai-bubble-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(165, 214, 167, 0.7);
+  margin-bottom: 6px;
+  letter-spacing: 0.3px;
+}
+
+.ai-expand-btn {
+  background: rgba(67, 160, 71, 0.15);
+  border: 1px solid rgba(67, 160, 71, 0.3);
+  color: rgba(165, 214, 167, 0.8);
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+.ai-expand-btn:hover {
+  background: rgba(67, 160, 71, 0.35);
+  color: #a5d6a7;
+  border-color: rgba(67, 160, 71, 0.6);
+  transform: scale(1.05);
+}
+
+/* Bubble AI masuk dengan animasi */
+.ai-bubble-ai {
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+.ai-bubble-ai.ai-bubble-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Badge cache */
+.ai-cache-badge {
+  font-size: 10px;
+  color: rgba(165, 214, 167, 0.4);
+  margin-top: 6px;
+  padding-top: 4px;
+  border-top: 1px solid rgba(67,160,71,0.1);
+}
+
+/* ══════════════════════════════════════════════════════════
+   MODAL EXPAND — JAWABAN LENGKAP LAYAR PENUH
+══════════════════════════════════════════════════════════ */
+.ai-expand-modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+.ai-expand-modal-overlay.ai-modal-visible {
+  opacity: 1;
+}
+
+.ai-expand-modal-box {
+  background: linear-gradient(135deg,
+    rgba(15, 28, 18, 0.98) 0%,
+    rgba(8, 20, 10, 0.99) 100%);
+  border: 1px solid rgba(67, 160, 71, 0.4);
+  border-radius: 20px;
+  width: min(860px, 94vw);
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow:
+    0 24px 80px rgba(0,0,0,0.7),
+    0 0 0 1px rgba(67,160,71,0.15) inset;
+  animation: ai-modal-in 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+  overflow: hidden;
+}
+
+@keyframes ai-modal-in {
+  from { transform: scale(0.92) translateY(20px); opacity: 0; }
+  to   { transform: scale(1)    translateY(0);    opacity: 1; }
+}
+
+/* Garis hijau di atas modal */
+.ai-expand-modal-box::before {
+  content: '';
+  display: block;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, #43a047, #00e676, #43a047, transparent);
+  flex-shrink: 0;
+}
+
+.ai-expand-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 16px 20px 14px;
+  border-bottom: 1px solid rgba(67, 160, 71, 0.2);
+  flex-shrink: 0;
+}
+
+.ai-expand-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #a5d6a7;
+  letter-spacing: 0.3px;
+}
+.ai-expand-subtitle {
+  font-size: 12px;
+  color: rgba(165, 214, 167, 0.55);
+  margin-top: 3px;
+  max-width: 680px;
+  line-height: 1.4;
+}
+
+.ai-expand-close {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  color: rgba(255,255,255,0.7);
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  font-size: 14px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.2s;
+  margin-left: 12px;
+}
+.ai-expand-close:hover {
+  background: rgba(244,67,54,0.2);
+  border-color: rgba(244,67,54,0.4);
+  color: #ef9a9a;
+  transform: scale(1.1);
+}
+
+.ai-expand-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px;
+  color: rgba(245, 245, 245, 0.92);
+  font-size: 14px;
+  line-height: 1.75;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(67,160,71,0.3) transparent;
+}
+.ai-expand-body::-webkit-scrollbar { width: 6px; }
+.ai-expand-body::-webkit-scrollbar-thumb {
+  background: rgba(67,160,71,0.3);
+  border-radius: 3px;
+}
+
+/* Styling konten di dalam modal */
+.ai-expand-body h5 {
+  color: #81c784;
+  font-size: 14px;
+  font-weight: 700;
+  margin: 18px 0 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(67,160,71,0.2);
+  letter-spacing: 0.3px;
+}
+.ai-expand-body h5:first-child { margin-top: 0; }
+.ai-expand-body ul {
+  padding-left: 18px;
+  margin: 6px 0 10px;
+}
+.ai-expand-body li {
+  color: rgba(245,245,245,0.85);
+  margin-bottom: 5px;
+  line-height: 1.65;
+}
+.ai-expand-body strong { color: #a5d6a7; }
+.ai-expand-body p { margin: 0 0 10px; }
+
+.ai-expand-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 20px 14px;
+  border-top: 1px solid rgba(67,160,71,0.15);
+  flex-shrink: 0;
+}
+
+.ai-expand-copy-btn {
+  background: linear-gradient(135deg, #2e7d32, #43a047);
+  color: #fff;
+  border: none;
+  padding: 7px 16px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  letter-spacing: 0.3px;
+}
+.ai-expand-copy-btn:hover {
+  background: linear-gradient(135deg, #43a047, #66bb6a);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(67,160,71,0.4);
+}
+
+/* ══════════════════════════════════════════════════════════
+   TOAST NOTIFICATION
+══════════════════════════════════════════════════════════ */
+.ai-toast {
+  position: fixed;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: rgba(30,50,30,0.96);
+  border: 1px solid rgba(67,160,71,0.5);
+  color: #a5d6a7;
+  padding: 10px 22px;
+  border-radius: 30px;
+  font-size: 13px;
+  font-weight: 600;
+  z-index: 999999;
+  opacity: 0;
+  transition: all 0.3s ease;
+  pointer-events: none;
+  white-space: nowrap;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+}
+.ai-toast.ai-toast-show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* ══════════════════════════════════════════════════════════
+   HINTS WRAP
+══════════════════════════════════════════════════════════ */
+.ai-hints-wrap {
+  margin-bottom: 10px;
+}
+.ai-hints-label {
+  font-size: 10px;
+  color: rgba(165,214,167,0.45);
+  margin-bottom: 5px;
+  letter-spacing: 0.3px;
+}
+.ai-footer-note {
+  font-size: 10px;
+  color: rgba(165,214,167,0.35);
+  text-align: center;
+  margin-top: 4px;
+}
+

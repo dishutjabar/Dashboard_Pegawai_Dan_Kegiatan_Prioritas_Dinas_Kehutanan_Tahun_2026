@@ -161,16 +161,15 @@ function applyCurrentUserRoleDefaults(user) {
   var clusterToggle = document.getElementById('toggle-cluster');
   var pjlPolyToggle = document.getElementById('toggle-pjl-polygon');
 
-  if (group === 1) {
-    // Admin full access - no restrictions
-    return;
-  }
-
-  // All non-admin: enable spatial polygon toggle
   if (spatialToggle && !spatialToggle.checked) {
     spatialToggle.checked = true;
     if (typeof toggleSpatialPolygons === 'function') toggleSpatialPolygons();
     else SPATIAL_ENABLED = true;
+  }
+
+  if (group === 1) {
+    // Admin full access - no restrictions
+    return;
   }
 
   if (group === 2) {
@@ -187,12 +186,12 @@ function applyCurrentUserRoleDefaults(user) {
   }
 
   if (group === 3) {
-    // kepala cdk, kepala tahura, dll - see all layers in their CDK, clustering ON
+    // kepala cdk, kepala tahura, dll - see all layers in their CDK, clustering OFF
     var clkToggle3 = document.getElementById('toggle-cluster');
-    if (clkToggle3 && !clkToggle3.checked) {
-      clkToggle3.checked = true;
+    if (clkToggle3 && clkToggle3.checked) {
+      clkToggle3.checked = false;
       if (typeof toggleClustering === 'function') toggleClustering();
-      else CLUSTER_ENABLED = true;
+      else CLUSTER_ENABLED = false;
     }
     setLayerVisibleState(['pjl', 'per', 'jum', 'peg', 'pegb'], true, false);
     schedRender();
@@ -221,16 +220,21 @@ function zoomToCurrentUserLocation() {
   var user = getCurrentAuthUser();
   var nip = getCurrentUserNip(user);
   if (!nip || !mapObj) return;
-  var target = null;
+  var targetLatLngs = [];
+  var targetFirst = null;
   if (DATA && Array.isArray(DATA.pegawai)) {
-    target = DATA.pegawai.find(function(row) { return isOwnPegawaiRecord(row, 'pegawai', user) && row._lat && row._lng; });
+    var peg = DATA.pegawai.filter(function(row) { return isOwnPegawaiRecord(row, 'pegawai', user) && row._lat && row._lng; });
+    peg.forEach(function(p) { targetLatLngs.push([p._lat, p._lng]); if(!targetFirst) { targetFirst = p; targetFirst._dataType = 'peg'; } });
   }
-  if (!target && DATA && Array.isArray(DATA.pegawaiBinaan)) {
-    target = DATA.pegawaiBinaan.find(function(row) { return isOwnPegawaiRecord(row, 'pegawaiBinaan', user) && row._lat && row._lng; });
+  if (DATA && Array.isArray(DATA.pegawaiBinaan)) {
+    var pegb = DATA.pegawaiBinaan.filter(function(row) { return isOwnPegawaiRecord(row, 'pegawaiBinaan', user) && row._lat && row._lng; });
+    pegb.forEach(function(p) { targetLatLngs.push([p._lat, p._lng]); if(!targetFirst) { targetFirst = p; targetFirst._dataType = 'pegb'; } });
   }
-  if (target && target._lat && target._lng) {
-    mapObj.setView([target._lat, target._lng], 16);
-    highlightMarker(target._lat, target._lng, target._data_type === 'pegawaiBinaan' ? 'pegb' : 'peg');
+  if (targetLatLngs.length > 1) {
+    mapObj.fitBounds(targetLatLngs, { padding: [20, 20], maxZoom: 16 });
+  } else if (targetLatLngs.length === 1 && targetFirst) {
+    mapObj.setView(targetLatLngs[0], 16);
+    highlightMarker(targetLatLngs[0][0], targetLatLngs[0][1], targetFirst._dataType);
   }
 }
 
@@ -238,17 +242,9 @@ function canUploadPhotoForContext(context, row) {
   var user = getCurrentAuthUser();
   if (!user || !user.username) return false;
   var group = getRoleGroup(user.role);
-  if (group === 1) return true;
-  if (group === 2) return false;
-  if (group === 3) {
-    // Can upload to juna (Jumat Menanam) and own pegawai/binaan records; NOT pjl/per
-    if (context === 'juna') return true;
-    if (context === 'pegawai') return isOwnPegawaiRecord(row, 'pegawai', user);
-    if (context === 'pegawaiBinaan') return isOwnPegawaiRecord(row, 'pegawaiBinaan', user);
-    return false;
-  }
-  if (group === 4) {
-    // Can upload only own pegawai/binaan records, read-only everywhere else
+  if (group === 1 || group === 2) return true;
+  if (group === 3 || group === 4) {
+    if (context === 'juna' || context === 'pjl' || context === 'per') return true;
     if (context === 'pegawai') return isOwnPegawaiRecord(row, 'pegawai', user);
     if (context === 'pegawaiBinaan') return isOwnPegawaiRecord(row, 'pegawaiBinaan', user);
     return false;
@@ -2296,6 +2292,13 @@ function openDrawer(type, r) {
   }
   
   if (dr) dr.classList.add('open');
+
+  // ── Inject AI Assistant card (hanya untuk role yang diizinkan) ──
+  if (typeof GeoHutanAI !== 'undefined' && typeof GeoHutanAI.injectCard === 'function') {
+    setTimeout(function() {
+      GeoHutanAI.injectCard(type, r);
+    }, 80);
+  }
 }
 function closeDrawer() { 
   var dr = document.getElementById('detail-drawer');
@@ -2622,8 +2625,19 @@ function passFilter(r, type) {
           return false;
         }
       } else if (group === 4) {
-        if (type !== 'pegawai' && type !== 'pegawaiBinaan') return false;
-        if (!isOwnPegawaiRecord(r, type, user)) return false;
+        if (type !== 'pegawai' && type !== 'pegawaiBinaan') {
+          var rUnit2 = String(getRowUnit(r, type)).toLowerCase().trim();
+          var uUnit2 = String(getCurrentUserUnit(user)).toLowerCase().trim();
+          var rCdk2 = getCDKExtended(rUnit2);
+          var uCdk2 = getCDKExtended(uUnit2);
+          if (uCdk2 && rCdk2 && uCdk2 !== rCdk2) {
+            return false;
+          } else if (uUnit2 && rUnit2 && uUnit2 !== rUnit2 && (!uCdk2 || !rCdk2)) {
+            return false;
+          }
+        } else {
+          if (!isOwnPegawaiRecord(r, type, user)) return false;
+        }
       }
     }
   }
