@@ -2,6 +2,15 @@
 // 🌲 BACKEND WEB APP: GEOHUTAN JABAR (GOOGLE APPS SCRIPT)
 // ==============================================================================
 
+/**
+ * ⚠️ FUNGSI KHUSUS OTORISASI (JALANKAN FUNGSI INI SEKALI SAJA) ⚠️
+ * Pilih fungsi "setupAI" di dropdown atas lalu klik "Jalankan".
+ * Ini akan memancing Google memunculkan popup "Tinjau Izin".
+ */
+function setupAI() {
+  UrlFetchApp.fetch("https://www.google.com");
+}
+
 var SPREADSHEET_ID = "14jmMYMOY6vl2nIdbZdO-wahixn1yN3LTLqwI-19RNtY";
 var JUNA_SPREADSHEET_ID = "1p7-7pSKtNCc58eC-tXJsXNKk3QSSswI68Gl6fNsZhSE";
 var PEGAWAI_SPREADSHEET_ID = "1K_rijLYh_sdVmNzSgs7TIdjVslBYeQ31";
@@ -1586,6 +1595,10 @@ String(data.latitude || ""),
         deletedId: delFileId,
       });
 
+    // ─── ACTION: AI Assistant (Gemini) ───
+    } else if (data.action === "askAI") {
+      return handleAskAI_(data);
+
     } else {
       return jsonOutput_({
         success: false,
@@ -1756,4 +1769,303 @@ function doGet(e) {
     success: true,
     message: "Backend GeoHutan Aktif! Siap menerima API Request.",
   });
+}
+
+// ═══════════════════════════════════════════════════════════
+// 🤖 AI ASSISTANT — Gemini API Handler
+// ═══════════════════════════════════════════════════════════
+
+/** API Key Gemini (RAHASIA – hanya di server, tidak pernah dikirim ke client) */
+var GEMINI_API_KEY = "AQ.Ab8RN6IeqRLkpAc8Wk19dQ4DLdZMDw1udftpg3VWrPLgiu-ofQ";
+var GEMINI_MODEL   = "gemini-flash-latest";
+var GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/"
+                   + GEMINI_MODEL + ":generateContent";
+
+/** Role yang boleh mengakses AI */
+var AI_ALLOWED_ROLES_ = [
+  "admin", "kadis", "sekdis", "kabid pdas",
+  "kabid ppkh", "kabid bupm", "kabid pksdae"
+];
+
+/**
+ * Memvalidasi role dan memanggil Gemini untuk analisis kehutanan.
+ * @param {Object} data - payload dari request POST
+ */
+function handleAskAI_(data) {
+  try {
+    // ── 1. Validasi session token ──
+    var sessionUsername = verifyAuthToken_(data.authToken || data.token || "");
+    if (!sessionUsername) {
+      return jsonOutput_({ success: false, error: "Sesi tidak valid. Silakan login ulang." });
+    }
+
+    // ── 2. Validasi role ──
+    var requestedRole = String(data.role || "").toLowerCase().trim().replace(/\s+/g, " ");
+    var isAllowed = AI_ALLOWED_ROLES_.some(function(r) { return r === requestedRole; });
+    if (!isAllowed) {
+      return jsonOutput_({
+        success: false,
+        error: "Akses AI Assistant tidak diizinkan untuk role: " + requestedRole
+      });
+    }
+
+    // ── 3. Ambil pertanyaan & data marker ──
+    var question   = String(data.question || "").trim();
+    var markerData = data.marker || {};
+    var dataType   = String(data.dataType || "unknown");
+
+    if (!question) {
+      return jsonOutput_({ success: false, error: "Pertanyaan tidak boleh kosong." });
+    }
+
+    // ── 4. Bangun konteks marker sebagai string ──
+    var markerContext = buildMarkerContext_(markerData, dataType);
+
+    // ── 5. Bangun system prompt ──
+    var systemPrompt = buildSystemPrompt_();
+
+    // ── 6. Ambil history percakapan multi-turn dari frontend ──
+    var history = [];
+    if (Array.isArray(data.history)) {
+      // Validasi format: [{role:'user'|'model', parts:[{text}]}]
+      history = data.history.filter(function(h) {
+        return h && (h.role === 'user' || h.role === 'model') &&
+               Array.isArray(h.parts) && h.parts.length > 0;
+      });
+    }
+
+    // ── 7. Bangun user prompt dengan konteks marker (hanya di pesan pertama) ──
+    var userPrompt;
+    if (history.length === 0) {
+      // Pesan pertama: sertakan konteks marker lengkap
+      userPrompt = buildUserPrompt_(question, markerContext, dataType);
+    } else {
+      // Pesan lanjutan: cukup kirim pertanyaan saja, konteks sudah ada di history
+      userPrompt = question;
+    }
+
+    // ── 8. Panggil Gemini API dengan history multi-turn ──
+    var answer = callGeminiAPI_(systemPrompt, userPrompt, history);
+
+    return jsonOutput_({ success: true, answer: answer });
+
+  } catch (err) {
+    Logger.log("handleAskAI_ error: " + err.toString());
+    return jsonOutput_({
+      success: false,
+      error: "Terjadi kesalahan pada server AI: " + err.message
+    });
+  }
+}
+
+/**
+ * Mengkonversi object marker menjadi teks konteks terstruktur untuk AI.
+ */
+function buildMarkerContext_(markerData, dataType) {
+  if (!markerData || typeof markerData !== "object") return "Data marker tidak tersedia.";
+
+  var labelMap = {
+    "pjl":             "Petugas Jaga Leuweung",
+    "per":             "Lokasi Persemaian Jaga Leuweung",
+    "persemaian":      "Lokasi Persemaian Jaga Leuweung",
+    "peg":             "Pegawai Dinas Kehutanan",
+    "pegawai":         "Pegawai Dinas Kehutanan",
+    "pegb":            "Pegawai Wilayah Hutan Binaan",
+    "pegawaiBinaan":   "Pegawai Wilayah Hutan Binaan",
+    "jum":             "Lokasi Juna Permanen (Jum'at Menanam)",
+    "jumat":           "Lokasi Juna Permanen (Jum'at Menanam)",
+    "pohon":           "Area/Titik Kegiatan Tanam & Pelihara",
+    "polygon_kegiatan":"Area/Titik Kegiatan Tanam & Pelihara"
+  };
+
+  var label = labelMap[dataType] || "Data Kegiatan Kehutanan";
+
+  var lines = [];
+  lines.push("=== DATA " + label.toUpperCase() + " ===");
+  lines.push("");
+
+  var keys = Object.keys(markerData);
+  keys.forEach(function(k) {
+    var v = markerData[k];
+    if (v !== null && v !== undefined && String(v).trim() !== "" && String(v).trim() !== "-") {
+      lines.push("• " + k + ": " + String(v).trim());
+    }
+  });
+
+  if (lines.length <= 2) {
+    lines.push("(Data atribut tidak tersedia secara lengkap)");
+  }
+
+  lines.push("");
+  lines.push("=== END DATA ===");
+  return lines.join("\n");
+}
+
+/**
+ * System prompt sebagai ahli kehutanan Indonesia.
+ */
+function buildSystemPrompt_() {
+  return [
+    "Anda adalah AI GeoHutan — asisten resmi Dinas Kehutanan Provinsi Jawa Barat.",
+    "",
+    "PERAN ANDA:",
+    "Anda adalah pakar multidisiplin dengan keahlian mendalam di bidang:",
+    "- Ahli Kehutanan Indonesia dan Hukum Kehutanan",
+    "- Ahli Rehabilitasi Hutan dan Lahan (RHL)",
+    "- Ahli Konservasi Sumber Daya Alam dan Ekosistem",
+    "- Ahli Pengelolaan Daerah Aliran Sungai (DAS)",
+    "- Ahli Agroforestry dan Perhutanan Sosial",
+    "- Ahli Pengelolaan Tahura dan Kawasan Konservasi",
+    "- Ahli Kebijakan Kehutanan Provinsi Jawa Barat",
+    "- Ahli GIS dan Analisis Spasial Kehutanan",
+    "- Ahli Lingkungan dan Adaptasi Perubahan Iklim",
+    "- Ahli Mitigasi Bencana dan Pemulihan Lahan Kritis",
+    "",
+    "PRIORITAS ANALISIS:",
+    "1. Perhutanan Sosial dan pemberdayaan masyarakat",
+    "2. Prinsip kehutanan berkelanjutan",
+    "3. Konservasi biodiversitas",
+    "4. Rehabilitasi hutan dan pemulihan ekosistem",
+    "5. Pengelolaan DAS terpadu",
+    "6. Perlindungan hutan dan pencegahan kebakaran",
+    "7. Agroforestry dan ketahanan pangan",
+    "8. Adaptasi dan mitigasi perubahan iklim",
+    "9. Mitigasi bencana alam (longsor, banjir)",
+    "10. Pemulihan lahan kritis",
+    "",
+    "ATURAN JAWABAN:",
+    "- SELALU gunakan data marker/lokasi sebagai dasar utama analisis.",
+    "- JANGAN menjawab pertanyaan di luar konteks kehutanan.",
+    "- Jika data tidak lengkap, sebutkan secara jujur dan sebutkan data tambahan yang diperlukan.",
+    "- Gunakan bahasa Indonesia formal dan profesional.",
+    "- Berikan jawaban terstruktur dalam format berikut:",
+    "",
+    "FORMAT JAWABAN WAJIB:",
+    "## 📍 Ringkasan Lokasi",
+    "Deskripsi singkat lokasi berdasarkan data.",
+    "",
+    "## 🔍 Analisis Kondisi",
+    "Analisis kondisi lapangan berdasarkan data yang tersedia.",
+    "",
+    "## 🌱 Potensi",
+    "Potensi pengembangan dan pemanfaatan lokasi.",
+    "",
+    "## ⚠️ Ancaman & Risiko",
+    "Identifikasi ancaman dan risiko utama.",
+    "",
+    "## 🛠️ Rekomendasi Teknis",
+    "Rekomendasi teknis operasional yang spesifik.",
+    "",
+    "## 🎯 Rekomendasi Kebijakan",
+    "Rekomendasi strategis untuk pimpinan Dinas Kehutanan.",
+    "",
+    "## 📊 Tingkat Keyakinan Analisis",
+    "Tingkat keyakinan: [Tinggi/Sedang/Rendah] — alasan singkat.",
+    "",
+    "Gunakan bullet points (- atau •) untuk poin-poin dalam setiap seksi.",
+    "Buat analisis yang SPESIFIK terhadap lokasi, BUKAN generik."
+  ].join("\n");
+}
+
+/**
+ * User prompt dengan konteks marker dan pertanyaan pengguna.
+ */
+function buildUserPrompt_(question, markerContext, dataType) {
+  return [
+    "KONTEKS DATA MARKER YANG DIKLIK OLEH PIMPINAN:",
+    "",
+    markerContext,
+    "",
+    "PERTANYAAN DARI PIMPINAN:",
+    question,
+    "",
+    "Catatan: Jawab berdasarkan konteks data di atas. Jika ada data spasial seperti",
+    "koordinat, luas, DAS, atau kawasan hutan — gunakan untuk memperkaya analisis.",
+    "Jenis data: " + dataType
+  ].join("\n");
+}
+
+/**
+ * Memanggil Gemini API dan mengembalikan teks jawaban.
+ * Mendukung multi-turn conversation (history).
+ * @param {string} systemPrompt
+ * @param {string} userPrompt  - pesan terbaru dari user
+ * @param {Array}  history     - array history [{role, parts:[{text}]}]
+ * @returns {string} jawaban AI
+ */
+function callGeminiAPI_(systemPrompt, userPrompt, history) {
+  // Susun contents: history lama + pesan baru dari user
+  var contents = [];
+  if (Array.isArray(history) && history.length > 0) {
+    contents = history;
+  }
+  contents = contents.concat([{
+    role: "user",
+    parts: [{ text: userPrompt }]
+  }]);
+
+  var payload = {
+    system_instruction: {
+      parts: [{ text: systemPrompt }]
+    },
+    contents: contents,
+    generationConfig: {
+      temperature:     0.7,
+      topK:            40,
+      topP:            0.95,
+      maxOutputTokens: 8192,   // ← dinaikkan agar jawaban tidak terpotong
+      candidateCount:  1
+    },
+    safetySettings: [
+      { category: "HARM_CATEGORY_HARASSMENT",        threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+      { category: "HARM_CATEGORY_HATE_SPEECH",       threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+      { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+      { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_MEDIUM_AND_ABOVE" }
+    ]
+  };
+
+  var options = {
+    method:      "post",
+    contentType: "application/json",
+    headers: {
+      "x-goog-api-key": GEMINI_API_KEY
+    },
+    payload:     JSON.stringify(payload),
+    muteHttpExceptions: true
+  };
+
+  var response = UrlFetchApp.fetch(GEMINI_API_URL, options);
+  var statusCode = response.getResponseCode();
+
+  if (statusCode !== 200) {
+    var errText = response.getContentText();
+    Logger.log("Gemini API error " + statusCode + ": " + errText);
+    throw new Error("Gemini API gagal (HTTP " + statusCode + "). " +
+                    "Periksa konfigurasi API key atau coba beberapa saat lagi.");
+  }
+
+  var json = JSON.parse(response.getContentText());
+
+  // Ekstrak teks dari response Gemini
+  try {
+    var candidates = json.candidates || [];
+    if (candidates.length === 0) {
+      throw new Error("Tidak ada respons dari model AI.");
+    }
+    var candidate = candidates[0];
+    var content   = candidate.content || {};
+    var parts     = content.parts || [];
+    if (parts.length === 0) {
+      // Cek finish reason
+      var reason = candidate.finishReason || "UNKNOWN";
+      throw new Error("Model AI tidak menghasilkan teks (finishReason: " + reason + ").");
+    }
+    var text = parts.map(function(p) { return p.text || ""; }).join("").trim();
+    if (!text) throw new Error("Respons AI kosong.");
+    return text;
+  } catch (parseErr) {
+    Logger.log("Parse Gemini response error: " + parseErr.toString());
+    Logger.log("Raw response: " + response.getContentText().substring(0, 500));
+    throw new Error("Gagal memproses respons AI: " + parseErr.message);
+  }
 }
