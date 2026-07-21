@@ -2717,7 +2717,14 @@ function loadCSV(url, type) {
   try {
     var gidMatch = String(url || '').match(/[?&]gid=([^&]+)/);
     var sourceGid = gidMatch ? decodeURIComponent(gidMatch[1]) : '';
-    Papa.parse(url, {
+    
+    // Add cache buster to bypass browser cache
+    var fetchUrl = url;
+    if (fetchUrl) {
+      fetchUrl += (fetchUrl.indexOf('?') !== -1 ? '&' : '?') + '_cb=' + new Date().getTime();
+    }
+    
+    Papa.parse(fetchUrl, {
       download: true, header: true, skipEmptyLines: true,
       complete: function(res) {
         var rows = Array.isArray(res.data) ? res.data : [];
@@ -3347,7 +3354,7 @@ var PER_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS5Zmpk0bJdGg7tyv
 ['1149553688','1364517698','144675684','1843729244','1981250821','1159710704','1142124495','420074128','1536834083'].forEach(function(g) { loadCSV(PER_URL.replace('{G}', g), 'persemaian'); });
 
 loadCSV('https://docs.google.com/spreadsheets/d/e/2PACX-1vSEHhDs2n0UKFjZlPcM4TrWQD9alaw1esFLVxjnKAD9isJ5vbKEQwhXFGYtyp8D2g/pub?gid=738073883&single=true&output=csv', 'pegawai');
-loadCSV('https://docs.google.com/spreadsheets/d/1xrl3W7DZs8SsYZIWiLgHYvi_89V7NismK-G9YDu9NdM/export?format=csv', 'pegawaiBinaan');
+loadCSV('https://docs.google.com/spreadsheets/d/1xrl3W7DZs8SsYZIWiLgHYvi_89V7NismK-G9YDu9NdM/export?format=csv&gid=1475147460', 'pegawaiBinaan');
 loadCSV('https://docs.google.com/spreadsheets/d/e/2PACX-1vSPtxo38ft9es4Mt0xn1oqPJQCVmYZcmyYN1GKTUBYz8b4wRX34jbQa5odSjVLwvB-yxuUnDGAV9Pou/pub?gid=2039375183&single=true&output=csv', 'jumat');
 
 /* ── LEAFLET DRAW & POLYGON ANALYSIS ── */
@@ -3842,7 +3849,7 @@ function renderCarousel(photos, dates) {
     if (total > 10) dotsHtml += '<span style="font-size:9px;color:rgba(255,255,255,0.4);margin-left:4px;">+' + (total - 10) + '</span>';
   }
 
-  var localBadge = isLocalPhoto ? '<span class="local-photo-badge">&#128247; Lokal</span>' : '';
+  var localBadge = isLocalPhoto ? '<span class="local-photo-badge" title="Foto berhasil diupload dan sedang disinkronisasi ke server global.">&#128247; Baru Upload</span>' : '';
   var deleteBtn = canUploadPhotoForContext(context, PHOTO_GALLERY.row)
     ? '<button class="car-delete-btn" onclick="event.stopPropagation();deleteCurrentCarouselPhoto()" title="Hapus foto ini">&#128465;</button>'
     : '';
@@ -4552,6 +4559,14 @@ function saveLocalPhoto() {
               r['Ekosistem_' + year] = mon.ekosistem || r['Ekosistem_' + year] || '';
               r['Usulan_' + year] = mon.usulan || r['Usulan_' + year] || '';
             }
+            
+            // Update the row data directly so it doesn't show as local
+            var currentFotos = r['Foto_' + year] ? String(r['Foto_' + year]).trim() : '';
+            r['Foto_' + year] = currentFotos ? currentFotos + "|" + data.url : data.url;
+            var currentDates = r['Tanggal_' + year] ? String(r['Tanggal_' + year]).trim() : '';
+            r['Tanggal_' + year] = currentDates ? currentDates + "|" + (data.date || finalDateStr) : (data.date || finalDateStr);
+
+            // Also keep it in localStorage just in case of page reload before Google Sheets cache expires
             var locals = getLocalPhotos(r, year, context);
             locals.push({ url: data.url, date: data.date || finalDateStr });
             saveLocalPhotosToStorage(r, year, locals, context);
