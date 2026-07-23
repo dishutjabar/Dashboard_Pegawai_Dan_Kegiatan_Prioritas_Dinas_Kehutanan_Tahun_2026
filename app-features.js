@@ -242,8 +242,19 @@ function canUploadPhotoForContext(context, row) {
   var user = getCurrentAuthUser();
   if (!user || !user.username) return false;
   var group = getRoleGroup(user.role);
+  // Grup 1 (admin/kadis) & Grup 2 (kabid): akses penuh
   if (group === 1 || group === 2) return true;
-  if (group === 3 || group === 4) {
+  if (group === 3) {
+    // Kepala CDK 1-9, Kepala Tahura, Kepala SPTH, Kepala PPHH:
+    // - Bisa upload/hapus foto untuk SEMUA pegawaiBinaan (rekan lain)
+    // - Juga bisa upload foto juna, pjl, per
+    if (context === 'juna' || context === 'pjl' || context === 'per') return true;
+    if (context === 'pegawai') return isOwnPegawaiRecord(row, 'pegawai', user);
+    if (context === 'pegawaiBinaan') return true; // akses penuh ke seluruh foto linimasa pegawaiBinaan
+    return false;
+  }
+  if (group === 4) {
+    // Pegawai biasa: hanya bisa upload/hapus foto milik sendiri
     if (context === 'juna' || context === 'pjl' || context === 'per') return true;
     if (context === 'pegawai') return isOwnPegawaiRecord(row, 'pegawai', user);
     if (context === 'pegawaiBinaan') return isOwnPegawaiRecord(row, 'pegawaiBinaan', user);
