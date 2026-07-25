@@ -20,18 +20,12 @@ const GeoHutanAI = (() => {
   const AI_ALLOWED_ROLES_L2 = ['kabid ppkh', 'kabid bupm', 'kabid pksdae'];
 
   const HINT_QUESTIONS = [
-    // 🌱 Teknis & Pengelolaan
-    'Tujuan & potensi lokasi ini untuk apa?',
     'Jenis tanaman apa yang cocok & kenapa?',
+    'Bagaimana potensi lokasi ini ?',
     'Pola tanam yang ideal: monokultur, agroforestry, atau tumpang sari?',
-    'Tingkat keberhasilan & risiko jika tidak ditanami?',
-    // 🌍 Dampak & Manfaat
-    'Manfaat & dampak nyata bagi masyarakat sekitar (ekonomi, lingkungan, sosial)?',
-    'Berapa warga/KK yang terlibat & ancaman utama di lokasi ini?',
-    // 🔄 Keberlanjutan & Rekomendasi
-    'Kendala utama & dukungan apa yang dibutuhkan untuk keberlanjutan?',
-    'Rencana pengembangan 5 tahun ke depan & potensi wisata edukasi?',
-    'Rekomendasi prioritas kegiatan berikutnya untuk pimpinan?',
+    'Risiko jika tidak ditanami?',
+    'Manfaat nyata bagi masyarakat sekitar ?',
+    'Rekomendasi pengembangan kegiatan berikutnya ?'
   ];
 
   const SESSION_CACHE = new Map();

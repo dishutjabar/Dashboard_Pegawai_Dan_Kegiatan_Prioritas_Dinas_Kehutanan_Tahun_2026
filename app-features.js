@@ -58,16 +58,20 @@ function getUserInitials(user) {
 }
 
 function getRoleGroup(role) {
-  if (!role) return 4; // default most restrictive
+  if (!role) return 5; // default most restrictive (group 5)
   var r = String(role).toLowerCase().trim().replace(/\s+/g, ' ');
   r = r.replace(/\bcdk\s*([1-9])\b/g, 'cdk $1');
   var g1 = ['admin', 'kadis', 'sekdis', 'kabid pdas'];
   var g2 = ['kabid ppkh', 'kabid bupm', 'kabid pksdae'];
-  var g3 = ['kepala tahura', 'kepala spth', 'kepala pphh', 'kepala cdk 1', 'kepala cdk 2', 'kepala cdk 3', 'kepala cdk 4', 'kepala cdk 5', 'kepala cdk 6', 'kepala cdk 7', 'kepala cdk 8', 'kepala cdk 9', 'pegwai madya', 'pegawai madya'];
+  var g3 = ['kepala tahura', 'kepala spth', 'kepala pphh', 'kepala cdk 1', 'kepala cdk 2', 'kepala cdk 3', 'kepala cdk 4', 'kepala cdk 5', 'kepala cdk 6', 'kepala cdk 7', 'kepala cdk 8', 'kepala cdk 9'];
+  var g4 = ['pegwai madya', 'pegawai madya'];
+  var g5 = ['pegawai', 'kepala tu tahura', 'kepala tu spth', 'kepala tu pphh', 'kepala tu cdk 1', 'kepala tu cdk 2', 'kepala tu cdk 3', 'kepala tu cdk 4', 'kepala tu cdk 5', 'kepala tu cdk 6', 'kepala tu cdk 7', 'kepala tu cdk 8', 'kepala tu cdk 9', 'kepala tu sekretariat'];
   if (g1.indexOf(r) > -1) return 1;
   if (g2.indexOf(r) > -1) return 2;
   if (g3.indexOf(r) > -1) return 3;
-  return 4;
+  if (g4.indexOf(r) > -1) return 4;
+  if (g5.indexOf(r) > -1) return 5;
+  return 5;
 }
 
 function getCurrentAuthUser() {
@@ -182,11 +186,12 @@ function applyCurrentUserRoleDefaults(user) {
     }
     setLayerVisibleState(['pjl', 'per', 'jum', 'peg', 'pegb'], true, false);
     schedRender();
+    setTimeout(zoomToCurrentUserLocation, 450);
     return;
   }
 
   if (group === 3) {
-    // kepala cdk, kepala tahura, dll - see all layers in their CDK, clustering OFF
+    // kepala tahura, spth, pphh, cdk 1-9 - see all layers in their CDK, clustering OFF
     var clkToggle3 = document.getElementById('toggle-cluster');
     if (clkToggle3 && clkToggle3.checked) {
       clkToggle3.checked = false;
@@ -200,15 +205,34 @@ function applyCurrentUserRoleDefaults(user) {
   }
 
   if (group === 4) {
-    // pegawai, kepala tu - pjl/per/jum OFF (can enable), peg/pegb visible
+    // pegawai madya - pjl/per/jum OFF (can enable), peg/pegb visible
     // Turn off clustering
-    if (clusterToggle && clusterToggle.checked) {
-      clusterToggle.checked = false;
+    var clkToggle4 = document.getElementById('toggle-cluster');
+    if (clkToggle4 && clkToggle4.checked) {
+      clkToggle4.checked = false;
       if (typeof toggleClustering === 'function') toggleClustering();
       else CLUSTER_ENABLED = false;
     }
-    // Show peg/pegb, hide pjl/per/jum in legend (but user can toggle)
-    setLayerVisibleState(['pjl', 'per', 'jum'], false, false); // hidden in layer but legend visible
+    setLayerVisibleState(['pjl', 'per', 'jum'], false, false); 
+    setLayerVisibleState(['peg', 'pegb'], true, false);
+    if (pjlPolyToggle && pjlPolyToggle.checked) {
+      pjlPolyToggle.checked = false;
+      if (typeof togglePjlPolygons === 'function') togglePjlPolygons();
+    }
+    schedRender();
+    setTimeout(zoomToCurrentUserLocation, 450);
+    return;
+  }
+
+  if (group === 5) {
+    // pegawai, kepala tu - pjl/per/jum OFF (can enable), peg/pegb visible
+    var clkToggle5 = document.getElementById('toggle-cluster');
+    if (clkToggle5 && clkToggle5.checked) {
+      clkToggle5.checked = false;
+      if (typeof toggleClustering === 'function') toggleClustering();
+      else CLUSTER_ENABLED = false;
+    }
+    setLayerVisibleState(['pjl', 'per', 'jum'], false, false);
     setLayerVisibleState(['peg', 'pegb'], true, false);
     if (pjlPolyToggle && pjlPolyToggle.closest('label')) pjlPolyToggle.closest('label').style.display = 'none';
     schedRender();
@@ -241,26 +265,10 @@ function zoomToCurrentUserLocation() {
 function canUploadPhotoForContext(context, row) {
   var user = getCurrentAuthUser();
   if (!user || !user.username) return false;
-  var group = getRoleGroup(user.role);
-  // Grup 1 (admin/kadis) & Grup 2 (kabid): akses penuh
-  if (group === 1 || group === 2) return true;
-  if (group === 3) {
-    // Kepala CDK 1-9, Kepala Tahura, Kepala SPTH, Kepala PPHH:
-    // - Bisa upload/hapus foto untuk SEMUA pegawaiBinaan (rekan lain)
-    // - Juga bisa upload foto juna, pjl, per
-    if (context === 'juna' || context === 'pjl' || context === 'per') return true;
-    if (context === 'pegawai') return isOwnPegawaiRecord(row, 'pegawai', user);
-    if (context === 'pegawaiBinaan') return true; // akses penuh ke seluruh foto linimasa pegawaiBinaan
-    return false;
-  }
-  if (group === 4) {
-    // Pegawai biasa: hanya bisa upload/hapus foto milik sendiri
-    if (context === 'juna' || context === 'pjl' || context === 'per') return true;
-    if (context === 'pegawai') return isOwnPegawaiRecord(row, 'pegawai', user);
-    if (context === 'pegawaiBinaan') return isOwnPegawaiRecord(row, 'pegawaiBinaan', user);
-    return false;
-  }
-  return false;
+  
+  // Berdasarkan aturan baru, semua user yang terautentikasi (Group 1-5) 
+  // diizinkan melakukan full CRUD (Upload/Edit) untuk SEMUA data (Juna, Persemaian, Pegawai, dll)
+  return true;
 }
 
 function canManageSpatialData() {
@@ -331,8 +339,8 @@ function updateAuthUserUI(user) {
       }
     }
     
-    // Specific Group 4 UI changes
-    if (group === 4) {
+    // Specific Group 4 & 5 UI changes
+    if (group === 4 || group === 5) {
        var f_cdk_grp = document.getElementById("f_cdk") ? document.getElementById("f_cdk").closest(".filter-group") : null;
        var f_status_grp = document.getElementById("f_status") ? document.getElementById("f_status").closest(".filter-group") : null;
        var f_kawasan_grp = document.getElementById("f_kawasan") ? document.getElementById("f_kawasan").closest(".filter-group") : null;
@@ -539,6 +547,15 @@ function submitCredentialChange(event) {
 
 document.addEventListener("DOMContentLoaded", function() {
   initAuthPortal();
+  
+  // Auto-collapse sidebar on mobile load
+  if (window.innerWidth <= 768) {
+    var sb = document.getElementById('sidebar');
+    if (sb) sb.classList.add('sidebar-collapsed');
+    var sbBtn = document.getElementById('sidebar-collapse-btn');
+    if (sbBtn) sbBtn.innerHTML = '&rsaquo;';
+  }
+  
   document.addEventListener("click", closeProfileMenu);
   document.addEventListener("keydown", function(event) {
     if (event.key === "Escape") closeProfileMenu();
@@ -2089,6 +2106,16 @@ function openDrawer(type, r) {
   var minBtn = document.getElementById('drawer-min-btn');
   if (minBtn) minBtn.innerHTML = '&minus;';
 
+  // Auto-collapse sidebar on mobile to prevent overlapping
+  if (window.innerWidth <= 768) {
+    var sb = document.getElementById('sidebar');
+    if (sb && !sb.classList.contains('sidebar-collapsed')) {
+      sb.classList.add('sidebar-collapsed');
+      var sbBtn = document.getElementById('sidebar-collapse-btn');
+      if (sbBtn) sbBtn.innerHTML = '&rsaquo;';
+    }
+  }
+
   var t = document.getElementById('drawer-title');
   var c = document.getElementById('drawer-content');
   if (t) t.textContent = POP_LABEL[type] || 'Detail Informasi';
@@ -2580,8 +2607,8 @@ function forceRefresh() { try { mapObj.invalidateSize(); } catch(e) {} schedRend
 function getCDKExtended(unitKerja) {
   var u = String(unitKerja || '').toUpperCase().trim();
   if (!u) return null;
-  if (u.includes('SPTH')) return 'SPTH';
-  if (u.includes('P2HH') || u.includes('PPPH') || u.includes('PPHH')) return 'PPPH';
+  if (u.includes('SPTH') || u.includes('SERTIFIKASI DAN PERBENIHAN')) return 'SPTH';
+  if (u.includes('P2HH') || u.includes('PPPH') || u.includes('PPHH') || u.includes('PENGOLAHAN HASIL HUTAN')) return 'PPPH';
   if (u.includes('TAHURA') || u.includes('TAMAN HUTAN RAYA')) return 'TAHURA';
   // Handle 'CABANG DINAS KEHUTANAN WILAYAH I BOGOR' → 'CDK WILAYAH I'
   var m = u.match(/CABANG\s+DINAS\s+KEHUTANAN\s+WILAYAH\s+([IVX]+)/i) ||
@@ -2648,6 +2675,20 @@ function passFilter(r, type) {
           }
         } else {
           if (!isOwnPegawaiRecord(r, type, user)) return false;
+        }
+      } else if (group === 5) {
+        if (type === 'pegawai' || type === 'pegawaiBinaan') {
+          if (!isOwnPegawaiRecord(r, type, user)) return false;
+        } else {
+          var rUnit3 = String(getRowUnit(r, type)).toLowerCase().trim();
+          var uUnit3 = String(getCurrentUserUnit(user)).toLowerCase().trim();
+          var rCdk3 = getCDKExtended(rUnit3);
+          var uCdk3 = getCDKExtended(uUnit3);
+          if (uCdk3 && rCdk3 && uCdk3 !== rCdk3) {
+            return false;
+          } else if (uUnit3 && rUnit3 && uUnit3 !== rUnit3 && (!uCdk3 || !rCdk3)) {
+            return false;
+          }
         }
       }
     }
@@ -2897,7 +2938,7 @@ function doRender() {
             // Build rich thumbnail tooltip for JUM markers
             var thumbYear = getCurrentPhotoYear(r, 'juna');
             var thumbMerged = getMergedData(r, thumbYear, 'juna');
-            var thumbUrl = thumbMerged.photos.length > 0 ? thumbMerged.photos[0] : null;
+            var thumbUrl = thumbMerged.photos.length > 0 ? thumbMerged.photos[thumbMerged.photos.length - 1] : null;
             var desa = r['Desa/Kelurahan'] || r['Desa/ Kelurahan'] || r['Desa'] || r['DESA'] || '-';
             var kat2 = String(r['Kategori Lojuna'] || '').trim() || 'Lokasi Juna';
             var cdk = r['Unit Kerja'] || r._cdk || '-';
@@ -2926,7 +2967,7 @@ function doRender() {
           } else if (type === 'pjl') {
             var pjlYear = getCurrentPhotoYear(r, 'pjl');
             var pjlMerged = getMergedData(r, pjlYear, 'pjl');
-            var pjlThumb = pjlMerged.photos.length > 0 ? pjlMerged.photos[0] : null;
+            var pjlThumb = pjlMerged.photos.length > 0 ? pjlMerged.photos[pjlMerged.photos.length - 1] : null;
             var pjlCdk = r['Unit Kerja'] || '-';
             var pjlAlamat = r['Alamat'] || '-';
             var cPen = coordText(toFloat(r['Titik Koordinat Penanaman (Y)']), toFloat(r['Titik Koordinat Penanaman (X)']));
@@ -2981,7 +3022,7 @@ function doRender() {
           } else if (type === 'peg') {
             var pegYear = getCurrentPhotoYear(r, 'pegawai');
             var pegMerged = getMergedData(r, pegYear, 'pegawai');
-            var pegThumb = pegMerged.photos.length > 0 ? pegMerged.photos[0] : null;
+            var pegThumb = pegMerged.photos.length > 0 ? pegMerged.photos[pegMerged.photos.length - 1] : null;
             var pegUnit = r['Unit Kerja'] || r['UNIT KERJA'] || '-';
             var pegJabatan = r['Nama Jabatan'] || r['Jabatan'] || r['JABATAN'] || '-';
             var pegAlamat = r['Alamat'] || r['ALAMAT'] || '-';
@@ -3008,7 +3049,7 @@ function doRender() {
             normalizeBinaanRow(r);
             var pegbYear = getCurrentPhotoYear(r, 'pegawaiBinaan');
             var pegbMerged = getMergedData(r, pegbYear, 'pegawaiBinaan');
-            var pegbThumb = pegbMerged.photos.length > 0 ? pegbMerged.photos[0] : null;
+            var pegbThumb = pegbMerged.photos.length > 0 ? pegbMerged.photos[pegbMerged.photos.length - 1] : null;
             var pegbUnit = getBinaanField(r, 'unit') || '-';
             var pegbJabatan = getBinaanField(r, 'jabatan') || '-';
             var pegbKeg = getBinaanField(r, 'kegiatan') || '-';
@@ -3037,7 +3078,7 @@ function doRender() {
             } else {
               hoverHTML = '<div class="jum-tooltip-no-img">' +
                 '<div style="font-weight:700;font-size:11px;margin-bottom:3px;">' + name + '</div>' +
-                '<div style="font-size:10px;color:#00897b;font-weight:600;">Pegawai Wilayah Hutan Binaan</div>' +
+                '<div style="font-size:10px;color:#00897b;font-weight:600;">Data hutan binaan</div>' +
                 pegbInfo +
                 '</div>';
             }
@@ -3290,7 +3331,7 @@ function exportCSV(type) {
   if (type === 'pjl') { dataToExport = DATA.pjl; filename = 'Petugas_Jaga_Leuweung.csv'; lbl = 'Petugas Jaga Leuweung'; }
   else if (type === 'per') { dataToExport = DATA.persemaian; filename = 'Lokasi_Persemaian_Jaga_Leuweung.csv'; lbl = 'Lokasi Persemaian Jaga Leuweung'; }
   else if (type === 'peg') { dataToExport = DATA.pegawai; filename = 'Pegawai_Dinas_Kehutanan.csv'; lbl = 'Pegawai Dinas Kehutanan'; }
-  else if (type === 'pegb') { dataToExport = DATA.pegawaiBinaan; filename = 'Pegawai_Wilayah_Hutan_Binaan.csv'; lbl = 'Pegawai Wilayah Hutan Binaan'; }
+  else if (type === 'pegb') { dataToExport = DATA.pegawaiBinaan; filename = 'Pegawai_Wilayah_Hutan_Binaan.csv'; lbl = 'Data hutan binaan'; }
   else if (type === 'jum') { dataToExport = DATA.jumat; filename = 'Lokasi_Unggulan_Jumat_Menanam.csv'; lbl = 'Lokasi Permanen Jum\'at Menanam'; }
   else return;
 
@@ -3316,7 +3357,7 @@ function exportAllFiltered() {
     { k: 'pjl', label: 'Petugas Jaga Leuweung', data: DATA.pjl, filterType: 'pjl' },
     { k: 'per', label: 'Persemaian Jaga Leuweung', data: DATA.persemaian, filterType: 'persemaian' },
     { k: 'peg', label: 'Pegawai Dinas Kehutanan', data: DATA.pegawai, filterType: 'pegawai' },
-    { k: 'pegb', label: 'Pegawai Wilayah Hutan Binaan', data: DATA.pegawaiBinaan, filterType: 'pegawaiBinaan' },
+    { k: 'pegb', label: 'Data hutan binaan', data: DATA.pegawaiBinaan, filterType: 'pegawaiBinaan' },
     { k: 'jum', label: 'Lokasi Permanen Jumat Menanam', data: DATA.jumat, filterType: 'jumat' }
   ];
   
@@ -3626,9 +3667,9 @@ function buildPhotoSection(r, context) {
   var ids = getGalleryDomIds(context);
   var title = 'Dokumentasi Foto Lokasi';
   var accent = '#8e24aa';
-  if (context === 'pjl') { title = 'Dokumentasi Tanam & Pelihara Pohon (PJL)'; accent = '#2e7d32'; }
+  if (context === 'pjl') { title = 'Dokumentasi Tanam & Pelihara Pohon '; accent = '#2e7d32'; }
   else if (context === 'pegawai') { title = 'Dokumentasi Foto Pegawai'; accent = '#fb8c00'; }
-  else if (context === 'pegawaiBinaan') { title = 'Dokumentasi Foto Pegawai Binaan'; accent = '#00897b'; }
+  else if (context === 'pegawaiBinaan') { title = 'Foto Hutan Binaan'; accent = '#00897b'; }
   else if (context === 'polygon') { title = 'Dokumentasi Kegiatan (Tanam & Pelihara)'; accent = '#388e3c'; }
   else if (context === 'per') { title = 'Dokumentasi Lokasi Persemaian'; accent = '#1e88e5'; }
 
@@ -3761,7 +3802,7 @@ function refreshGalleryForYear(year) {
       }
     });
     
-    combined.sort(function(a, b) { return b.timestamp - a.timestamp; });
+    combined.sort(function(a, b) { return a.timestamp - b.timestamp; });
     
     var allP = [], allD = [], isLocMap = [];
     combined.forEach(function(c) {
@@ -4063,14 +4104,14 @@ function refreshLightbox() {
     };
     
     var monData = {
-      'Tutupan Lahan': getMonVal('Tutupan'),
-      'Jenis Pohon': getMonVal('Jenis'),
-      'Kerapatan': getMonVal('Kerapatan'),
+      'Keragaman Jenis Tanaman': getMonVal('Tutupan'),
+      'Jenis Tanaman/Pohon': getMonVal('Jenis'),
+      'Kerapatan Tanaman': getMonVal('Kerapatan'),
       'Kelas Lereng': getMonVal('Lereng'),
-      'Kelas Umur': getMonVal('Umur'),
-      'Pola Pengelolaan': getMonVal('Pengelolaan'),
-      'Kondisi Ekosistem': getMonVal('Ekosistem'),
-      'Usulan Kegiatan': getMonVal('Usulan')
+      'Tinggi Tanaman (Cm)': getMonVal('Umur'),
+      'Kondisi Hutan': getMonVal('Pengelolaan'),
+      'Sumber Air': getMonVal('Ekosistem'),
+      'Usulan Kegiatan Lanjutan': getMonVal('Usulan')
     };
     
     var hasAny = false;
@@ -4235,7 +4276,7 @@ function getMergedData(r, year, context) {
   });
   
   combined.sort(function(a, b) {
-    return b.timestamp - a.timestamp;
+    return a.timestamp - b.timestamp;
   });
   
   var allPhotos = [], allDates = [], isLocalMap = [];
@@ -4350,7 +4391,7 @@ function openUploadModal(r) {
   
   var modalTitle = document.querySelector('#upload-modal .modal-head h2');
   if (modalTitle) {
-    if (context === 'pjl') modalTitle.textContent = 'Upload Dokumentasi Tanam & Pelihara (PJL)';
+    if (context === 'pjl') modalTitle.textContent = 'Upload Dokumentasi Tanam & Pelihara ';
     else if (context === 'pegawai') modalTitle.textContent = 'Upload Foto Pegawai Dinas Kehutanan';
     else if (context === 'pegawaiBinaan') modalTitle.textContent = 'Upload Foto Pegawai Wilayah Binaan';
     else if (context === 'polygon') modalTitle.textContent = 'Upload Dokumentasi Kegiatan';
@@ -4458,7 +4499,7 @@ function readFileAsDataUrl(file) {
 
 function validateUploadFiles(files) {
   if (!files || files.length === 0) return "Pilih minimal satu file foto.";
-  if (files.length > 10) return "Maksimal 10 foto per sesi upload.";
+  if (files.length > 2) return "Maksimal 2 foto per sesi upload.";
   var totalSize = 0;
   for (var i = 0; i < files.length; i++) {
     var f = files[i];
@@ -4511,7 +4552,8 @@ function saveLocalPhoto() {
     btn.innerHTML = 'Menyiapkan foto (' + (index + 1) + '/' + files.length + ')...';
     return getFileExifDate(file)
       .then(function(exifDate) {
-        var finalDateStr = exifDate || formatUploadDate(new Date());
+        var manualDateVal = document.getElementById('upload-datetime') ? document.getElementById('upload-datetime').value : '';
+        var finalDateStr = manualDateVal ? formatUploadDate(new Date(manualDateVal)) : (exifDate || formatUploadDate(new Date()));
         return readFileAsDataUrl(file).then(function(base64Full) {
           var base64Clean = String(base64Full).split(',')[1] || '';
           btn.innerHTML = 'Mengupload (' + (index + 1) + '/' + files.length + ')...';
@@ -4530,8 +4572,8 @@ function saveLocalPhoto() {
               jenis: getCheckedValues('mon-jenis'),
               kerapatan: getCheckedValues('mon-kerapatan'),
               lereng: getRadioValue('mon-lereng'),
-              umur: getCheckedValues('mon-umur'),
-              pengelolaan: getCheckedValues('mon-pengelolaan'),
+              umur: getRadioValue('mon-umur'),
+              pengelolaan: getRadioValue('mon-pengelolaan'),
               ekosistem: getCheckedValues('mon-ekosistem'),
               usulan: getCheckedValues('mon-usulan')
             };
@@ -4561,14 +4603,19 @@ function saveLocalPhoto() {
             if (!data.success) throw new Error(data.error || 'Upload gagal.');
             successCount++;
             if (mon) {
-              r['Tutupan_' + year] = mon.tutupan || r['Tutupan_' + year] || '';
-              r['Jenis_' + year] = mon.jenis || r['Jenis_' + year] || '';
-              r['Kerapatan_' + year] = mon.kerapatan || r['Kerapatan_' + year] || '';
-              r['Lereng_' + year] = mon.lereng || r['Lereng_' + year] || '';
-              r['Umur_' + year] = mon.umur || r['Umur_' + year] || '';
-              r['Pengelolaan_' + year] = mon.pengelolaan || r['Pengelolaan_' + year] || '';
-              r['Ekosistem_' + year] = mon.ekosistem || r['Ekosistem_' + year] || '';
-              r['Usulan_' + year] = mon.usulan || r['Usulan_' + year] || '';
+              var updateMonField = function(key, newVal) {
+                var current = String(r[key + '_' + year] || '').trim();
+                newVal = newVal || '-';
+                r[key + '_' + year] = current ? current + '|' + newVal : newVal;
+              };
+              updateMonField('Tutupan', mon.tutupan);
+              updateMonField('Jenis', mon.jenis);
+              updateMonField('Kerapatan', mon.kerapatan);
+              updateMonField('Lereng', mon.lereng);
+              updateMonField('Umur', mon.umur);
+              updateMonField('Pengelolaan', mon.pengelolaan);
+              updateMonField('Ekosistem', mon.ekosistem);
+              updateMonField('Usulan', mon.usulan);
             }
             
             // Update the row data directly so it doesn't show as local

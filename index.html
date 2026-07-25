@@ -235,7 +235,7 @@
     </div>
     
     <div class="stat-card">
-      <div class="stat-info"><div class="stat-lbl" style="font-size:10px;">Pegawai Wilayah Hutan Binaan</div><div class="stat-val" style="color:#00897b;" id="cnt-pegb">0</div></div>
+      <div class="stat-info"><div class="stat-lbl" style="font-size:10px;">Data hutan binaan</div><div class="stat-val" style="color:#00897b;" id="cnt-pegb">0</div></div>
       <div class="stat-icon">&#127966;</div>
     </div>
     <div class="stat-card">
@@ -312,7 +312,7 @@
         <path d="M9 14 L12 17 L15 14" fill="none" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/>
         <path d="M10 11 L12 9 L14 11" fill="none" stroke="#fff" stroke-width="1" stroke-linejoin="round"/>
       </svg>
-      <span class="leg-text">Pegawai Wilayah Hutan Binaan</span>
+      <span class="leg-text">Data hutan binaan</span>
     </div>
     <div class="leg-item" id="leg-autopoly" onclick="toggleAutoPoly()">
       <svg class="leg-icon-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><polygon points="12,2 22,12 12,22 2,12" fill="rgba(0,172,193,0.2)" stroke="#00acc1" stroke-width="2" stroke-dasharray="4,4"/></svg>
@@ -419,7 +419,7 @@
           <option value="pjl">Petugas Jaga Leuweung</option>
           <option value="persemaian">Lokasi Persemaian Jaga Leuweung</option>
           <option value="pegawai">Pegawai Dinas Kehutanan</option>
-          <option value="pegawaiBinaan">Pegawai Wilayah Hutan Binaan</option>
+          <option value="pegawaiBinaan">Data hutan binaan</option>
           <option value="jumat">Lokasi Permanen Jum'at Menanam</option>
         </select>
         <input type="text" id="table-search" placeholder="Cari dalam tabel..." onkeyup="filterTable()">
@@ -476,7 +476,7 @@
       <button class="btn-icon" style="justify-content:center; padding:12px; background:#e8f5e9; border-color:#43a047;" onclick="exportCSV('pjl')">&#128196; Unduh Petugas Jaga Leuweung</button>
       <button class="btn-icon" style="justify-content:center; padding:12px; background:#f3e5f5; border-color:#8e24aa;" onclick="exportCSV('jum')">&#128196; Download Lokasi Jum'at Menanam</button>
       <button class="btn-icon" style="justify-content:center; padding:12px; background:#fff3e0; border-color:#fb8c00;" onclick="exportCSV('peg')">&#128196; Download Pegawai Dinas Kehutanan</button>
-      <button class="btn-icon" style="justify-content:center; padding:12px; background:#e0f2f1; border-color:#00897b; color:#00695c;" onclick="exportCSV('pegb')">&#128196; Download Pegawai Wilayah Hutan Binaan</button>
+      <button class="btn-icon" style="justify-content:center; padding:12px; background:#e0f2f1; border-color:#00897b; color:#00695c;" onclick="exportCSV('pegb')">&#128196; Download Data hutan binaan</button>
       <button class="btn-icon" style="justify-content:center; padding:12px; background:#e3f2fd; border-color:#1e88e5;" onclick="exportCSV('per')">&#128196; Download Persemaian Jaga Leuweung</button>
       <button class="btn-icon" style="justify-content:center; padding:12px; background:var(--primary); color:white; border-color:var(--primary);" onclick="exportAllFiltered()">&#128196; Unduh Semua Data Hasil Filter (CSV)</button>
     </div>
@@ -619,6 +619,12 @@
           <!-- Diisi JS dari PHOTO_YEARS -->
         </div>
         <input type="hidden" id="upload-year" value="2026">
+        
+        <div style="margin-top:15px; margin-bottom:15px;">
+          <label style="display:block; font-size:12px; font-weight:600; margin-bottom:5px;">Tanggal Foto (Manual):</label>
+          <input type="datetime-local" id="upload-datetime" required style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px;">
+          <div style="font-size:10px; color:#666; margin-top:4px;">* Isi jika tanggal dari foto tidak valid atau kamera tidak menyimpan metadata tanggal.</div>
+        </div>
       </div>
 
       <div class="filter-group">
@@ -631,19 +637,19 @@
         <div class="monitoring-title">Hasil Kegiatan dan Monitoring Lapangan</div>
         <div class="monitoring-grid">
           <fieldset class="monitoring-field">
-            <legend>Tutupan Lahan</legend>
+            <legend>Keragaman Jenis Tanaman</legend>
             <label><input type="radio" name="mon-tutupan" value="Homogen"> Homogen</label>
             <label><input type="radio" name="mon-tutupan" value="Heterogen"> Heterogen</label>
           </fieldset>
           <fieldset class="monitoring-field">
-            <legend>Jenis Pohon</legend>
+            <legend>Jenis Tanaman/Pohon</legend>
             <label><input type="checkbox" name="mon-jenis" value="Kayu-kayuan"> Kayu-kayuan</label>
             <label><input type="checkbox" name="mon-jenis" value="MPTS"> MPTS</label>
             <label><input type="checkbox" name="mon-jenis" value="Bambu"> Bambu</label>
             <label><input type="checkbox" name="mon-jenis" value="Lainnya"> Lainnya</label>
           </fieldset>
           <fieldset class="monitoring-field">
-            <legend>Kerapatan Tutupan Lahan</legend>
+            <legend>Kerapatan Tanaman</legend>
             <label><input type="checkbox" name="mon-kerapatan" value="Sangat rapat"> Sangat rapat</label>
             <label><input type="checkbox" name="mon-kerapatan" value="Rapat"> Rapat</label>
             <label><input type="checkbox" name="mon-kerapatan" value="Sedang"> Sedang</label>
@@ -658,28 +664,32 @@
             <label><input type="radio" name="mon-lereng" value="Sangat Curam (>40%)"> Sangat Curam (&gt;40%)</label>
           </fieldset>
           <fieldset class="monitoring-field">
-            <legend>Kelas Umur</legend>
-            <label><input type="checkbox" name="mon-umur" value="Semai (Seedling)"> Semai (Seedling)</label>
-            <label><input type="checkbox" name="mon-umur" value="Pancang (Sapling)"> Pancang (Sapling)</label>
-            <label><input type="checkbox" name="mon-umur" value="Tiang (Pole)"> Tiang (Pole)</label>
-            <label><input type="checkbox" name="mon-umur" value="Pohon (Tree)"> Pohon (Tree)</label>
+            <legend>Tinggi Tanaman (Cm)</legend>
+            <label><input type="radio" name="mon-umur" value="Kurang dari 1 meter"> Kurang dari 1 meter</label>
+            <label><input type="radio" name="mon-umur" value="1 sampai dengan 2 meter"> 1 sampai dengan 2 meter</label>
+            <label><input type="radio" name="mon-umur" value="Lebih dari 2 meter"> Lebih dari 2 meter</label>
           </fieldset>
           <fieldset class="monitoring-field">
-            <legend>Pola Pengelolaan Lahan</legend>
-            <label><input type="checkbox" name="mon-pengelolaan" value="Agroforestry"> Agroforestry</label>
-            <label><input type="checkbox" name="mon-pengelolaan" value="Non Agroforestry"> Non Agroforestry</label>
+            <legend>Kondisi Hutan</legend>
+            <label><input type="radio" name="mon-pengelolaan" value="Baik"> Baik</label>
+            <label><input type="radio" name="mon-pengelolaan" value="Cukup"> Cukup</label>
+            <label><input type="radio" name="mon-pengelolaan" value="Kurang"> Kurang</label>
           </fieldset>
           <fieldset class="monitoring-field">
-            <legend>Kondisi Ekosistem</legend>
-            <label><input type="checkbox" name="mon-ekosistem" value="Sungai/anak sungai"> Sungai/anak sungai</label>
-            <label><input type="checkbox" name="mon-ekosistem" value="Mata air"> Mata air</label>
-            <label><input type="checkbox" name="mon-ekosistem" value="Satwa liar"> Satwa liar</label>
-            <label><input type="checkbox" name="mon-ekosistem" value="TSL endemic"> TSL endemic</label>
-            <label><input type="checkbox" name="mon-ekosistem" value="Pohon Induk"> Pohon Induk</label>
+            <legend>Sumber Air</legend>
+            <label><input type="checkbox" name="mon-ekosistem" value="Sungai"> Sungai</label>
+            <label><input type="checkbox" name="mon-ekosistem" value="Danau"> Danau</label>
+            <label><input type="checkbox" name="mon-ekosistem" value="Irigasi"> Irigasi</label>
+            <label><input type="checkbox" name="mon-ekosistem" value="Laut"> Laut</label>
+            <label><input type="checkbox" name="mon-ekosistem" value="Tadah Hujan"> Tadah Hujan</label>
           </fieldset>
           <fieldset class="monitoring-field">
-            <legend>Usulan Kegiatan</legend>
-            <label><input type="checkbox" name="mon-usulan" value="Vegetatif"> Vegetatif</label>
+            <legend>Usulan Kegiatan Lanjutan</legend>
+            <label><input type="checkbox" name="mon-usulan" value="Penyulaman"> Penyulaman</label>
+            <label><input type="checkbox" name="mon-usulan" value="Pemupukan"> Pemupukan</label>
+            <label><input type="checkbox" name="mon-usulan" value="Penyiraman"> Penyiraman</label>
+            <label><input type="checkbox" name="mon-usulan" value="Pembersihan Gulma"> Pembersihan Gulma</label>
+            <label><input type="checkbox" name="mon-usulan" value="Penambahan Sumber Air"> Penambahan Sumber Air</label>
             <label><input type="checkbox" name="mon-usulan" value="Sipil Teknis"> Sipil Teknis</label>
           </fieldset>
         </div>
