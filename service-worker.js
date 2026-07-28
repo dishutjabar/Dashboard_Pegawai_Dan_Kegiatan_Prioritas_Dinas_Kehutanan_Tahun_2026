@@ -1,5 +1,5 @@
 /* GeoHutan Service Worker v3 - Lebih aman, tidak intercept API call */
-const CACHE_NAME = 'geohutan-v3';
+const CACHE_NAME = 'geohutan-v4';
 
 const STATIC_URLS = [
   './index.html',

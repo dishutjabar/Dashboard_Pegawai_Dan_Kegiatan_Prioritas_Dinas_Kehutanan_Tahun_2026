@@ -235,18 +235,33 @@ let deferredPrompt;
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
   deferredPrompt = e;
+});
+
+window.addEventListener('load', () => {
   const installBtn = document.getElementById('btn-install-pwa');
   if (installBtn) {
-    installBtn.style.display = 'block';
     installBtn.onclick = function() {
-      installBtn.style.display = 'none';
       if (deferredPrompt) {
         deferredPrompt.prompt();
         deferredPrompt.userChoice.then((choiceResult) => {
+          if (choiceResult.outcome === 'accepted') {
+            installBtn.style.display = 'none';
+          }
           deferredPrompt = null;
         });
+      } else {
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+        if (isIOS) {
+          alert('Untuk pengguna iOS: Ketuk ikon Share (Bagikan) di bawah browser Anda, lalu pilih "Add to Home Screen" (Tambahkan ke Layar Utama) untuk menginstal GeoHutan.');
+        } else {
+          alert('Pemasangan otomatis belum siap. Anda juga dapat menginstal dengan memilih "Tambah ke Layar Utama" dari menu opsi browser Anda (titik tiga di pojok).');
+        }
       }
     };
+    
+    if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true) {
+      installBtn.style.display = 'none';
+    }
   }
 });
 
