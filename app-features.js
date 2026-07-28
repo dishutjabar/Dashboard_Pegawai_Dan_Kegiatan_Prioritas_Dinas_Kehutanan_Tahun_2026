@@ -1368,15 +1368,26 @@ function loadSpatialGeoJSONForFile(fileObj) {
 }
 
 function passesCdkSpatialFilter(gj, activeCDKs, activePJLPoints, fileInfo) {
-  if (!activeCDKs.length) return true;
+  var user = typeof getStoredAuthUser === 'function' ? getStoredAuthUser() : null;
+  var group = getRoleGroup(user ? user.role : null);
+  
+  var hasCdkFilter = (activeCDKs && activeCDKs.length > 0) || group === 3;
+  var hasPembinaFilter = (FILTER.binaan_pembina && FILTER.binaan_pembina.length > 0) || 
+                         (FILTER.binaan_kegiatan && FILTER.binaan_kegiatan.length > 0) || 
+                         (FILTER.binaan_jabatan && FILTER.binaan_jabatan.length > 0) || 
+                         group === 4 || group === 5;
+                         
+  if (!hasCdkFilter && !hasPembinaFilter) return true;
 
-  if (fileInfo && fileInfo.cdkTag) {
+  if (fileInfo && fileInfo.cdkTag && !hasPembinaFilter) {
     var fileCdkTags = fileInfo.cdkTag.toLowerCase().split(',').map(function(s) { return s.trim(); });
-    var match = activeCDKs.some(function(cdk) {
-      return fileCdkTags.indexOf(cdk.toLowerCase()) !== -1;
-    });
-    if (match) return true;
-    return false;
+    if (activeCDKs && activeCDKs.length > 0) {
+      var match = activeCDKs.some(function(cdk) {
+        return fileCdkTags.indexOf(cdk.toLowerCase()) !== -1;
+      });
+      if (match) return true;
+      return false;
+    }
   }
 
   if (!activePJLPoints.length) return false;
@@ -1690,14 +1701,32 @@ function renderSpatialPolygons(forceRebuild) {
   var mapBounds = mapObj.getBounds();
   var activeCDKs = FILTER.cdk && FILTER.cdk.length ? FILTER.cdk.map(function(c){ return c.toLowerCase(); }) : [];
   var activePJLPoints = [];
-  if (activeCDKs.length > 0) {
-    DATA.pjl.forEach(function(r) {
-      if (!r._lat || !r._lng) return;
-      var cdk = String(r['Unit Kerja'] || r['CDK'] || '').toLowerCase();
-      var cdkTags = cdk.split(',').map(function(s) { return s.trim(); });
-      var match = activeCDKs.some(function(f) { return cdkTags.indexOf(f) !== -1; });
-      if (match) activePJLPoints.push([r._lat, r._lng]);
-    });
+  
+  var user = typeof getStoredAuthUser === 'function' ? getStoredAuthUser() : null;
+  var group = getRoleGroup(user ? user.role : null);
+  var hasCdkFilter = activeCDKs.length > 0 || group === 3;
+  var hasPembinaFilter = (FILTER.binaan_pembina && FILTER.binaan_pembina.length > 0) || 
+                         (FILTER.binaan_kegiatan && FILTER.binaan_kegiatan.length > 0) || 
+                         (FILTER.binaan_jabatan && FILTER.binaan_jabatan.length > 0) || 
+                         group === 4 || group === 5;
+
+  if (hasCdkFilter || hasPembinaFilter) {
+    if (typeof DATA !== 'undefined' && Array.isArray(DATA.pegawaiBinaan)) {
+      DATA.pegawaiBinaan.forEach(function(r) {
+        if (!r._lat || !r._lng) return;
+        if (passFilter(r, 'pegawaiBinaan')) {
+          activePJLPoints.push([r._lat, r._lng]);
+        }
+      });
+    }
+    if (typeof DATA !== 'undefined' && Array.isArray(DATA.pjl)) {
+      DATA.pjl.forEach(function(r) {
+        if (!r._lat || !r._lng) return;
+        if (passFilter(r, 'pjl')) {
+          activePJLPoints.push([r._lat, r._lng]);
+        }
+      });
+    }
   }
 
   var candidates = SPATIAL_FILES_CACHE.filter(function(f) {
@@ -1741,35 +1770,70 @@ function renderSpatialPolygons(forceRebuild) {
 function addGeoJSONToSpatialLayer(gj, fileInfo, activeCDKs, activePJLPoints) {
   if (!gj || !gj.features || !SPATIAL_UPLOAD_LAYER) return null;
   
+  var user = typeof getStoredAuthUser === 'function' ? getStoredAuthUser() : null;
+  var group = getRoleGroup(user ? user.role : null);
+  var hasCdkFilter = (activeCDKs && activeCDKs.length > 0) || group === 3;
+  var hasPembinaFilter = (FILTER.binaan_pembina && FILTER.binaan_pembina.length > 0) || 
+                         (FILTER.binaan_kegiatan && FILTER.binaan_kegiatan.length > 0) || 
+                         (FILTER.binaan_jabatan && FILTER.binaan_jabatan.length > 0) || 
+                         group === 4 || group === 5;
+  var filterActive = hasCdkFilter || hasPembinaFilter;
+  
   var hasCdkTagMatch = false;
-  if (activeCDKs.length > 0 && fileInfo && fileInfo.cdkTag) {
+  if (activeCDKs && activeCDKs.length > 0 && fileInfo && fileInfo.cdkTag) {
     var fileCdkTags = fileInfo.cdkTag.toLowerCase().split(',').map(function(s) { return s.trim(); });
     hasCdkTagMatch = activeCDKs.some(function(cdk) {
       return fileCdkTags.indexOf(cdk.toLowerCase()) !== -1;
     });
   }
   
-  var useFeatureFilter = activeCDKs.length > 0 && activePJLPoints.length > 0 && !hasCdkTagMatch;
+  var useFeatureFilter = filterActive && activePJLPoints.length > 0 && !(hasCdkTagMatch && !hasPembinaFilter);
   if (fileInfo && SPATIAL_VISIBLE_CACHE[fileInfo.fileId] === false) return; // Hidden by toggle
 
   try {
     var filteredGj = gj;
     if (useFeatureFilter) {
-      filteredGj = { type: 'FeatureCollection', features: gj.features.filter(function(feature) {
+      var newFeatures = [];
+      gj.features.forEach(function(feature) {
         var geom = feature.geometry;
-        if (!geom) return false;
-        try {
-          var turfFeat = turf.feature(geom);
-          var fb = turf.bbox(turfFeat);
-          return activePJLPoints.some(function(pt) {
-            if (pt[1] < fb[0] || pt[1] > fb[2] || pt[0] < fb[1] || pt[0] > fb[3]) return false;
-            try { return turf.booleanPointInPolygon(turf.point([pt[1], pt[0]]), turfFeat); }
-            catch (e) {
-              return pt[1] >= fb[0] && pt[1] <= fb[2] && pt[0] >= fb[1] && pt[0] <= fb[3];
+        if (!geom) return;
+
+        function checkIntersect(checkGeom) {
+          try {
+            var turfFeat = turf.feature(checkGeom);
+            var fb = turf.bbox(turfFeat);
+            return activePJLPoints.some(function(pt) {
+              if (pt[1] < fb[0] || pt[1] > fb[2] || pt[0] < fb[1] || pt[0] > fb[3]) return false;
+              try { return turf.booleanPointInPolygon(turf.point([pt[1], pt[0]]), turfFeat); }
+              catch (e) {
+                return pt[1] >= fb[0] && pt[1] <= fb[2] && pt[0] >= fb[1] && pt[0] <= fb[3];
+              }
+            });
+          } catch(e) { return true; }
+        }
+
+        if (geom.type === 'MultiPolygon') {
+          var matchedPolys = [];
+          geom.coordinates.forEach(function(polyCoords) {
+            var subGeom = { type: 'Polygon', coordinates: polyCoords };
+            if (checkIntersect(subGeom)) {
+              matchedPolys.push(polyCoords);
             }
           });
-        } catch (e) { return true; }
-      }) };
+          if (matchedPolys.length > 0) {
+            if (matchedPolys.length === 1) {
+              newFeatures.push({ type: 'Feature', geometry: { type: 'Polygon', coordinates: matchedPolys[0] }, properties: feature.properties });
+            } else {
+              newFeatures.push({ type: 'Feature', geometry: { type: 'MultiPolygon', coordinates: matchedPolys }, properties: feature.properties });
+            }
+          }
+        } else {
+          if (checkIntersect(geom)) {
+            newFeatures.push(feature);
+          }
+        }
+      });
+      filteredGj = { type: 'FeatureCollection', features: newFeatures };
     }
 
     var isLarge = fileInfo && (fileInfo.sizeKB > 1500);
