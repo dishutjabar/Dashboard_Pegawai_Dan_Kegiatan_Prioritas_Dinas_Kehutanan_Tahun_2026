@@ -495,11 +495,19 @@ function togglePasswordVisibility(inputId, btn) {
   if (btn) btn.textContent = input.type === "password" ? "Tampilkan" : "Sembunyikan";
 }
 
-function toggleCredentialPanel() {
-  var panel = document.getElementById("credential-panel");
-  if (!panel) return;
-  panel.classList.toggle("open");
-  setAuthStatus("", false);
+function openCredentialModal() {
+  closeProfileMenu();
+  var modal = document.getElementById("credential-modal");
+  if (modal) {
+    modal.style.display = "flex";
+    var form = document.getElementById("credential-form");
+    if (form) form.reset();
+  }
+}
+
+function closeCredentialModal() {
+  var modal = document.getElementById("credential-modal");
+  if (modal) modal.style.display = "none";
 }
 
 function submitCredentialChange(event) {
@@ -532,12 +540,10 @@ function submitCredentialChange(event) {
     newPassword: newPassword
   }).then(function(res) {
     if (!res.success) throw new Error(res.error || "Gagal memperbarui akun.");
-    clearStoredAuth();
-    var form = document.getElementById("credential-form");
-    if (form) form.reset();
-    var loginUser = document.getElementById("login-username");
-    if (loginUser) loginUser.value = newUsername.trim();
-    setAuthStatus("Akun berhasil diperbarui. Silakan login dengan username dan password baru.", false);
+    
+    alert("Akun berhasil diperbarui. Silakan login kembali dengan password baru.");
+    closeCredentialModal();
+    logoutGeoHutan();
   }).catch(function(err) {
     setAuthStatus(err.message || "Gagal memperbarui akun.", true);
   }).finally(function() {
@@ -549,16 +555,30 @@ document.addEventListener("DOMContentLoaded", function() {
   initAuthPortal();
   
   // Auto-collapse sidebar on mobile load
-  if (window.innerWidth <= 768) {
+  if (window.innerWidth <= 950) {
     var sb = document.getElementById('sidebar');
     if (sb) sb.classList.add('sidebar-collapsed');
     var sbBtn = document.getElementById('sidebar-collapse-btn');
     if (sbBtn) sbBtn.innerHTML = '&rsaquo;';
   }
   
+  // PWA: Cek apakah sudah bisa di-install (standalone mode = sudah diinstall)
+  if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true) {
+    var installBtn = document.getElementById('btn-install-pwa');
+    if (installBtn) installBtn.style.display = 'none';
+  }
+  
+  // Credential modal close on backdrop click
+  var credModal = document.getElementById('credential-modal');
+  if (credModal) {
+    credModal.addEventListener('click', function(e) {
+      if (e.target === credModal) closeCredentialModal();
+    });
+  }
+  
   document.addEventListener("click", closeProfileMenu);
   document.addEventListener("keydown", function(event) {
-    if (event.key === "Escape") closeProfileMenu();
+    if (event.key === "Escape") { closeProfileMenu(); closeCredentialModal(); }
   });
   var profileMenu = document.getElementById("profile-menu");
   if (profileMenu) {
@@ -2107,7 +2127,7 @@ function openDrawer(type, r) {
   if (minBtn) minBtn.innerHTML = '&minus;';
 
   // Auto-collapse sidebar on mobile to prevent overlapping
-  if (window.innerWidth <= 768) {
+  if (window.innerWidth <= 950) {
     var sb = document.getElementById('sidebar');
     if (sb && !sb.classList.contains('sidebar-collapsed')) {
       sb.classList.add('sidebar-collapsed');
@@ -2118,6 +2138,7 @@ function openDrawer(type, r) {
 
   var t = document.getElementById('drawer-title');
   var c = document.getElementById('drawer-content');
+  if (c) c.scrollTop = 0;
   if (t) t.textContent = POP_LABEL[type] || 'Detail Informasi';
 
   var cx = r._lng, cy = r._lat;
@@ -2331,12 +2352,16 @@ function openDrawer(type, r) {
   
   if (dr) dr.classList.add('open');
 
-  // ── Inject AI Assistant card (hanya untuk role yang diizinkan) ──
+  // ── Inject AI Assistant card FIRST, then reset scroll ──
   if (typeof GeoHutanAI !== 'undefined' && typeof GeoHutanAI.injectCard === 'function') {
-    setTimeout(function() {
-      GeoHutanAI.injectCard(type, r);
-    }, 80);
+    GeoHutanAI.injectCard(type, r);
   }
+  
+  // Reset scroll to top AFTER all content is injected
+  setTimeout(function() {
+    var c2 = document.getElementById('drawer-content');
+    if (c2) c2.scrollTop = 0;
+  }, 50);
 }
 function closeDrawer() { 
   var dr = document.getElementById('detail-drawer');

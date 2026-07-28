@@ -217,3 +217,42 @@ fetch('Jawa Barattt.geojson')
   .catch(err => {
     console.error("Gagal load GeoJSON:", err);
   });
+
+
+/* PWA INTEGRATION */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function() {
+    navigator.serviceWorker.register('service-worker.js').then(function(registration) {
+      console.log('ServiceWorker registered, scope: ', registration.scope);
+      registration.update();
+    }, function(err) {
+      console.warn('ServiceWorker registration failed: ', err);
+    });
+  });
+}
+
+let deferredPrompt;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  const installBtn = document.getElementById('btn-install-pwa');
+  if (installBtn) {
+    installBtn.style.display = 'block';
+    installBtn.onclick = function() {
+      installBtn.style.display = 'none';
+      if (deferredPrompt) {
+        deferredPrompt.prompt();
+        deferredPrompt.userChoice.then((choiceResult) => {
+          deferredPrompt = null;
+        });
+      }
+    };
+  }
+});
+
+window.addEventListener('appinstalled', () => {
+  console.log('GeoHutan telah diinstal!');
+  const installBtn = document.getElementById('btn-install-pwa');
+  if (installBtn) installBtn.style.display = 'none';
+  deferredPrompt = null;
+});
