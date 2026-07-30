@@ -219,55 +219,340 @@ fetch('Jawa Barattt.geojson')
   });
 
 
-/* PWA INTEGRATION */
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', function() {
-    navigator.serviceWorker.register('service-worker.js').then(function(registration) {
-      console.log('ServiceWorker registered, scope: ', registration.scope);
-      registration.update();
-    }, function(err) {
-      console.warn('ServiceWorker registration failed: ', err);
-    });
+/* ═══════════════════════════════════════════════════════════════
+   PWA INTEGRATION — Auto-Update + Install Prompt
+   ═══════════════════════════════════════════════════════════════ */
+
+// ── Toast notifikasi update ─────────────────────────────────────
+function showUpdateToast(onReload) {
+  // Hapus toast lama jika ada
+  const old = document.getElementById('pwa-update-toast');
+  if (old) old.remove();
+
+  const toast = document.createElement('div');
+  toast.id = 'pwa-update-toast';
+  toast.setAttribute('role', 'alert');
+  toast.innerHTML = `
+    <div class="pwa-toast-content">
+      <span class="pwa-toast-icon">🔄</span>
+      <div class="pwa-toast-text">
+        <strong>Pembaruan Tersedia!</strong>
+        <small>Versi terbaru GeoHutan siap digunakan.</small>
+      </div>
+      <button id="pwa-reload-btn" class="pwa-toast-btn pwa-btn-primary">Perbarui Sekarang</button>
+      <button id="pwa-dismiss-btn" class="pwa-toast-btn pwa-btn-secondary" title="Tutup">✕</button>
+    </div>
+  `;
+
+  // Inject style jika belum ada
+  if (!document.getElementById('pwa-toast-style')) {
+    const style = document.createElement('style');
+    style.id = 'pwa-toast-style';
+    style.textContent = `
+      #pwa-update-toast {
+        position: fixed;
+        bottom: 24px;
+        left: 50%;
+        transform: translateX(-50%) translateY(120px);
+        z-index: 99999;
+        background: linear-gradient(135deg, #1b5e20 0%, #2e7d32 100%);
+        color: #fff;
+        border-radius: 14px;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.35), 0 2px 8px rgba(46,125,50,0.4);
+        padding: 0;
+        min-width: 320px;
+        max-width: 92vw;
+        transition: transform 0.4s cubic-bezier(0.34,1.56,0.64,1), opacity 0.3s ease;
+        opacity: 0;
+        border: 1px solid rgba(255,255,255,0.15);
+      }
+      #pwa-update-toast.visible {
+        transform: translateX(-50%) translateY(0);
+        opacity: 1;
+      }
+      .pwa-toast-content {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 14px 16px;
+      }
+      .pwa-toast-icon { font-size: 22px; flex-shrink: 0; }
+      .pwa-toast-text { flex: 1; line-height: 1.3; }
+      .pwa-toast-text strong { display: block; font-size: 13.5px; }
+      .pwa-toast-text small { font-size: 11.5px; opacity: 0.85; }
+      .pwa-toast-btn {
+        border: none;
+        border-radius: 8px;
+        padding: 7px 14px;
+        font-size: 12.5px;
+        font-weight: 600;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: background 0.2s, transform 0.1s;
+        flex-shrink: 0;
+      }
+      .pwa-toast-btn:active { transform: scale(0.96); }
+      .pwa-btn-primary {
+        background: #fff;
+        color: #1b5e20;
+      }
+      .pwa-btn-primary:hover { background: #e8f5e9; }
+      .pwa-btn-secondary {
+        background: rgba(255,255,255,0.15);
+        color: #fff;
+        padding: 7px 10px;
+      }
+      .pwa-btn-secondary:hover { background: rgba(255,255,255,0.25); }
+
+      /* Toast install PWA */
+      #pwa-install-toast {
+        position: fixed;
+        bottom: 24px;
+        right: 20px;
+        z-index: 99998;
+        background: linear-gradient(135deg, #0d47a1 0%, #1565c0 100%);
+        color: #fff;
+        border-radius: 14px;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+        padding: 14px 16px;
+        min-width: 260px;
+        max-width: 88vw;
+        transform: translateY(120px);
+        opacity: 0;
+        transition: transform 0.4s cubic-bezier(0.34,1.56,0.64,1), opacity 0.3s ease;
+        border: 1px solid rgba(255,255,255,0.15);
+      }
+      #pwa-install-toast.visible {
+        transform: translateY(0);
+        opacity: 1;
+      }
+      .pwa-install-content { display: flex; align-items: center; gap: 10px; }
+      .pwa-install-icon { font-size: 24px; }
+      .pwa-install-text { flex: 1; line-height: 1.3; }
+      .pwa-install-text strong { display: block; font-size: 13.5px; }
+      .pwa-install-text small { font-size: 11px; opacity: 0.85; }
+      .pwa-install-actions { display: flex; gap: 6px; margin-top: 10px; justify-content: flex-end; }
+    `;
+    document.head.appendChild(style);
+  }
+
+  document.body.appendChild(toast);
+  // Trigger animasi masuk
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => toast.classList.add('visible'));
+  });
+
+  document.getElementById('pwa-reload-btn').addEventListener('click', () => {
+    toast.classList.remove('visible');
+    setTimeout(() => {
+      if (typeof onReload === 'function') onReload();
+    }, 300);
+  });
+
+  document.getElementById('pwa-dismiss-btn').addEventListener('click', () => {
+    toast.classList.remove('visible');
+    setTimeout(() => toast.remove(), 400);
+  });
+
+  // Auto-dismiss setelah 30 detik
+  setTimeout(() => {
+    if (document.getElementById('pwa-update-toast')) {
+      toast.classList.remove('visible');
+      setTimeout(() => toast.remove(), 400);
+    }
+  }, 30000);
+}
+
+// ── Toast install PWA (muncul otomatis saat browser siap) ───────
+function showInstallToast(onInstall, onDismiss) {
+  const old = document.getElementById('pwa-install-toast');
+  if (old) return; // sudah tampil
+
+  const toast = document.createElement('div');
+  toast.id = 'pwa-install-toast';
+  toast.setAttribute('role', 'dialog');
+  toast.setAttribute('aria-label', 'Instal GeoHutan sebagai aplikasi');
+  toast.innerHTML = `
+    <div class="pwa-install-content">
+      <span class="pwa-install-icon">📲</span>
+      <div class="pwa-install-text">
+        <strong>Instal GeoHutan</strong>
+        <small>Tambahkan ke layar utama untuk akses lebih cepat & offline</small>
+      </div>
+    </div>
+    <div class="pwa-install-actions">
+      <button id="pwa-install-dismiss" class="pwa-toast-btn pwa-btn-secondary">Nanti</button>
+      <button id="pwa-install-confirm" class="pwa-toast-btn pwa-btn-primary" style="background:#fff;color:#0d47a1;">Instal</button>
+    </div>
+  `;
+
+  document.body.appendChild(toast);
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => toast.classList.add('visible'));
+  });
+
+  document.getElementById('pwa-install-confirm').addEventListener('click', () => {
+    toast.classList.remove('visible');
+    setTimeout(() => { toast.remove(); if (typeof onInstall === 'function') onInstall(); }, 300);
+  });
+
+  document.getElementById('pwa-install-dismiss').addEventListener('click', () => {
+    toast.classList.remove('visible');
+    setTimeout(() => { toast.remove(); if (typeof onDismiss === 'function') onDismiss(); }, 300);
+    // Tunda tampil lagi 3 hari
+    localStorage.setItem('pwa_install_dismiss_ts', Date.now().toString());
   });
 }
 
-let deferredPrompt;
+// ── Registrasi Service Worker ───────────────────────────────────
+let deferredPrompt = null;
+let swRegistration  = null;
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', async function () {
+    try {
+      swRegistration = await navigator.serviceWorker.register('service-worker.js', {
+        updateViaCache: 'none'   // Paksa browser selalu cek SW terbaru dari server
+      });
+      console.log('[PWA] Service Worker terdaftar, scope:', swRegistration.scope);
+
+      // Cek update saat halaman load & setiap 60 detik
+      swRegistration.update().catch(() => {});
+      setInterval(() => swRegistration.update().catch(() => {}), 60 * 1000);
+
+      // SW baru sedang menunggu → tawarkan update
+      if (swRegistration.waiting) {
+        console.log('[PWA] SW baru sudah menunggu aktivasi');
+        showUpdateToast(() => {
+          swRegistration.waiting.postMessage({ type: 'SKIP_WAITING' });
+        });
+      }
+
+      // SW baru ditemukan saat install
+      swRegistration.addEventListener('updatefound', () => {
+        const newWorker = swRegistration.installing;
+        if (!newWorker) return;
+        console.log('[PWA] SW baru sedang diinstal...');
+
+        newWorker.addEventListener('statechange', () => {
+          if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+            console.log('[PWA] SW baru siap — tampilkan notifikasi update');
+            showUpdateToast(() => {
+              newWorker.postMessage({ type: 'SKIP_WAITING' });
+            });
+          }
+        });
+      });
+
+      // ⚡ Terima sinyal dari SW bahwa versi baru sudah aktif → reload
+      navigator.serviceWorker.addEventListener('message', event => {
+        if (event.data && event.data.type === 'SW_UPDATED') {
+          console.log('[PWA] SW versi baru aktif:', event.data.version, '— reload halaman');
+          window.location.reload(true);
+        }
+      });
+
+      // Reload otomatis saat SW controller berganti (tab lama)
+      let refreshing = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!refreshing) {
+          refreshing = true;
+          console.log('[PWA] Controller berubah — reload halaman');
+          window.location.reload(true);
+        }
+      });
+
+    } catch (err) {
+      console.warn('[PWA] Registrasi Service Worker gagal:', err);
+    }
+  });
+}
+
+// ── Install Prompt (Android Chrome & kompatibel) ────────────────
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
   deferredPrompt = e;
-});
+  console.log('[PWA] beforeinstallprompt ditangkap — siap menampilkan prompt instal');
 
-window.addEventListener('load', () => {
+  // Sembunyikan tombol install di UI (pakai toast kita sendiri)
   const installBtn = document.getElementById('btn-install-pwa');
-  if (installBtn) {
-    installBtn.onclick = function() {
-      if (deferredPrompt) {
-        deferredPrompt.prompt();
-        deferredPrompt.userChoice.then((choiceResult) => {
-          if (choiceResult.outcome === 'accepted') {
-            installBtn.style.display = 'none';
+  if (installBtn) installBtn.style.display = 'none';
+
+  // Cek apakah user pernah dismiss (tunda 3 hari)
+  const dismissTs  = parseInt(localStorage.getItem('pwa_install_dismiss_ts') || '0');
+  const threeDays  = 3 * 24 * 60 * 60 * 1000;
+  const shouldShow = Date.now() - dismissTs > threeDays;
+
+  if (shouldShow && !window.matchMedia('(display-mode: standalone)').matches) {
+    // Tunda sedikit agar halaman selesai render
+    setTimeout(() => {
+      showInstallToast(
+        // onInstall
+        () => {
+          if (deferredPrompt) {
+            deferredPrompt.prompt();
+            deferredPrompt.userChoice.then(choice => {
+              console.log('[PWA] Pilihan user:', choice.outcome);
+              deferredPrompt = null;
+            });
           }
-          deferredPrompt = null;
-        });
-      } else {
-        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-        if (isIOS) {
-          alert('Untuk pengguna iOS: Ketuk ikon Share (Bagikan) di bawah browser Anda, lalu pilih "Add to Home Screen" (Tambahkan ke Layar Utama) untuk menginstal GeoHutan.');
-        } else {
-          alert('Pemasangan otomatis belum siap. Anda juga dapat menginstal dengan memilih "Tambah ke Layar Utama" dari menu opsi browser Anda (titik tiga di pojok).');
-        }
-      }
-    };
-    
-    if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true) {
-      installBtn.style.display = 'none';
-    }
+        },
+        // onDismiss
+        () => { console.log('[PWA] User menunda instalasi'); }
+      );
+    }, 3000);
   }
 });
 
+// ── Tombol install manual di UI ─────────────────────────────────
+window.addEventListener('load', () => {
+  const installBtn = document.getElementById('btn-install-pwa');
+  if (!installBtn) return;
+
+  // Sembunyikan jika sudah terinstal sebagai standalone
+  if (
+    window.matchMedia('(display-mode: standalone)').matches ||
+    window.navigator.standalone === true
+  ) {
+    installBtn.style.display = 'none';
+    return;
+  }
+
+  installBtn.addEventListener('click', () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      deferredPrompt.userChoice.then(choice => {
+        if (choice.outcome === 'accepted') {
+          installBtn.style.display = 'none';
+        }
+        deferredPrompt = null;
+      });
+    } else {
+      // iOS Safari
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+      if (isIOS) {
+        alert(
+          '📲 Untuk pengguna iOS:\n' +
+          'Ketuk ikon "Bagikan" (kotak dengan panah ke atas) di bawah browser,\n' +
+          'lalu pilih "Tambahkan ke Layar Utama".'
+        );
+      } else {
+        alert(
+          '📲 Untuk menginstal GeoHutan:\n' +
+          'Buka menu browser (⋮ titik tiga di pojok kanan atas),\n' +
+          'lalu pilih "Instal Aplikasi" atau "Tambah ke Layar Utama".'
+        );
+      }
+    }
+  });
+});
+
+// ── Sembunyikan tombol install setelah terpasang ────────────────
 window.addEventListener('appinstalled', () => {
-  console.log('GeoHutan telah diinstal!');
+  console.log('[PWA] GeoHutan berhasil diinstal!');
   const installBtn = document.getElementById('btn-install-pwa');
   if (installBtn) installBtn.style.display = 'none';
+  const installToast = document.getElementById('pwa-install-toast');
+  if (installToast) installToast.remove();
   deferredPrompt = null;
 });
