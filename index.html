@@ -8,7 +8,14 @@
 <meta name="description" content="Dashboard WebGIS Dinas Kehutanan Provinsi Jawa Barat">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#2e7d32">
-<link rel="apple-touch-icon" href="img/icon-192.png">
+<!-- PWA iOS Meta Tags -->
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="GeoHutan">
+<link rel="apple-touch-icon" href="img/pwa-icon-192.png">
+<link rel="apple-touch-icon" sizes="192x192" href="img/pwa-icon-192.png">
+<link rel="apple-touch-icon" sizes="512x512" href="img/pwa-icon-512.png">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
@@ -69,7 +76,7 @@
       </label>
 
       <button id="login-submit" class="auth-primary" type="submit">Masuk Dashboard</button>
-      <button id="btn-install-pwa" class="auth-primary secondary" type="button" style="display: block; margin-top: 10px; background: transparent; color: var(--primary); border: 1px solid var(--primary);">Unduh Aplikasi GeoHutan</button>
+      <button id="btn-install-pwa" class="auth-primary secondary" type="button" style="display: block; margin-top: 10px; background: transparent; color: var(--primary); border: 1px solid var(--primary);" aria-label="Unduh dan instal aplikasi GeoHutan ke perangkat">📲 Unduh Aplikasi GeoHutan</button>
     </form>
 
     <div id="auth-status" class="auth-status" aria-live="polite"></div>
