@@ -7,7 +7,7 @@
 // ── UBAH VERSI INI setiap kali deploy / update proyek ──────────
 // Bisa pakai tanggal: 'geohutan-2026-07-30-v1'
 // Atau auto timestamp jika build tool tersedia
-const CACHE_VERSION = 'geohutan-2026-07-30-v2';
+const CACHE_VERSION = 'geohutan-2026-07-30-v10';
 const CACHE_NAME    = `geohutan-static-${CACHE_VERSION}`;
 const CACHE_DYNAMIC = `geohutan-dynamic-${CACHE_VERSION}`;
 
