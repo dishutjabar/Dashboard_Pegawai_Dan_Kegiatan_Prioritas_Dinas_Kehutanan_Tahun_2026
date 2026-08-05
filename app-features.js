@@ -1,6 +1,86 @@
-/* ═══ GeoHutan Jabar – Features ═══ */
+﻿// Custom ShapeMarker Extension for Canvas
+if (typeof L !== 'undefined' && L.Canvas) {
+    L.Canvas.include({
+        _updateShapeMarker: function (layer) {
+            if (!this._drawing || layer._empty()) { return; }
+            var p = layer._point, ctx = this._ctx, shape = layer.options.shape;
+            
+            // Dynamic scale based on zoom
+            var zoom = this._map ? this._map.getZoom() : 12;
+            var r = layer._radius;
+            if (zoom <= 8) r = r * 0.4;
+            else if (zoom === 9) r = r * 0.5;
+            else if (zoom === 10) r = r * 0.6;
+            else if (zoom === 11) r = r * 0.8;
+            else if (zoom >= 14) r = r * 1.3;
+            else if (zoom >= 16) r = r * 1.5;
+            
+            r = Math.max(1.5, Math.min(r, 10)); // bounds
+
+            ctx.beginPath();
+            if (shape === 'square') {
+                ctx.rect(p.x - r, p.y - r, r * 2, r * 2);
+            } else if (shape === 'diamond') {
+                ctx.moveTo(p.x, p.y - r);
+                ctx.lineTo(p.x + r, p.y);
+                ctx.lineTo(p.x, p.y + r);
+                ctx.lineTo(p.x - r, p.y);
+                ctx.closePath();
+            } else if (shape === 'pentagon') {
+                for (var i = 0; i < 5; i++) {
+                    var a = (Math.PI * 2 * i / 5) - Math.PI / 2;
+                    var x = p.x + r * Math.cos(a);
+                    var y = p.y + r * Math.sin(a);
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.closePath();
+            } else if (shape === 'star') {
+                var rot = Math.PI / 2 * 3;
+                var cx = p.x, cy = p.y;
+                var step = Math.PI / 5;
+                ctx.moveTo(cx, cy - r);
+                for (var i = 0; i < 5; i++) {
+                    ctx.lineTo(cx + Math.cos(rot) * r, cy + Math.sin(rot) * r);
+                    rot += step;
+                    ctx.lineTo(cx + Math.cos(rot) * (r * 0.4), cy + Math.sin(rot) * (r * 0.4));
+                    rot += step;
+                }
+                ctx.lineTo(cx, cy - r);
+                ctx.closePath();
+            } else if (shape === 'triangle') {
+                ctx.moveTo(p.x, p.y - r);
+                ctx.lineTo(p.x + (r * 0.866), p.y + (r * 0.5));
+                ctx.lineTo(p.x - (r * 0.866), p.y + (r * 0.5));
+                ctx.closePath();
+            } else {
+                ctx.arc(p.x, p.y, r, 0, Math.PI * 2, false);
+            }
+            this._fillStroke(ctx, layer);
+        }
+    });
+
+    L.ShapeMarker = L.CircleMarker.extend({
+        _updatePath: function () {
+            if (this._renderer && this._renderer._updateShapeMarker) {
+                this._renderer._updateShapeMarker(this);
+            } else {
+                L.CircleMarker.prototype._updatePath.call(this);
+            }
+        }
+    });
+
+    L.shapeMarker = function (latlng, options) {
+        return new L.ShapeMarker(latlng, options);
+    };
+}
+
+/* â•â•â• GeoHutan Jabar â€“ Features â•â•â• */
 /** URL Web App Google Apps Script */
 var GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwCdFIZ3y9BbBiRHJItturR5cSt2RvoQKEbePXXhogpusq_8oID6v6pN654k85sI1kb/exec";
+var REQUIRED_BACKEND_VERSION = "2026-08-02-weekly-report-v3";
+var _backendVersionChecked = false;
+var _backendVersionOk = null;
 var AUTH_TOKEN_STORAGE_KEY = "geohutan_auth_token";
 var AUTH_USER_STORAGE_KEY = "geohutan_auth_user";
 
@@ -160,6 +240,8 @@ function applyCurrentUserRoleDefaults(user) {
   document.body.classList.remove('rbac-group-1', 'rbac-group-2', 'rbac-group-3', 'rbac-group-4', 'rbac-no-spatial-upload');
   document.body.classList.add('rbac-group-' + group);
   if (group > 1) document.body.classList.add('rbac-no-spatial-upload');
+  var reportMenu = document.getElementById('report-menu');
+  if (reportMenu) reportMenu.style.display = group <= 3 ? 'block' : 'none';
 
   var spatialToggle = document.getElementById('toggle-spatial');
   var clusterToggle = document.getElementById('toggle-cluster');
@@ -287,6 +369,7 @@ function updateAuthUserUI(user) {
   var btnTable = document.getElementById("btn-table");
   var btnSource = document.getElementById("btn-source");
   var btnExport = document.getElementById("btn-export");
+  var reportMenu = document.getElementById("report-menu");
 
   var chkSpatial = document.getElementById("toggle-spatial");
   var drawControl = document.querySelector(".leaflet-draw, .custom-draw-control");
@@ -305,6 +388,7 @@ function updateAuthUserUI(user) {
     
     // UI Logic based on Group
     var group = getRoleGroup(user.role);
+    if (reportMenu) reportMenu.style.display = group <= 3 ? 'block' : 'none';
     if (group === 1) {
       if (btnSpatial) { btnSpatial.style.display = ''; btnSpatial.innerHTML = '&#128205; <span class="d-none-mobile">Upload Spasial</span>'; }
       if (btnTable) btnTable.style.display = '';
@@ -383,6 +467,7 @@ function updateAuthUserUI(user) {
     if (btnSpatial) btnSpatial.style.display = 'none';
     if (btnSource) btnSource.style.display = 'none';
     if (btnExport) btnExport.style.display = 'none';
+    if (reportMenu) reportMenu.style.display = 'none';
   }
   applyCurrentUserRoleDefaults(user);
 }
@@ -451,6 +536,17 @@ function closeProfileMenu() {
   if (!menu) return;
   menu.classList.remove("open");
   if (trigger) trigger.setAttribute("aria-expanded", "false");
+}
+
+function toggleReportMenu(event) {
+  if (event) event.stopPropagation();
+  var menu = document.getElementById("report-menu");
+  if (menu) menu.classList.toggle("open");
+}
+
+function closeReportMenu() {
+  var menu = document.getElementById("report-menu");
+  if (menu) menu.classList.remove("open");
 }
 
 function submitLogin(event) {
@@ -677,9 +773,9 @@ function togglePjlPolygons() {
   showToast('Area Tanam 2 Ha (Jaga Leuweung) ' + (PJL_POLYGON_ENABLED ? 'ditampilkan' : 'disembunyikan'));
 }
 
-/* ════════════════════════════════════════════════════════════
-   🗺️  SPATIAL UPLOAD SYSTEM
-   ════════════════════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   ðŸ—ºï¸  SPATIAL UPLOAD SYSTEM
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 var SPATIAL_UPLOAD_LAYER = null;
 var SPATIAL_ENABLED = false;
 var SPATIAL_FILES_CACHE = []; // [{fileId, filename, url, uploaded, sizeKB, cdkTag, geojson}]
@@ -828,7 +924,7 @@ function closeSpatialModal() {
   if (m) m.style.display = 'none';
 }
 
-/* ── Handle Drop (supports folder drag via webkitGetAsEntry) ── */
+/* â”€â”€ Handle Drop (supports folder drag via webkitGetAsEntry) â”€â”€ */
 function handleSpatialDrop(event) {
   event.preventDefault();
   var dz = document.getElementById('spatial-dropzone');
@@ -891,7 +987,7 @@ function collectSpatialEntryFiles(entries, cb) {
   tick();
 }
 
-/* ── Handle Files (from input or drop) ── */
+/* â”€â”€ Handle Files (from input or drop) â”€â”€ */
 function handleSpatialFiles(fileList) {
   if (!canManageSpatialData()) {
     showToast('Akun ini hanya dapat mengatur tampilan polygon, bukan upload data spasial.', 'error');
@@ -961,7 +1057,7 @@ function handleSpatialFiles(fileList) {
           processNext(idx + 1);
         });
       } else {
-        showToast('Gagal parse: ' + job.name + (err ? ' — ' + err : ''));
+        showToast('Gagal parse: ' + job.name + (err ? ' â€” ' + err : ''));
         processNext(idx + 1);
       }
     });
@@ -969,7 +1065,7 @@ function handleSpatialFiles(fileList) {
   processNext(0);
 }
 
-/* ── Parse single file/group to GeoJSON ── */
+/* â”€â”€ Parse single file/group to GeoJSON â”€â”€ */
 function parseSpatialFile(job, cb) {
   try {
     if (job.type === 'geojson') {
@@ -1053,7 +1149,7 @@ function parseSpatialFile(job, cb) {
   } catch(e) { cb(null, e.message); }
 }
 
-/* ── Upload GeoJSON ke Backend GAS ── */
+/* â”€â”€ Upload GeoJSON ke Backend GAS â”€â”€ */
 function uploadSpatialToBackendLegacy(geojson, filename, done) {
   if (!canManageSpatialData()) {
     showToast('Akun ini tidak memiliki izin upload polygon spasial.', 'error');
@@ -1108,13 +1204,13 @@ function uploadSpatialToBackendLegacy(geojson, filename, done) {
       SPATIAL_GEOJSON_MEM[res.fileId] = geojson;
       if (bbox) saveSpatialBBoxToLS(res.fileId, bbox);
       if (SPATIAL_ENABLED) scheduleSpatialPolygonLoad(50);
-      showToast('✓ Tersimpan: ' + filename);
+      showToast('âœ“ Tersimpan: ' + filename);
     } else { showToast('Gagal simpan: ' + (res.error || 'Error')); }
     if (done) done();
   }).catch(function(err) { showToast('Error upload: ' + err.message); if (done) done(); });
 }
 
-/* ── Fetch daftar file spasial dari backend ── */
+/* â”€â”€ Fetch daftar file spasial dari backend â”€â”€ */
 var SPATIAL_MAX_POST_BYTES = 3500000;
 
 function estimateJSONBytes(value) {
@@ -1597,7 +1693,7 @@ function getSpatialFeatureStyle(feature, fileInfo) {
   var palette = SPATIAL_CATEGORY_STYLES[kategori] || SPATIAL_CATEGORY_STYLES['Jaga Leuweung'];
   var geom = feature && feature.geometry;
 
-  /* Kuning kehijauan (#A4C639) hanya untuk garis murni tanpa isi — bukan polygon tipis */
+  /* Kuning kehijauan (#A4C639) hanya untuk garis murni tanpa isi â€” bukan polygon tipis */
   if (isSpatialLineGeometry(geom)) {
     return Object.assign({ dashArray: null }, palette.line || palette.polygon);
   }
@@ -1720,7 +1816,7 @@ function fetchSpatialFileList() {
     .catch(function(err) { if (listEl) listEl.innerHTML = '<div class="sp-file-list-error">Gagal terhubung ke backend.</div>'; });
 }
 
-/* ── Render daftar file di modal (scroll + pagination) ── */
+/* â”€â”€ Render daftar file di modal (scroll + pagination) â”€â”€ */
 function renderSpatialFileList(files) {
   SPATIAL_LIST_ALL = files || [];
   SPATIAL_LIST_PAGE = 0;
@@ -1748,10 +1844,10 @@ function renderSpatialFileListPage() {
   if (SPATIAL_LIST_PAGE > totalPages - 1) SPATIAL_LIST_PAGE = Math.max(0, totalPages - 1);
   var start = SPATIAL_LIST_PAGE * SPATIAL_LIST_PAGE_SIZE;
   var pageFiles = files.slice(start, start + SPATIAL_LIST_PAGE_SIZE);
-  var icons = {geojson:'🗺️', json:'🗺️', kml:'📍', kmz:'📍', shp:'🟫', zip:'📦'};
+  var icons = {geojson:'ðŸ—ºï¸', json:'ðŸ—ºï¸', kml:'ðŸ“', kmz:'ðŸ“', shp:'ðŸŸ«', zip:'ðŸ“¦'};
   var html = pageFiles.map(function(f) {
     var ext = f.filename.split('.').pop().toLowerCase();
-    var icon = icons[ext] || '📄';
+    var icon = icons[ext] || 'ðŸ“„';
     var cdkBadge = f.cdkTag ? '<span class="sp-upload-badge">' + f.cdkTag + '</span>' : '';
     return '<div class="sp-file-item" id="sp-item-' + f.fileId + '">' +
       '<div class="sp-file-icon">' + icon + '</div>' +
@@ -1776,7 +1872,7 @@ function renderSpatialFileListPage() {
   listEl.innerHTML = html;
 }
 
-/* ── Render polygon ke peta dengan filter CDK (lazy + viewport) ── */
+/* â”€â”€ Render polygon ke peta dengan filter CDK (lazy + viewport) â”€â”€ */
 function renderSpatialPolygons(forceRebuild) {
   if (forceRebuild) {
     if (SPATIAL_UPLOAD_LAYER && mapObj) { try { mapObj.removeLayer(SPATIAL_UPLOAD_LAYER); } catch(e) {} }
@@ -1853,7 +1949,7 @@ function renderSpatialPolygons(forceRebuild) {
   processBatch();
 }
 
-/* ── Add one GeoJSON to the spatial layer with CDK spatial filter ── */
+/* â”€â”€ Add one GeoJSON to the spatial layer with CDK spatial filter â”€â”€ */
 function addGeoJSONToSpatialLayer(gj, fileInfo, activeCDKs, activePJLPoints) {
   if (!gj || !gj.features || !SPATIAL_UPLOAD_LAYER) return null;
   
@@ -1899,7 +1995,7 @@ function addGeoJSONToSpatialLayer(gj, fileInfo, activeCDKs, activePJLPoints) {
           return '<tr><td style="padding:2px 8px 2px 0; font-weight:600; color:#43a047; white-space:nowrap;">' + k + '</td><td style="padding:2px 0;">' + props[k] + '</td></tr>';
         }).join('');
         var html = '<div style="font-size:11px; font-family:Inter; max-height:220px; overflow-y:auto;">' +
-          '<b style="font-size:12px; color:' + popupAccent + '; display:block; margin-bottom:6px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:4px;">📄 ' + (fileInfo ? fileInfo.filename : '') + '</b>' +
+          '<b style="font-size:12px; color:' + popupAccent + '; display:block; margin-bottom:6px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:4px;">ðŸ“„ ' + (fileInfo ? fileInfo.filename : '') + '</b>' +
           '<table>' + rows + '</table></div>';
         layer.bindPopup(html);
       }
@@ -1909,7 +2005,7 @@ function addGeoJSONToSpatialLayer(gj, fileInfo, activeCDKs, activePJLPoints) {
   } catch(e) { return null; }
 }
 
-/* ── Zoom ke polygon tertentu ── */
+/* â”€â”€ Zoom ke polygon tertentu â”€â”€ */
 function zoomToSpatialFile(fileId) {
   var f = SPATIAL_FILES_CACHE.find(function(c) { return c.fileId === fileId; });
   if (!f) { showToast('File tidak ditemukan.'); return; }
@@ -1921,7 +2017,7 @@ function zoomToSpatialFile(fileId) {
   }).catch(function(err) { showToast('Gagal memuat file: ' + err.message); });
 }
 
-/* ── Hapus polygon dari Drive, Sheet, dan peta ── */
+/* â”€â”€ Hapus polygon dari Drive, Sheet, dan peta â”€â”€ */
 function deleteSpatialFile(fileId, filename) {
   if (!canManageSpatialData()) {
     showToast('Akun ini tidak memiliki izin menghapus polygon spasial.', 'error');
@@ -1942,12 +2038,12 @@ function deleteSpatialFile(fileId, filename) {
       try { localStorage.removeItem('sp_bbox_' + fileId); } catch (e) {}
       renderSpatialPolygons();
       fetchSpatialFileList();
-      showToast('✓ Polygon "' + filename + '" berhasil dihapus.');
+      showToast('âœ“ Polygon "' + filename + '" berhasil dihapus.');
     } else { showToast('Gagal hapus: ' + (res.error || 'Error backend')); if (itemEl) { itemEl.style.opacity = '1'; itemEl.style.pointerEvents = ''; } }
   }).catch(function(err) { showToast('Error: ' + err.message); if (itemEl) { itemEl.style.opacity = '1'; itemEl.style.pointerEvents = ''; } });
 }
 
-/* ── Progress helpers ── */
+/* â”€â”€ Progress helpers â”€â”€ */
 function showSpatialProgress(pct, text) {
   var pw = document.getElementById('spatial-progress-wrap');
   var pb = document.getElementById('sp-progress-bar');
@@ -1961,7 +2057,7 @@ function hideSpatialProgress() {
   setTimeout(function() { if (pw) pw.style.display = 'none'; }, 1500);
 }
 
-/* ── Auto-fetch saat halaman selesai dimuat ── */
+/* â”€â”€ Auto-fetch saat halaman selesai dimuat â”€â”€ */
 function initSpatialUploadSystem_() {
   if (!getAuthToken()) return;
   if (GAS_WEB_APP_URL && GAS_WEB_APP_URL.indexOf('script.google.com') !== -1) {
@@ -2395,25 +2491,26 @@ function openDrawer(type, r) {
 
   // Inject photo gallery for Jumat Menanam & PJL & Pegawai & Pohon
   if ((type === 'jum' || type === 'jumat') && typeof _jumPhotoRow !== 'undefined') {
-    html += buildPhotoSection(_jumPhotoRow, 'juna');
+    html += buildReportHubSection(_jumPhotoRow, 'juna');
   }
   if (type === 'pjl' && typeof _pjlPhotoRow !== 'undefined') {
-    html += buildPhotoSection(_pjlPhotoRow, 'pjl');
+    html += buildReportHubSection(_pjlPhotoRow, 'pjl');
   }
   if ((type === 'peg' || type === 'pegawai') && typeof _pegPhotoRow !== 'undefined') {
-    html += buildPhotoSection(_pegPhotoRow, 'pegawai');
+    html += buildReportHubSection(_pegPhotoRow, 'pegawai');
   }
   if ((type === 'pegb' || type === 'pegawaiBinaan') && typeof _pegbPhotoRow !== 'undefined') {
-    html += buildPhotoSection(_pegbPhotoRow, 'pegawaiBinaan');
+    html += buildReportHubSection(_pegbPhotoRow, 'pegawaiBinaan');
   }
   if ((type === 'pohon' || type === 'polygon_kegiatan') && typeof _pohonPhotoRow !== 'undefined') {
-    html += buildPhotoSection(_pohonPhotoRow, 'polygon');
+    html += buildReportHubSection(_pohonPhotoRow, 'polygon');
   }
   if ((type === 'per' || type === 'persemaian') && typeof _perPhotoRow !== 'undefined') {
-    html += buildPhotoSection(_perPhotoRow, 'per');
+    html += buildReportHubSection(_perPhotoRow, 'per');
   }
 
   if (c) c.innerHTML = html;
+  PHOTO_GALLERY.angleFilter = 'all';
   
   // Init gallery state after DOM injection
   if ((type === 'jum' || type === 'jumat') && typeof _jumPhotoRow !== 'undefined') {
@@ -2421,6 +2518,8 @@ function openDrawer(type, r) {
     PHOTO_GALLERY.row = _jumPhotoRow;
     PHOTO_GALLERY.year = getCurrentPhotoYear(_jumPhotoRow, 'juna');
     PHOTO_GALLERY.idx = 0;
+    WEEKLY_REPORT_STATE.context = 'juna';
+    WEEKLY_REPORT_STATE.row = _jumPhotoRow;
     refreshGalleryForYear(PHOTO_GALLERY.year);
   }
   if (type === 'pjl' && typeof _pjlPhotoRow !== 'undefined') {
@@ -2428,6 +2527,8 @@ function openDrawer(type, r) {
     PHOTO_GALLERY.row = _pjlPhotoRow;
     PHOTO_GALLERY.year = getCurrentPhotoYear(_pjlPhotoRow, 'pjl');
     PHOTO_GALLERY.idx = 0;
+    WEEKLY_REPORT_STATE.context = 'pjl';
+    WEEKLY_REPORT_STATE.row = _pjlPhotoRow;
     refreshGalleryForYear(PHOTO_GALLERY.year);
   }
   if ((type === 'peg' || type === 'pegawai') && typeof _pegPhotoRow !== 'undefined') {
@@ -2435,6 +2536,8 @@ function openDrawer(type, r) {
     PHOTO_GALLERY.row = _pegPhotoRow;
     PHOTO_GALLERY.year = getCurrentPhotoYear(_pegPhotoRow, 'pegawai');
     PHOTO_GALLERY.idx = 0;
+    WEEKLY_REPORT_STATE.context = 'pegawai';
+    WEEKLY_REPORT_STATE.row = _pegPhotoRow;
     refreshGalleryForYear(PHOTO_GALLERY.year);
   }
   if ((type === 'pohon' || type === 'polygon_kegiatan') && typeof _pohonPhotoRow !== 'undefined') {
@@ -2442,6 +2545,8 @@ function openDrawer(type, r) {
     PHOTO_GALLERY.row = _pohonPhotoRow;
     PHOTO_GALLERY.year = getCurrentPhotoYear(_pohonPhotoRow, 'polygon');
     PHOTO_GALLERY.idx = 0;
+    WEEKLY_REPORT_STATE.context = 'polygon';
+    WEEKLY_REPORT_STATE.row = _pohonPhotoRow;
     refreshGalleryForYear(PHOTO_GALLERY.year);
   }
   if ((type === 'pegb' || type === 'pegawaiBinaan') && typeof _pegbPhotoRow !== 'undefined') {
@@ -2449,6 +2554,8 @@ function openDrawer(type, r) {
     PHOTO_GALLERY.row = _pegbPhotoRow;
     PHOTO_GALLERY.year = getCurrentPhotoYear(_pegbPhotoRow, 'pegawaiBinaan');
     PHOTO_GALLERY.idx = 0;
+    WEEKLY_REPORT_STATE.context = 'pegawaiBinaan';
+    WEEKLY_REPORT_STATE.row = _pegbPhotoRow;
     refreshGalleryForYear(PHOTO_GALLERY.year);
   }
   if ((type === 'per' || type === 'persemaian') && typeof _perPhotoRow !== 'undefined') {
@@ -2456,12 +2563,14 @@ function openDrawer(type, r) {
     PHOTO_GALLERY.row = _perPhotoRow;
     PHOTO_GALLERY.year = getCurrentPhotoYear(_perPhotoRow, 'per');
     PHOTO_GALLERY.idx = 0;
+    WEEKLY_REPORT_STATE.context = 'per';
+    WEEKLY_REPORT_STATE.row = _perPhotoRow;
     refreshGalleryForYear(PHOTO_GALLERY.year);
   }
   
   if (dr) dr.classList.add('open');
 
-  // ── Inject AI Assistant card FIRST, then reset scroll ──
+  // â”€â”€ Inject AI Assistant card FIRST, then reset scroll â”€â”€
   if (typeof GeoHutanAI !== 'undefined' && typeof GeoHutanAI.injectCard === 'function') {
     GeoHutanAI.injectCard(type, r);
   }
@@ -2504,6 +2613,31 @@ function showToast(msg) {
   }, 3000);
 }
 
+function getFriendlyBackendErrorMessage(err) {
+  var msg = err && err.message ? err.message : String(err || '');
+  if (/Aksi tidak dikenal:\s*saveWeeklyReport/i.test(msg) || /Aksi tidak dikenal:\s*getWeeklyReports/i.test(msg) || /Aksi tidak dikenal:\s*getAllWeeklyReports/i.test(msg)) {
+    return '\u26a0\ufe0f Backend Apps Script belum memakai kode terbaru.\n\nLangkah perbaikan:\n1. Buka script.google.com\n2. Pilih project backend.gs\n3. Klik Deploy \u2192 Manage Deployments\n4. Edit deployment aktif \u2192 pilih "Latest version"\n5. Klik Deploy, lalu refresh halaman ini.';
+  }
+  return msg;
+}
+
+function checkBackendVersion(callback) {
+  if (_backendVersionOk !== null) { if (callback) callback(_backendVersionOk); return; }
+  if (!GAS_WEB_APP_URL || GAS_WEB_APP_URL.indexOf('script.google.com') === -1) { if (callback) callback(true); return; }
+  fetch(GAS_WEB_APP_URL + '?action=getVersion')
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+      var ok = !!(data && data.success && data.features && data.features.indexOf('saveWeeklyReport') !== -1);
+      _backendVersionOk = ok;
+      _backendVersionChecked = true;
+      if (callback) callback(ok);
+    })
+    .catch(function() {
+      _backendVersionChecked = true;
+      if (callback) callback(false);
+    });
+}
+
 var HIGHLIGHT_LAYER = null;
 var BUFFER_LAYERS = null;
 var LINK_POLYGON = null;
@@ -2525,7 +2659,7 @@ function highlightMarker(lat, lng, type) {
     if (polyCoords && polyCoords.length > 0) {
       var measureLine = L.polyline([[lat, lng], polyCoords[0]], {
         color: '#ffb74d', weight: 2, dashArray: '4, 4'
-      }).bindTooltip('r ≈ 79.8m<br>Luas ±2 Ha', {permanent: true, direction: 'center', className: 'measure-tooltip'});
+      }).bindTooltip('r â‰ˆ 79.8m<br>Luas Â±2 Ha', {permanent: true, direction: 'center', className: 'measure-tooltip'});
       measureLine.addTo(BUFFER_LAYERS);
     }
   }
@@ -2580,6 +2714,8 @@ document.getElementById('global-search-input').addEventListener('focus', functio
 document.addEventListener('click', function(e) {
   var container = document.querySelector('.global-search-container');
   if (container && !container.contains(e.target)) closeGlobalSearch();
+  var reportMenu = document.getElementById('report-menu');
+  if (reportMenu && !reportMenu.contains(e.target)) closeReportMenu();
 });
 
 document.getElementById('global-search-clear').addEventListener('click', function() {
@@ -2746,7 +2882,7 @@ function getCDKExtended(unitKerja) {
   if (u.includes('SPTH') || u.includes('SERTIFIKASI DAN PERBENIHAN')) return 'SPTH';
   if (u.includes('P2HH') || u.includes('PPPH') || u.includes('PPHH') || u.includes('PENGOLAHAN HASIL HUTAN')) return 'PPPH';
   if (u.includes('TAHURA') || u.includes('TAMAN HUTAN RAYA')) return 'TAHURA';
-  // Handle 'CABANG DINAS KEHUTANAN WILAYAH I BOGOR' → 'CDK WILAYAH I'
+  // Handle 'CABANG DINAS KEHUTANAN WILAYAH I BOGOR' â†’ 'CDK WILAYAH I'
   var m = u.match(/CABANG\s+DINAS\s+KEHUTANAN\s+WILAYAH\s+([IVX]+)/i) ||
           u.match(/CABANG\s+DINAS\s+(?:KE)?HUT(?:ANAN)?\s+WIL(?:AYAH)?\s+([IVX]+)/i) ||
           u.match(/CDK\s*(?:WILAYAH\s*)?([IVX]+)/i);
@@ -2887,9 +3023,9 @@ function toggleBuffer() {
 }
 
 /* GeoJSON */
-fetch('Jawa Barattt.geojson').then(res => res.json()).then(gj => {
+(typeof loadJawaBaratGeoJSON === 'function' ? loadJawaBaratGeoJSON() : fetch('Jawa Barattt.geojson').then(function(res) { return res.json(); })).then(gj => {
   GEO = gj;
-  try { L.geoJSON(gj, { style: { color: '#222222', weight: 1.5, fillOpacity: 0.02, fillColor: '#43a047', opacity: 0.8, dashArray: '' } }).addTo(mapObj); } catch(e) {}
+  GEO_FEATURE_BOUNDS = null;
   ['pjl','persemaian','pegawai','jumat','pegawaiBinaan'].forEach(function(t) {
     DATA[t].forEach(function(r) {
       if (t === 'pegawaiBinaan') normalizeBinaanRow(r);
@@ -2902,7 +3038,23 @@ fetch('Jawa Barattt.geojson').then(res => res.json()).then(gj => {
 
 /* CSV Loader */
 function loadCSV(url, type) {
+  var done = false;
+  var watchdog = null;
+  function finish() {
+    if (done) return;
+    done = true;
+    if (watchdog) clearTimeout(watchdog);
+    onLoaded();
+  }
+
   try {
+    watchdog = setTimeout(function() {
+      if (done) return;
+      done = true;
+      console.warn('CSV timeout:', type, url);
+      onLoaded();
+    }, 25000);
+
     var gidMatch = String(url || '').match(/[?&]gid=([^&]+)/);
     var sourceGid = gidMatch ? decodeURIComponent(gidMatch[1]) : '';
     
@@ -2915,22 +3067,28 @@ function loadCSV(url, type) {
     Papa.parse(fetchUrl, {
       download: true, header: true, skipEmptyLines: true,
       complete: function(res) {
-        var rows = Array.isArray(res.data) ? res.data : [];
-        rows.forEach(function(r, idx) {
-          if (!r || typeof r !== 'object') return;
-          r._source_gid = sourceGid;
-          r._row_idx = idx + 2;
-          r._data_type = type;
-          var c = getCoord(r);
-          if (c) { r._lat = c.lat; r._lng = c.lng; r._kab = getKab(c.lat, c.lng); } else { r._lat = null; r._lng = null; r._kab = ''; }
-          if (type === 'pegawaiBinaan') normalizeBinaanRow(r);
-        });
-        DATA[type] = DATA[type].concat(rows);
-        onLoaded();
+        try {
+          var rows = Array.isArray(res.data) ? res.data : [];
+          rows.forEach(function(r, idx) {
+            if (!r || typeof r !== 'object') return;
+            r._source_gid = sourceGid;
+            r._row_idx = idx + 2;
+            r._data_type = type;
+            var c = getCoord(r);
+            if (c) { r._lat = c.lat; r._lng = c.lng; r._kab = getKab(c.lat, c.lng); } else { r._lat = null; r._lng = null; r._kab = ''; }
+            if (type === 'pegawaiBinaan') normalizeBinaanRow(r);
+          });
+          DATA[type] = DATA[type].concat(rows);
+        } catch (err) {
+          console.warn('CSV parse error:', type, err);
+        }
+        finish();
       },
-      error: function() { onLoaded(); }
+      error: function() { finish(); }
     });
-  } catch(e) { onLoaded(); }
+  } catch(e) {
+    finish();
+  }
 }
 function onLoaded() {
   LOADED++;
@@ -3046,6 +3204,26 @@ function doRender() {
   if (PJL_POLYGON_LAYER) { mapObj.removeLayer(PJL_POLYGON_LAYER); PJL_POLYGON_LAYER = null; }
   PJL_POLYGON_LAYER = L.layerGroup();
 
+  function getShapeSvg(shape, fillCol) {
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 10 10" style="overflow:visible;">';
+    var stroke = 'stroke="transparent" stroke-width="15"'; // to increase click area in DOM? No, for DOM we can just use CSS padding.
+    // For SVG, we just draw the shape.
+    if (shape === 'square') {
+        svg += '<rect x="1" y="1" width="8" height="8" fill="' + fillCol + '" />';
+    } else if (shape === 'diamond') {
+        svg += '<polygon points="5,1 9,5 5,9 1,5" fill="' + fillCol + '" />';
+    } else if (shape === 'pentagon') {
+        svg += '<polygon points="5,1 9,3.5 7.5,9 2.5,9 1,3.5" fill="' + fillCol + '" />';
+    } else if (shape === 'star') {
+        svg += '<polygon points="5,0 6.5,3.5 10,3.5 7,5.5 8,9 5,7 2,9 3,5.5 0,3.5 3.5,3.5" fill="' + fillCol + '" />';
+    } else if (shape === 'triangle') {
+        svg += '<polygon points="5,1 9,8 1,8" fill="' + fillCol + '" />';
+    } else { // circle
+        svg += '<circle cx="5" cy="5" r="4" fill="' + fillCol + '" />';
+    }
+    svg += '</svg>';
+    return L.divIcon({ html: svg, className: 'leaflet-marker-lightweight', iconSize: [10, 10], iconAnchor: [5, 5] });
+}
   function addMarkers(arr, type, defaultIcon) {
     if (!LAYER_VISIBLE[type]) return;
     arr.forEach(function(r) {
@@ -3053,21 +3231,42 @@ function doRender() {
       if (!r || !passFilter(r, type) || !r._lat || !r._lng) return;
       cnt[type]++;
       if (HEATMAP_ENABLED) heatData.push([r._lat, r._lng, 1]);
-      try {
-        var name = getName(r);
-        var icon = defaultIcon;
-        if (type === 'jum') {
-          var kat = String(r['Kategori Lojuna'] || '').trim();
-          if (kat === 'Lokasi Juna Biasa') icon = ICONS.jum_biasa;
-          else if (kat === 'Lokasi Juna Permanen') icon = ICONS.jum_permanen;
-          else icon = ICONS.jum_unggulan;
-        }
-        var mk = L.marker([r._lat, r._lng], { icon: icon });
-        mk.on('click', (function(capturedR, capturedType) { return function() {
-          mapObj.setView([capturedR._lat, capturedR._lng], 16);
-          highlightMarker(capturedR._lat, capturedR._lng, capturedType);
-          openDrawer(capturedType, capturedR);
-        }; })(r, type));
+              try {
+          var name = getName(r);
+          var fillCol = '#ffffff', shapeType = 'circle';
+          if (type === 'pjl') { fillCol = '#43a047'; shapeType = 'circle'; } // Match legend PJL
+          else if (type === 'per') { fillCol = '#82b1ff'; shapeType = 'pentagon'; }
+          else if (type === 'peg') { fillCol = '#ff9800'; shapeType = 'square'; }
+          else if (type === 'pegb') { fillCol = '#00bfa5'; shapeType = 'diamond'; } // Match legend PEGB
+          else if (type === 'jum') {
+            var kat = String(r['Kategori Lojuna'] || '').trim();
+            if (kat === 'Lokasi Juna Biasa') { fillCol = '#82b1ff'; shapeType = 'triangle'; }
+            else { fillCol = '#d500f9'; shapeType = 'star'; }
+          }
+          
+          var mk;
+          if (!CLUSTER_ENABLED) {
+            mk = L.shapeMarker([r._lat, r._lng], {
+              shape: shapeType,
+              radius: 4.0,
+              fillColor: fillCol,
+              stroke: true, // Enable stroke to increase click area
+              color: 'transparent',
+              weight: 15, // Large invisible stroke for touch target
+              opacity: 0, // Keep stroke invisible
+              fillOpacity: 1,
+              pane: 'markerPane' // Bring to front over polygons
+            });
+          } else {
+            var icon = getShapeSvg(shapeType, fillCol);
+            mk = L.marker([r._lat, r._lng], { icon: icon });
+          }
+          
+          mk.on('click', (function(capturedR, capturedType) { return function() {
+            mapObj.setView([capturedR._lat, capturedR._lng], 16);
+            highlightMarker(capturedR._lat, capturedR._lng, capturedType);
+            openDrawer(capturedType, capturedR);
+          }; })(r, type));
         if (name && name !== 'Data tidak tersedia') {
           var hoverHTML = name;
           if (type === 'jum') {
@@ -3545,7 +3744,7 @@ loadCSV('https://docs.google.com/spreadsheets/d/e/2PACX-1vSEHhDs2n0UKFjZlPcM4TrW
 loadCSV('https://docs.google.com/spreadsheets/d/1xrl3W7DZs8SsYZIWiLgHYvi_89V7NismK-G9YDu9NdM/export?format=csv&gid=1475147460', 'pegawaiBinaan');
 loadCSV('https://docs.google.com/spreadsheets/d/e/2PACX-1vSPtxo38ft9es4Mt0xn1oqPJQCVmYZcmyYN1GKTUBYz8b4wRX34jbQa5odSjVLwvB-yxuUnDGAV9Pou/pub?gid=2039375183&single=true&output=csv', 'jumat');
 
-/* ── LEAFLET DRAW & POLYGON ANALYSIS ── */
+/* â”€â”€ LEAFLET DRAW & POLYGON ANALYSIS â”€â”€ */
 var drawnItems = new L.FeatureGroup();
 mapObj.addLayer(drawnItems);
 
@@ -3669,16 +3868,17 @@ function openTableModal() {
   renderTable();
 }
 
-/* ═══════════════════════════════════════════════════════════
-   📸 PHOTO GALLERY – JUNA PERMANEN & PJL
-   ═══════════════════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   ðŸ“¸ PHOTO GALLERY â€“ JUNA PERMANEN & PJL
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 var PHOTO_YEARS = ['2025','2026','2027','2028','2029','2030'];
 var BULAN_ID = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
 
-var PHOTO_GALLERY = { context: 'juna', row: null, year: '2026', idx: 0, photos: [], dates: [], sheetCount: 0, localCount: 0 };
+var PHOTO_GALLERY = { context: 'juna', row: null, year: '2026', idx: 0, photos: [], dates: [], years: [], angles: [], sheetCount: 0, localCount: 0, angleFilter: 'all' };
 var JUM_GALLERY = PHOTO_GALLERY;
-var LB_STATE = { photos: [], dates: [], idx: 0, year: '2026', locName: '', context: 'juna' };
+var LB_STATE = { photos: [], dates: [], years: [], angles: [], idx: 0, year: '2026', locName: '', context: 'juna' };
+var WEEKLY_REPORT_STATE = { row: null, context: 'juna', reports: [], monitorType: 'weekly', monitorRows: [] };
 
 function getPhotoContextPrefix(context) {
   if (context === 'pjl') return 'pjl';
@@ -3703,7 +3903,7 @@ function getPhotoCoords(r) {
   };
 }
 
-/** Format tanggal ke Bahasa Indonesia, mis. 17/06/2026 → 17 Juni 2026 */
+/** Format tanggal ke Bahasa Indonesia, mis. 17/06/2026 â†’ 17 Juni 2026 */
 function formatDateIndo(dStr) {
   if (!dStr) return '';
   var s = String(dStr).trim();
@@ -3714,7 +3914,7 @@ function formatDateIndo(dStr) {
     var year = m[3];
     if (monthIdx >= 0 && monthIdx < 12) {
       var out = day + ' ' + BULAN_ID[monthIdx] + ' ' + year;
-      if (m[4]) out += ' · ' + String(m[4]).padStart(2, '0') + ':' + m[5];
+      if (m[4]) out += ' Â· ' + String(m[4]).padStart(2, '0') + ':' + m[5];
       return out;
     }
   }
@@ -3724,7 +3924,7 @@ function formatDateIndo(dStr) {
     var monthIdx2 = parseInt(m[2], 10) - 1;
     if (monthIdx2 >= 0 && monthIdx2 < 12) {
       var out2 = day2 + ' ' + BULAN_ID[monthIdx2] + ' ' + m[1];
-      if (m[4]) out2 += ' · ' + m[4] + ':' + m[5];
+      if (m[4]) out2 += ' Â· ' + m[4] + ':' + m[5];
       return out2;
     }
   }
@@ -3764,6 +3964,22 @@ function getRowPhotos(r, year) {
 
 function getRowDates(r, year) {
   return parsePipeField(r['Tanggal_' + year]);
+}
+
+function getRowAngles(r, year) {
+  var angles = parsePipeField(r['Sudut_' + year] || r['Angle_' + year]);
+  return angles.map(normalizePhotoAngle);
+}
+
+function normalizePhotoAngle(angle) {
+  var s = String(angle || '').trim();
+  if (s === 'Sudut Foto #2' || s === '2' || /#?2\b/.test(s)) return 'Sudut Foto #2';
+  return 'Sudut Foto #1';
+}
+
+function getSelectedUploadAngle() {
+  var el = document.querySelector('input[name="upload-angle"]:checked');
+  return normalizePhotoAngle(el ? el.value : 'Sudut Foto #1');
 }
 
 function getJumPhotos(r, year) { return getRowPhotos(r, year); }
@@ -3836,6 +4052,12 @@ function buildPhotoSection(r, context) {
     '<button type="button" onclick="clearGalleryDateRange(\'' + context + '\')">Reset</button>' +
     '</div>';
 
+  html += '<div class="photo-angle-filter">' +
+    '<button type="button" class="active" data-angle="all" onclick="setGalleryAngleFilter(\'all\')">Semua Sudut</button>' +
+    '<button type="button" data-angle="Sudut Foto #1" onclick="setGalleryAngleFilter(\'Sudut Foto #1\')">Sudut Foto #1</button>' +
+    '<button type="button" data-angle="Sudut Foto #2" onclick="setGalleryAngleFilter(\'Sudut Foto #2\')">Sudut Foto #2</button>' +
+    '</div>';
+
   html += '<div id="' + ids.carousel + '" class="jum-carousel-wrap">' +
     '<div class="jum-no-photo">' +
     '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>' +
@@ -3865,6 +4087,54 @@ function buildPhotoSection(r, context) {
 }
 
 function buildJumPhotoSection(r) { return buildPhotoSection(r, 'juna'); }
+
+function buildReportHubSection(r, context) {
+  context = context || 'juna';
+  var safeContext = String(context).replace(/[^a-zA-Z0-9]/g, '');
+  return '<div class="drawer-report-hub" id="report-hub-' + safeContext + '">' +
+    '<div class="report-category-title">Kategori Laporan</div>' +
+    '<div class="report-category-buttons">' +
+      '<button type="button" onclick="showMarkerReportPanel(\'monthly\', \'' + context + '\')">Laporan Bulanan</button>' +
+      '<button type="button" onclick="showMarkerReportPanel(\'weekly\', \'' + context + '\')">Laporan Mingguan</button>' +
+    '</div>' +
+    '<div class="report-panel monthly-panel" id="report-monthly-panel-' + safeContext + '" style="display:none;">' +
+      buildPhotoSection(r, context) +
+    '</div>' +
+    '<div class="report-panel weekly-panel" id="report-weekly-panel-' + safeContext + '" style="display:none;">' +
+      buildWeeklyReportSection(context) +
+    '</div>' +
+  '</div>';
+}
+
+function buildWeeklyReportSection(context) {
+  return '<div class="weekly-drawer-section">' +
+    '<div class="weekly-drawer-title">Laporan Mingguan Hutan Binaan</div>' +
+    '<div class="weekly-drawer-actions">' +
+      '<button type="button" class="jum-upload-btn" onclick="openWeeklyReportModal()">Isi Laporan Mingguan</button>' +
+      '<button type="button" class="jum-upload-btn secondary" onclick="loadWeeklyReportsForMarker(true)">Lihat Laporan</button>' +
+    '</div>' +
+    '<div id="weekly-report-list" class="weekly-report-list">' +
+      '<div class="weekly-empty">Pilih Detail Laporan untuk melihat riwayat laporan mingguan titik ini.</div>' +
+    '</div>' +
+  '</div>';
+}
+
+function showMarkerReportPanel(panel, context) {
+  context = context || PHOTO_GALLERY.context || 'juna';
+  var safeContext = String(context).replace(/[^a-zA-Z0-9]/g, '');
+  var monthly = document.getElementById('report-monthly-panel-' + safeContext);
+  var weekly = document.getElementById('report-weekly-panel-' + safeContext);
+  var hub = document.getElementById('report-hub-' + safeContext);
+  if (monthly) monthly.style.display = panel === 'monthly' ? 'block' : 'none';
+  if (weekly) weekly.style.display = panel === 'weekly' ? 'block' : 'none';
+  if (hub) {
+    hub.querySelectorAll('.report-category-buttons button').forEach(function(btn) {
+      btn.classList.toggle('active', btn.textContent.toLowerCase().indexOf(panel === 'monthly' ? 'bulanan' : 'mingguan') !== -1);
+    });
+  }
+  if (panel === 'monthly') refreshGalleryForYear(PHOTO_GALLERY.year || getCurrentPhotoYear(PHOTO_GALLERY.row, context));
+  if (panel === 'weekly') loadWeeklyReportsForMarker(false);
+}
 
 /** Refresh carousel display for selected year */
 function refreshGalleryForYear(year) {
@@ -3911,14 +4181,14 @@ function refreshGalleryForYear(year) {
         });
     }
   } else {
-    applyGalleryData(getMergedData(r, year, context));
+    applyGalleryData(getMergedDataAcrossYears(r, context));
   }
 
   function processExtractedFolder(files) {
     var sheetPhotos = files.map(function(f) { return normalizeImageUrl(f.url); });
     var combined = [];
     files.forEach(function(f) {
-      combined.push({ url: normalizeImageUrl(f.url), date: f.date, timestamp: parseExifDate(f.date), isLocal: false });
+      combined.push({ url: normalizeImageUrl(f.url), date: f.date, year: year, angle: 'Sudut Foto #1', timestamp: parseExifDate(f.date), isLocal: false });
     });
     
     var locals = getLocalPhotos(r, year, context);
@@ -3934,19 +4204,19 @@ function refreshGalleryForYear(year) {
       });
 
       if (!isDuplicate) {
-        combined.push({ url: lNorm, date: l.date, timestamp: parseExifDate(l.date), isLocal: true });
+        combined.push({ url: lNorm, date: l.date, year: year, angle: normalizePhotoAngle(l.angle || 'Sudut Foto #1'), timestamp: parseExifDate(l.date), isLocal: true });
       }
     });
     
     combined.sort(function(a, b) { return a.timestamp - b.timestamp; });
     
-    var allP = [], allD = [], isLocMap = [];
+    var allP = [], allD = [], allY = [], allA = [], isLocMap = [];
     combined.forEach(function(c) {
-      allP.push(c.url); allD.push(c.date); isLocMap.push(c.isLocal);
+      allP.push(c.url); allD.push(c.date); allY.push(year); allA.push(normalizePhotoAngle(c.angle)); isLocMap.push(c.isLocal);
     });
     
     applyGalleryData({
-      photos: allP, dates: allD,
+      photos: allP, dates: allD, years: allY, angles: allA,
       sheetCount: files.length, localCount: locals.length,
       isLocalMap: isLocMap
     });
@@ -3954,18 +4224,37 @@ function refreshGalleryForYear(year) {
 
   function applyGalleryData(_merged) {
     _merged = filterGalleryByDateRange(_merged, context);
+    if (PHOTO_GALLERY.angleFilter && PHOTO_GALLERY.angleFilter !== 'all') {
+      var filtered = { photos: [], dates: [], years: [], angles: [], sheetCount: _merged.sheetCount, localCount: _merged.localCount, isLocalMap: [] };
+      (_merged.photos || []).forEach(function(photo, idx) {
+        var angle = normalizePhotoAngle((_merged.angles || [])[idx]);
+        if (angle !== PHOTO_GALLERY.angleFilter) return;
+        filtered.photos.push(photo);
+        filtered.dates.push((_merged.dates || [])[idx] || '');
+        filtered.years.push((_merged.years || [])[idx] || year);
+        filtered.angles.push(angle);
+        filtered.isLocalMap.push(_merged.isLocalMap ? _merged.isLocalMap[idx] : false);
+      });
+      _merged = filtered;
+    }
     PHOTO_GALLERY.photos = _merged.photos;
     PHOTO_GALLERY.dates = _merged.dates;
+    PHOTO_GALLERY.years = _merged.years || (_merged.photos || []).map(function() { return year; });
+    PHOTO_GALLERY.angles = (_merged.angles || []).map(normalizePhotoAngle);
     PHOTO_GALLERY.sheetCount = _merged.sheetCount;
     PHOTO_GALLERY.localCount = _merged.localCount;
     PHOTO_GALLERY.isLocalMap = _merged.isLocalMap;
-    PHOTO_GALLERY.idx = 0;
+    var startIdx = 0;
+    for (var si = 0; si < PHOTO_GALLERY.years.length; si++) {
+      if (String(PHOTO_GALLERY.years[si]) === String(year)) { startIdx = si; break; }
+    }
+    PHOTO_GALLERY.idx = startIdx;
 
     if (_merged.photos.length === 0) {
       wrap.innerHTML = '<div class="jum-no-photo">' +
         '<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>' +
-        '<span>Belum ada foto untuk tahun <strong style="color:#ab47bc">' + year + '</strong></span>' +
-        '<span style="font-size:10px;opacity:0.6;">Tambahkan foto di kolom Foto_' + year + ' spreadsheet</span>' +
+        '<span>Belum ada foto pada filter yang dipilih</span>' +
+        '<span style="font-size:10px;opacity:0.6;">Tambahkan foto di Laporan Bulanan atau ubah filter sudut/rentang waktu.</span>' +
         '</div>';
       return;
     }
@@ -3994,7 +4283,7 @@ function filterGalleryByDateRange(merged, context) {
   var startTs = startEl ? parseDateInputToTs(startEl.value, false) : 0;
   var endTs = endEl ? parseDateInputToTs(endEl.value, true) : 0;
   if (!startTs && !endTs) return merged;
-  var out = { photos: [], dates: [], sheetCount: merged.sheetCount, localCount: merged.localCount, isLocalMap: [] };
+  var out = { photos: [], dates: [], years: [], angles: [], sheetCount: merged.sheetCount, localCount: merged.localCount, isLocalMap: [] };
   (merged.photos || []).forEach(function(photo, idx) {
     var ts = parseExifDate((merged.dates || [])[idx]);
     if (!ts) return;
@@ -4002,6 +4291,8 @@ function filterGalleryByDateRange(merged, context) {
     if (endTs && ts > endTs) return;
     out.photos.push(photo);
     out.dates.push((merged.dates || [])[idx] || '');
+    out.years.push((merged.years || [])[idx] || PHOTO_GALLERY.year || '');
+    out.angles.push(normalizePhotoAngle((merged.angles || [])[idx]));
     out.isLocalMap.push(merged.isLocalMap ? merged.isLocalMap[idx] : false);
   });
   return out;
@@ -4016,6 +4307,17 @@ function clearGalleryDateRange(context) {
   refreshGalleryForYear(PHOTO_GALLERY.year);
 }
 
+function setGalleryAngleFilter(angle) {
+  PHOTO_GALLERY.angleFilter = angle || 'all';
+  document.querySelectorAll('.photo-angle-filter button, .lightbox-angle-filter button').forEach(function(btn) {
+    btn.classList.toggle('active', String(btn.getAttribute('data-angle')) === String(PHOTO_GALLERY.angleFilter));
+  });
+  refreshGalleryForYear(PHOTO_GALLERY.year);
+  if (document.getElementById('photo-lightbox') && document.getElementById('photo-lightbox').classList.contains('open')) {
+    openPhotoLightbox();
+  }
+}
+
 /** Render carousel with photos array */
 function renderCarousel(photos, dates) {
   var context = PHOTO_GALLERY.context || 'juna';
@@ -4025,6 +4327,8 @@ function renderCarousel(photos, dates) {
   var idx = PHOTO_GALLERY.idx;
   var url = photos[idx] || '';
   var date = dates[idx] || '';
+  var photoYear = (PHOTO_GALLERY.years || [])[idx] || PHOTO_GALLERY.year;
+  var photoAngle = normalizePhotoAngle((PHOTO_GALLERY.angles || [])[idx]);
   var dateDisplay = formatDateIndo(date);
   var total = photos.length;
   var isLocalPhoto = (PHOTO_GALLERY.isLocalMap && PHOTO_GALLERY.isLocalMap[idx]);
@@ -4055,6 +4359,8 @@ function renderCarousel(photos, dates) {
     '<div class="jum-carousel-footer">' +
       '<div class="jum-photo-timestamp">' +
         localBadge +
+        '<span class="photo-angle-badge">' + photoAngle.replace('Sudut Foto ', 'Sudut ') + '</span>' +
+        '<span class="photo-year-badge">' + photoYear + '</span>' +
         (dateDisplay ? '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> ' + dateDisplay : '<span style="opacity:0.4;">Tanggal tidak tersedia</span>') +
       '</div>' +
       '<div style="display:flex;align-items:center;gap:8px;">' +
@@ -4068,6 +4374,7 @@ function renderCarousel(photos, dates) {
 function navCarousel(dir) {
   var total = PHOTO_GALLERY.photos.length;
   PHOTO_GALLERY.idx = Math.max(0, Math.min(total - 1, PHOTO_GALLERY.idx + dir));
+  PHOTO_GALLERY.year = (PHOTO_GALLERY.years || [])[PHOTO_GALLERY.idx] || PHOTO_GALLERY.year;
   renderCarousel(PHOTO_GALLERY.photos, PHOTO_GALLERY.dates);
   if (document.getElementById('photo-lightbox').classList.contains('open')) {
     LB_STATE.idx = PHOTO_GALLERY.idx;
@@ -4077,6 +4384,7 @@ function navCarousel(dir) {
 
 function jumpCarousel(i) {
   PHOTO_GALLERY.idx = i;
+  PHOTO_GALLERY.year = (PHOTO_GALLERY.years || [])[PHOTO_GALLERY.idx] || PHOTO_GALLERY.year;
   renderCarousel(PHOTO_GALLERY.photos, PHOTO_GALLERY.dates);
 }
 
@@ -4085,7 +4393,7 @@ function changeGalleryYear(year) {
   refreshGalleryForYear(year);
 }
 
-/* ─── FULLSCREEN LIGHTBOX ─── */
+/* â”€â”€â”€ FULLSCREEN LIGHTBOX â”€â”€â”€ */
 
 /** Open fullscreen lightbox with current gallery state */
 function openPhotoLightbox() {
@@ -4093,8 +4401,10 @@ function openPhotoLightbox() {
   if (!photos || photos.length === 0) return;
   LB_STATE.photos = photos;
   LB_STATE.dates = PHOTO_GALLERY.dates;
+  LB_STATE.years = PHOTO_GALLERY.years || [];
+  LB_STATE.angles = PHOTO_GALLERY.angles || [];
   LB_STATE.idx = PHOTO_GALLERY.idx;
-  LB_STATE.year = PHOTO_GALLERY.year;
+  LB_STATE.year = (LB_STATE.years || [])[LB_STATE.idx] || PHOTO_GALLERY.year;
   LB_STATE.context = PHOTO_GALLERY.context || 'juna';
   
   if (PHOTO_GALLERY.row) {
@@ -4157,6 +4467,8 @@ function lightboxNav(dir) {
   var total = LB_STATE.photos.length;
   LB_STATE.idx = Math.max(0, Math.min(total - 1, LB_STATE.idx + dir));
   PHOTO_GALLERY.idx = LB_STATE.idx;
+  LB_STATE.year = (LB_STATE.years || [])[LB_STATE.idx] || LB_STATE.year;
+  PHOTO_GALLERY.year = LB_STATE.year;
   renderCarousel(PHOTO_GALLERY.photos, PHOTO_GALLERY.dates);
   refreshLightbox();
 }
@@ -4169,13 +4481,16 @@ function refreshLightbox() {
   var total = photos.length;
   var url = photos[idx] || '';
   var date = dates[idx] || '';
+  var currentYear = (LB_STATE.years || [])[idx] || LB_STATE.year;
+  var rawAngle = (LB_STATE.angles || [])[idx] || '';
+  var currentAngle = rawAngle === 'Laporan Mingguan' ? rawAngle : normalizePhotoAngle(rawAngle);
 
   // Header
   var yBadge = document.getElementById('lightbox-year-badge');
   var counter = document.getElementById('lightbox-counter');
   var stamp = document.getElementById('lightbox-timestamp');
   var locInfo = document.getElementById('lightbox-loc-info');
-  if (yBadge) yBadge.textContent = 'Foto ' + LB_STATE.year;
+  if (yBadge) yBadge.textContent = 'Foto ' + currentYear + ' - ' + currentAngle.replace('Sudut Foto ', 'Sudut ');
   if (counter) counter.textContent = (idx + 1) + ' dari ' + total;
   if (stamp) stamp.innerHTML = date ?
     '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> ' + formatDateIndo(date) :
@@ -4228,6 +4543,10 @@ function refreshLightbox() {
   var monWrap = document.getElementById('lightbox-monitoring');
   var monCont = document.getElementById('lightbox-monitoring-content');
   if (monWrap && monCont) {
+    if (LB_STATE.context === 'weekly') {
+      monWrap.style.display = 'none';
+      return;
+    }
     var r = PHOTO_GALLERY.row;
     var y = LB_STATE.year;
     
@@ -4274,6 +4593,8 @@ function refreshLightbox() {
 function lightboxJump(i) {
   LB_STATE.idx = i;
   PHOTO_GALLERY.idx = i;
+  LB_STATE.year = (LB_STATE.years || [])[i] || LB_STATE.year;
+  PHOTO_GALLERY.year = LB_STATE.year;
   renderCarousel(PHOTO_GALLERY.photos, PHOTO_GALLERY.dates);
   refreshLightbox();
 }
@@ -4336,9 +4657,9 @@ function lightboxJump(i) {
   }
 })();
 
-/* ═══════════════════════════════════════════════════════════
-   📸 LOCAL PHOTO UPLOAD & MANAGEMENT
-   ═══════════════════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   ðŸ“¸ LOCAL PHOTO UPLOAD & MANAGEMENT
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 /** Get local photos from localStorage for a specific row & year */
 function getLocalPhotos(r, year, context) {
@@ -4379,6 +4700,7 @@ function getMergedData(r, year, context) {
   context = context || PHOTO_GALLERY.context || 'juna';
   var sheetPhotos = getRowPhotos(r, year);
   var sheetDates = getRowDates(r, year);
+  var sheetAngles = getRowAngles(r, year);
   var locals = getLocalPhotos(r, year, context);
   
   var combined = [];
@@ -4391,7 +4713,7 @@ function getMergedData(r, year, context) {
     
     if (deletedIds.indexOf(sid) === -1) {
       var d = sheetDates[i] || '';
-      combined.push({ url: url, date: d, timestamp: parseExifDate(d), isLocal: false });
+      combined.push({ url: url, date: d, year: year, angle: normalizePhotoAngle(sheetAngles[i] || 'Sudut Foto #1'), timestamp: parseExifDate(d), isLocal: false });
     }
   }
   
@@ -4407,7 +4729,7 @@ function getMergedData(r, year, context) {
     });
 
     if (!isDuplicate) {
-      combined.push({ url: lNorm, date: l.date, timestamp: parseExifDate(l.date), isLocal: true });
+      combined.push({ url: lNorm, date: l.date, year: year, angle: normalizePhotoAngle(l.angle || 'Sudut Foto #1'), timestamp: parseExifDate(l.date), isLocal: true });
     }
   });
   
@@ -4415,12 +4737,14 @@ function getMergedData(r, year, context) {
     return a.timestamp - b.timestamp;
   });
   
-  var allPhotos = [], allDates = [], isLocalMap = [];
+  var allPhotos = [], allDates = [], allYears = [], allAngles = [], isLocalMap = [];
   var localCount = 0;
   
   combined.forEach(function(c) {
     allPhotos.push(c.url);
     allDates.push(c.date);
+    allYears.push(c.year || year);
+    allAngles.push(normalizePhotoAngle(c.angle));
     isLocalMap.push(c.isLocal);
     if(c.isLocal) localCount++;
   });
@@ -4428,17 +4752,53 @@ function getMergedData(r, year, context) {
   return {
     photos: allPhotos,
     dates: allDates,
+    years: allYears,
+    angles: allAngles,
     sheetCount: sheetPhotos.length,
     localCount: localCount,
     isLocalMap: isLocalMap
   };
 }
 
+function getMergedDataAcrossYears(r, context) {
+  var out = { photos: [], dates: [], years: [], angles: [], sheetCount: 0, localCount: 0, isLocalMap: [] };
+  PHOTO_YEARS.forEach(function(yr) {
+    var m = getMergedData(r, yr, context);
+    out.photos = out.photos.concat(m.photos || []);
+    out.dates = out.dates.concat(m.dates || []);
+    out.years = out.years.concat(m.years || (m.photos || []).map(function() { return yr; }));
+    out.angles = out.angles.concat(m.angles || (m.photos || []).map(function() { return 'Sudut Foto #1'; }));
+    out.isLocalMap = out.isLocalMap.concat(m.isLocalMap || []);
+    out.sheetCount += m.sheetCount || 0;
+    out.localCount += m.localCount || 0;
+  });
+  var packed = out.photos.map(function(url, idx) {
+    return {
+      url: url,
+      date: out.dates[idx] || '',
+      year: out.years[idx] || '',
+      angle: normalizePhotoAngle(out.angles[idx]),
+      isLocal: !!out.isLocalMap[idx],
+      timestamp: parseExifDate(out.dates[idx]) || Date.parse((out.years[idx] || '1970') + '-01-01') || 0
+    };
+  });
+  packed.sort(function(a, b) {
+    if (a.timestamp !== b.timestamp) return a.timestamp - b.timestamp;
+    return String(a.year).localeCompare(String(b.year));
+  });
+  out.photos = packed.map(function(x) { return x.url; });
+  out.dates = packed.map(function(x) { return x.date; });
+  out.years = packed.map(function(x) { return x.year; });
+  out.angles = packed.map(function(x) { return x.angle; });
+  out.isLocalMap = packed.map(function(x) { return x.isLocal; });
+  return out;
+}
+
 /** Delete the currently viewed photo from all sources */
 function deleteCurrentCarouselPhoto() {
   if (!confirm('Apakah Anda yakin ingin menghapus foto ini secara permanen dari Dashboard, Google Drive, dan Spreadsheet?')) return;
   var r = PHOTO_GALLERY.row;
-  var year = PHOTO_GALLERY.year;
+  var year = (PHOTO_GALLERY.years || [])[PHOTO_GALLERY.idx] || PHOTO_GALLERY.year;
   var context = PHOTO_GALLERY.context || 'juna';
   var idx = PHOTO_GALLERY.idx;
   var targetUrl = PHOTO_GALLERY.photos[idx];
@@ -4551,6 +4911,8 @@ function openUploadModal(r) {
   // Reset input file
   var fi = document.getElementById('upload-files');
   if (fi) fi.value = '';
+  var angle1 = document.querySelector('input[name="upload-angle"][value="Sudut Foto #1"]');
+  if (angle1) angle1.checked = true;
   
   var monDiv = document.getElementById('upload-monitoring-fields');
   if (monDiv) {
@@ -4666,6 +5028,7 @@ function saveLocalPhoto() {
   var year = document.getElementById('upload-year').value;
   var context = PHOTO_GALLERY.context || 'juna';
   var coords = getPhotoCoords(r);
+  var selectedAngle = getSelectedUploadAngle();
   
   var btn = document.querySelector('#upload-modal .btn-apply');
   var oldText = btn.innerHTML;
@@ -4686,7 +5049,11 @@ function saveLocalPhoto() {
 
   function uploadOne(file, index) {
     btn.innerHTML = 'Menyiapkan foto (' + (index + 1) + '/' + files.length + ')...';
-    return getFileExifDate(file)
+    return validateSingleImageFile(file)
+      .then(function(fileErr) {
+        if (fileErr) throw new Error(fileErr);
+        return getFileExifDate(file);
+      })
       .then(function(exifDate) {
         var manualDateVal = document.getElementById('upload-datetime') ? document.getElementById('upload-datetime').value : '';
         var finalDateStr = manualDateVal ? formatUploadDate(new Date(manualDateVal)) : (exifDate || formatUploadDate(new Date()));
@@ -4719,11 +5086,13 @@ function saveLocalPhoto() {
             action: "upload",
             base64: base64Clean,
             mimeType: file.type || "image/jpeg",
+            filename: file.name || '',
             lat: coords.lat,
             lng: coords.lng,
             year: year,
             date: finalDateStr,
             category: catUpload,
+            angle: selectedAngle,
             rowIndex: r._row_idx || '',
             sheetGid: r._source_gid || '',
             featureId: r['ID'] || r.featureId || '',
@@ -4759,10 +5128,12 @@ function saveLocalPhoto() {
             r['Foto_' + year] = currentFotos ? currentFotos + "|" + data.url : data.url;
             var currentDates = r['Tanggal_' + year] ? String(r['Tanggal_' + year]).trim() : '';
             r['Tanggal_' + year] = currentDates ? currentDates + "|" + (data.date || finalDateStr) : (data.date || finalDateStr);
+            var currentAngles = r['Sudut_' + year] ? String(r['Sudut_' + year]).trim() : '';
+            r['Sudut_' + year] = currentAngles ? currentAngles + "|" + selectedAngle : selectedAngle;
 
             // Also keep it in localStorage just in case of page reload before Google Sheets cache expires
             var locals = getLocalPhotos(r, year, context);
-            locals.push({ url: data.url, date: data.date || finalDateStr });
+            locals.push({ url: data.url, date: data.date || finalDateStr, angle: selectedAngle });
             saveLocalPhotosToStorage(r, year, locals, context);
           });
         });
@@ -4820,9 +5191,465 @@ function selectUploadYear(year) {
     if (p.getAttribute('data-year') === year) p.classList.add('active');
   });
 }
-/* ═══════════════════════════════════════════════════════════
-   🌲 POLYGON KEGIATAN & POHON MARKER
-   ═══════════════════════════════════════════════════════════ */
+
+function getBackendCategoryForContext(context) {
+  if (context === 'pjl') return 'pjl';
+  if (context === 'pegawai') return 'pegawai';
+  if (context === 'pegawaiBinaan') return 'pegawaibinaanformatsistem';
+  if (context === 'per') return 'persemaian';
+  if (context === 'polygon') return 'polygon';
+  return 'juna';
+}
+
+function parsePhotoDateToInputValue(dateStr) {
+  var ts = parseExifDate(dateStr);
+  if (!ts) return '';
+  var d = new Date(ts);
+  return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2) + 'T' + ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+}
+
+function getIsoDateFromInput(value) {
+  if (!value) return '';
+  var d = new Date(value);
+  if (isNaN(d.getTime())) return value;
+  return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2) + ' ' + ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+}
+
+function getWeeklyCheckedValues(name) {
+  return Array.from(document.querySelectorAll('input[name="' + name + '"]:checked')).map(function(el) { return el.value; }).join(', ');
+}
+
+function setWeeklyCheckedValues(name, value) {
+  var selected = String(value || '').split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+  document.querySelectorAll('input[name="' + name + '"]').forEach(function(el) {
+    el.checked = selected.indexOf(el.value) !== -1;
+  });
+}
+
+function calculateWeeklyTotalBibit(text) {
+  var total = 0;
+  String(text || '').replace(/\((\d+)\)|\b(\d+)\b/g, function(_, a, b) {
+    total += parseInt(a || b || '0', 10) || 0;
+    return _;
+  });
+  return total;
+}
+
+function resetWeeklyReportForm() {
+  var form = document.getElementById('weekly-report-form');
+  if (form) form.reset();
+  document.getElementById('weekly-report-id').value = '';
+  document.getElementById('weekly-report-mode').value = 'create';
+  var totalEl = document.getElementById('wr-total-bibit');
+  if (totalEl) totalEl.value = '0';
+  var user = getCurrentAuthUser();
+  var pelaksana = document.getElementById('wr-pelaksana');
+  if (pelaksana && user) pelaksana.value = user.nama || user.username || '';
+  var waktu = document.getElementById('wr-waktu');
+  if (waktu) {
+    delete waktu.dataset.userEdited;
+    var now = new Date();
+    waktu.value = now.getFullYear() + '-' + ('0' + (now.getMonth() + 1)).slice(-2) + '-' + ('0' + now.getDate()).slice(-2) + 'T' + ('0' + now.getHours()).slice(-2) + ':' + ('0' + now.getMinutes()).slice(-2);
+  }
+}
+
+function getWeeklyLocationLabel(r, context) {
+  if (!r) return '';
+  if (context === 'per') return (r['Nama Persemaian'] || r['Nama'] || 'Lokasi Persemaian') + ' - ' + (r['Unit Kerja'] || r._cdk || '');
+  if (context === 'polygon') return (r['Nama'] || 'Titik Kegiatan') + ' - ' + (r['Kegiatan'] || '');
+  if (context === 'pegawaiBinaan') return (getBinaanKabupaten(r) || r._kab || '') + ' - ' + (getBinaanField(r, 'kegiatan') || '');
+  return getName(r) + ' - ' + (r['Unit Kerja'] || r['UNIT KERJA'] || r['Kabupaten/Kota'] || r._kab || '');
+}
+
+function openWeeklyReportModal(report) {
+  var r = WEEKLY_REPORT_STATE.row || PHOTO_GALLERY.row;
+  if (!r) return;
+  var context = WEEKLY_REPORT_STATE.context || PHOTO_GALLERY.context || 'juna';
+  var modal = document.getElementById('weekly-report-modal');
+  if (!modal) return;
+  resetWeeklyReportForm();
+  var info = document.getElementById('weekly-report-loc-info');
+  if (info) info.textContent = getWeeklyLocationLabel(r, context);
+  var lokasi = document.getElementById('wr-lokasi');
+  if (lokasi) lokasi.value = getWeeklyLocationLabel(r, context);
+  var title = document.querySelector('#weekly-report-modal .modal-head h2');
+  if (title) title.textContent = report ? 'EDIT LAPORAN MINGGUAN HUTAN BINAAN' : 'FORM LAPORAN MINGGUAN HUTAN BINAAN';
+  if (report) {
+    document.getElementById('weekly-report-id').value = report.id || '';
+    document.getElementById('weekly-report-mode').value = 'edit';
+    document.getElementById('wr-pelaksana').value = report.pelaksana || '';
+    document.getElementById('wr-lokasi').value = report.lokasi || '';
+    document.getElementById('wr-waktu').value = parsePhotoDateToInputValue(report.waktu) || parsePhotoDateToInputValue(report.fotoTanggal) || '';
+    document.getElementById('wr-tutupan').value = report.tutupan || '';
+    setWeeklyCheckedValues('wr-vegetatif', report.kegiatanVegetatif);
+    document.getElementById('wr-bibit').value = report.jenisJumlahBibit || '';
+    document.getElementById('wr-total-bibit').value = report.totalBibit || calculateWeeklyTotalBibit(report.jenisJumlahBibit);
+    setWeeklyCheckedValues('wr-kondisi-tanaman', report.kondisiTanaman);
+    setWeeklyCheckedValues('wr-monitoring', report.kegiatanMonitoring);
+    document.getElementById('wr-uraian').value = report.uraian || '';
+    document.getElementById('wr-ada-gangguan').value = report.adaGangguan || '';
+    setWeeklyCheckedValues('wr-jenis-gangguan', report.jenisGangguan);
+    document.getElementById('wr-tindak-lanjut').value = report.tindakLanjut || '';
+  }
+  modal.classList.add('open');
+  // Cek versi backend satu kali; tampilkan warning jika perlu
+  checkBackendVersion(function(ok) {
+    var submitBtn = document.getElementById('weekly-report-submit');
+    var warningId = 'wr-backend-warning';
+    var existing = document.getElementById(warningId);
+    if (existing) existing.remove();
+    if (!ok) {
+      var warn = document.createElement('div');
+      warn.id = warningId;
+      warn.style.cssText = 'background:#fff3cd;border:1px solid #ffc107;border-radius:6px;padding:10px 14px;margin:8px 0;font-size:13px;color:#856404;line-height:1.5;';
+      warn.innerHTML = '<strong>\u26a0\ufe0f Backend perlu di-deploy ulang</strong><br>Kode terbaru belum aktif. Fitur Simpan Laporan tidak akan berfungsi.<br><small>Buka Apps Script &rarr; Deploy &rarr; Manage Deployments &rarr; Edit &rarr; Latest version &rarr; Deploy.</small>';
+      var form = document.getElementById('weekly-report-form');
+      if (form && submitBtn) form.insertBefore(warn, submitBtn.parentNode);
+      if (submitBtn) { submitBtn.disabled = true; submitBtn.title = 'Backend perlu di-deploy ulang terlebih dahulu.'; }
+    } else {
+      if (submitBtn) { submitBtn.disabled = false; submitBtn.title = ''; }
+    }
+  });
+}
+
+function closeWeeklyReportModal() {
+  var modal = document.getElementById('weekly-report-modal');
+  if (modal) modal.classList.remove('open');
+}
+
+function validateSingleImageFile(file) {
+  if (!file) return Promise.resolve(null);
+  if (file.size > 5 * 1024 * 1024) return Promise.resolve('Ukuran foto melebihi 5 MB.');
+  if (!file.type.match(/^image\//) && !file.name.toLowerCase().match(/\.(heic|heif)$/)) return Promise.resolve('File lampiran bukan format gambar.');
+  if (file.name.toLowerCase().match(/\.(heic|heif)$/)) return Promise.resolve(null);
+  return new Promise(function(resolve) {
+    var img = new Image();
+    var url = URL.createObjectURL(file);
+    var settled = false;
+    function finish(msg) {
+      if (settled) return;
+      settled = true;
+      URL.revokeObjectURL(url);
+      resolve(msg || null);
+    }
+    img.onload = function() { finish(null); };
+    img.onerror = function() { finish('File foto rusak atau tidak dapat dibaca.'); };
+    img.src = url;
+    setTimeout(function() { finish('File foto tidak dapat diverifikasi.'); }, 4000);
+  });
+}
+
+function submitWeeklyReport(event) {
+  if (event) event.preventDefault();
+  var r = WEEKLY_REPORT_STATE.row || PHOTO_GALLERY.row;
+  var context = WEEKLY_REPORT_STATE.context || PHOTO_GALLERY.context || 'juna';
+  if (!r) return;
+  var btn = document.getElementById('weekly-report-submit');
+  var old = btn ? btn.textContent : '';
+  var fileInput = document.getElementById('wr-foto');
+  var file = fileInput && fileInput.files ? fileInput.files[0] : null;
+  if (fileInput && fileInput.files && fileInput.files.length > 1) {
+    showToast('Maksimal 1 foto untuk laporan mingguan.', 'error');
+    return;
+  }
+  if (btn) { btn.disabled = true; btn.textContent = 'Menyimpan...'; }
+
+  validateSingleImageFile(file).then(function(err) {
+    if (err) throw new Error(err);
+    return file ? getFileExifDate(file).then(function(exifDate) {
+      var waktu = document.getElementById('wr-waktu');
+      if (exifDate && waktu && !waktu.dataset.userEdited) waktu.value = parsePhotoDateToInputValue(exifDate) || waktu.value;
+      return readFileAsDataUrl(file).then(function(dataUrl) {
+        return { base64: String(dataUrl).split(',')[1] || '', mimeType: file.type || 'image/jpeg', filename: file.name || '', exifDate: exifDate };
+      });
+    }) : Promise.resolve({ base64: '', mimeType: '', exifDate: '' });
+  }).then(function(photo) {
+    var coords = getPhotoCoords(r);
+    var bibitText = document.getElementById('wr-bibit').value || '';
+    var payload = {
+      action: 'saveWeeklyReport',
+      mode: document.getElementById('weekly-report-mode').value || 'create',
+      reportId: document.getElementById('weekly-report-id').value || '',
+      category: getBackendCategoryForContext(context),
+      lat: coords.lat,
+      lng: coords.lng,
+      rowIndex: r._row_idx || '',
+      sheetGid: r._source_gid || '',
+      featureId: r['ID'] || r.featureId || '',
+      photoBase64: photo.base64,
+      photoMimeType: photo.mimeType,
+      photoFilename: photo.filename || '',
+      report: {
+        pelaksana: document.getElementById('wr-pelaksana').value,
+        lokasi: document.getElementById('wr-lokasi').value,
+        waktu: getIsoDateFromInput(document.getElementById('wr-waktu').value),
+        tutupan: document.getElementById('wr-tutupan').value,
+        kegiatanVegetatif: getWeeklyCheckedValues('wr-vegetatif'),
+        jenisJumlahBibit: bibitText,
+        totalBibit: calculateWeeklyTotalBibit(bibitText),
+        kondisiTanaman: getWeeklyCheckedValues('wr-kondisi-tanaman'),
+        kegiatanMonitoring: getWeeklyCheckedValues('wr-monitoring'),
+        uraian: document.getElementById('wr-uraian').value,
+        adaGangguan: document.getElementById('wr-ada-gangguan').value,
+        jenisGangguan: getWeeklyCheckedValues('wr-jenis-gangguan'),
+        tindakLanjut: document.getElementById('wr-tindak-lanjut').value,
+        fotoTanggal: photo.exifDate
+      }
+    };
+    return fetch(GAS_WEB_APP_URL, { method: 'POST', body: JSON.stringify(withAuthPayload(payload)) }).then(function(res) { return res.json(); });
+  }).then(function(res) {
+    if (!res.success) throw new Error(res.error || 'Gagal menyimpan laporan.');
+    closeWeeklyReportModal();
+    showToast('Laporan mingguan berhasil disimpan.', 'success');
+    loadWeeklyReportsForMarker(true);
+  }).catch(function(err) {
+    showToast(getFriendlyBackendErrorMessage(err), 'error');
+  }).finally(function() {
+    if (btn) { btn.disabled = false; btn.textContent = old || 'Simpan Laporan'; }
+  });
+}
+
+function loadWeeklyReportsForMarker(showLoading) {
+  var r = WEEKLY_REPORT_STATE.row || PHOTO_GALLERY.row;
+  var context = WEEKLY_REPORT_STATE.context || PHOTO_GALLERY.context || 'juna';
+  var list = document.getElementById('weekly-report-list');
+  if (!r || !list) return;
+  if (showLoading) list.innerHTML = '<div class="weekly-empty">Memuat riwayat laporan...</div>';
+  var coords = getPhotoCoords(r);
+  var url = GAS_WEB_APP_URL + '?action=getWeeklyReports&category=' + encodeURIComponent(getBackendCategoryForContext(context)) +
+    '&lat=' + encodeURIComponent(coords.lat) + '&lng=' + encodeURIComponent(coords.lng) +
+    '&rowIndex=' + encodeURIComponent(r._row_idx || '') + '&sheetGid=' + encodeURIComponent(r._source_gid || '') +
+    '&featureId=' + encodeURIComponent(r['ID'] || r.featureId || '');
+  fetch(appendAuthParam(url)).then(function(res) { return res.json(); }).then(function(data) {
+    if (!data.success) throw new Error(data.error || 'Gagal memuat laporan.');
+    WEEKLY_REPORT_STATE.reports = data.reports || [];
+    renderWeeklyReportList();
+  }).catch(function(err) {
+    list.innerHTML = '<div class="weekly-empty error">' + getFriendlyBackendErrorMessage(err) + '</div>';
+  });
+}
+
+function renderWeeklyReportList() {
+  var list = document.getElementById('weekly-report-list');
+  if (!list) return;
+  var reports = WEEKLY_REPORT_STATE.reports || [];
+  if (!reports.length) {
+    list.innerHTML = '<div class="weekly-empty">Belum ada laporan mingguan untuk titik ini.</div>';
+    return;
+  }
+  list.innerHTML = reports.map(function(rep, idx) {
+    var photo = rep.fotoUrl ? '<button type="button" onclick="previewWeeklyPhoto(' + idx + ')">Lihat Foto</button>' : '';
+    return '<div class="weekly-report-card">' +
+      '<div><strong>' + (formatDateIndo(rep.waktu) || '-') + '</strong><span>' + (rep.pelaksana || '-') + '</span></div>' +
+      '<p>' + (rep.uraian || '-').substring(0, 180) + '</p>' +
+      '<div class="weekly-report-actions">' + photo +
+        '<button type="button" onclick="viewWeeklyReportDetail(' + idx + ')">Detail</button>' +
+        '<button type="button" onclick="openWeeklyReportModal(WEEKLY_REPORT_STATE.reports[' + idx + '])">Edit</button>' +
+        '<button type="button" class="danger" onclick="deleteWeeklyReport(\'' + (rep.id || '') + '\')">Hapus</button>' +
+      '</div></div>';
+  }).join('');
+}
+
+function viewWeeklyReportDetail(idx) {
+  var rep = (WEEKLY_REPORT_STATE.reports || [])[idx];
+  if (!rep) return;
+  alert([
+    'Pelaksana: ' + (rep.pelaksana || '-'),
+    'Lokasi: ' + (rep.lokasi || '-'),
+    'Waktu: ' + (formatDateIndo(rep.waktu) || '-'),
+    'Tutupan: ' + (rep.tutupan || '-'),
+    'Kegiatan Vegetatif: ' + (rep.kegiatanVegetatif || '-'),
+    'Bibit: ' + (rep.jenisJumlahBibit || '-') + ' | Total: ' + (rep.totalBibit || 0),
+    'Kondisi Tanaman: ' + (rep.kondisiTanaman || '-'),
+    'Monitoring: ' + (rep.kegiatanMonitoring || '-'),
+    'Uraian: ' + (rep.uraian || '-'),
+    'Gangguan: ' + (rep.adaGangguan || '-') + ' | ' + (rep.jenisGangguan || '-'),
+    'Tindak Lanjut: ' + (rep.tindakLanjut || '-')
+  ].join('\n'));
+}
+
+function previewWeeklyPhoto(idx) {
+  var rep = (WEEKLY_REPORT_STATE.reports || [])[idx];
+  if (!rep || !rep.fotoUrl) return;
+  LB_STATE.photos = [normalizeImageUrl(rep.fotoUrl)];
+  LB_STATE.dates = [rep.fotoTanggal || rep.waktu || ''];
+  LB_STATE.years = [''];
+  LB_STATE.angles = ['Laporan Mingguan'];
+  LB_STATE.idx = 0;
+  LB_STATE.year = '';
+  LB_STATE.context = 'weekly';
+  LB_STATE.locName = '<strong style="color:#fff;">Laporan Mingguan</strong><br/>' + (rep.lokasi || '');
+  document.getElementById('photo-lightbox').classList.add('open');
+  document.body.style.overflow = 'hidden';
+  refreshLightbox();
+}
+
+function deleteWeeklyReport(reportId) {
+  if (!reportId || !confirm('Hapus laporan mingguan ini?')) return;
+  var r = WEEKLY_REPORT_STATE.row || PHOTO_GALLERY.row;
+  var context = WEEKLY_REPORT_STATE.context || PHOTO_GALLERY.context || 'juna';
+  var coords = getPhotoCoords(r);
+  fetch(GAS_WEB_APP_URL, {
+    method: 'POST',
+    body: JSON.stringify(withAuthPayload({
+      action: 'deleteWeeklyReport',
+      reportId: reportId,
+      category: getBackendCategoryForContext(context),
+      lat: coords.lat,
+      lng: coords.lng,
+      rowIndex: r._row_idx || '',
+      sheetGid: r._source_gid || '',
+      featureId: r['ID'] || r.featureId || ''
+    }))
+  }).then(function(res) { return res.json(); }).then(function(res) {
+    if (!res.success) throw new Error(res.error || 'Gagal menghapus laporan.');
+    showToast('Laporan mingguan dihapus.', 'success');
+    loadWeeklyReportsForMarker(true);
+  }).catch(function(err) { showToast(err.message || String(err), 'error'); });
+}
+
+var wrBibitEl = document.getElementById('wr-bibit');
+if (wrBibitEl) wrBibitEl.addEventListener('input', function() {
+  var totalEl = document.getElementById('wr-total-bibit');
+  if (totalEl) totalEl.value = calculateWeeklyTotalBibit(this.value);
+});
+var wrWaktuEl = document.getElementById('wr-waktu');
+if (wrWaktuEl) wrWaktuEl.addEventListener('input', function() { this.dataset.userEdited = '1'; });
+var wrFotoEl = document.getElementById('wr-foto');
+if (wrFotoEl) wrFotoEl.addEventListener('change', function() {
+  var f = this.files && this.files[0];
+  if (!f) return;
+  getFileExifDate(f).then(function(exifDate) {
+    var waktu = document.getElementById('wr-waktu');
+    if (exifDate && waktu && !waktu.dataset.userEdited) waktu.value = parsePhotoDateToInputValue(exifDate) || waktu.value;
+  });
+});
+
+function canAccessReportMonitor() {
+  var user = getCurrentAuthUser();
+  return !!(user && user.username && getRoleGroup(user.role) <= 3);
+}
+
+function openReportMonitor(type) {
+  closeReportMenu();
+  if (!canAccessReportMonitor()) {
+    showToast('Akses laporan hanya untuk pimpinan dan admin.', 'error');
+    return;
+  }
+  WEEKLY_REPORT_STATE.monitorType = type || 'weekly';
+  var modal = document.getElementById('report-monitor-modal');
+  var title = document.getElementById('report-monitor-title');
+  if (title) title.textContent = type === 'monthly' ? 'Monitoring Laporan Bulanan' : 'Monitoring Laporan Mingguan';
+  if (modal) modal.classList.add('open');
+  reloadReportMonitor();
+}
+
+function closeReportMonitor() {
+  var modal = document.getElementById('report-monitor-modal');
+  if (modal) modal.classList.remove('open');
+}
+
+function reloadReportMonitor() {
+  if (WEEKLY_REPORT_STATE.monitorType === 'monthly') {
+    WEEKLY_REPORT_STATE.monitorRows = buildMonthlyReportRows();
+    renderReportMonitorTable();
+    return;
+  }
+  var body = document.getElementById('report-monitor-body');
+  if (body) body.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;">Memuat laporan mingguan...</td></tr>';
+  fetch(appendAuthParam(GAS_WEB_APP_URL + '?action=getAllWeeklyReports')).then(function(res) { return res.json(); }).then(function(data) {
+    if (!data.success) throw new Error(data.error || 'Gagal memuat laporan mingguan.');
+    WEEKLY_REPORT_STATE.monitorRows = data.reports || [];
+    renderReportMonitorTable();
+  }).catch(function(err) {
+    if (body) body.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:#c62828;">' + getFriendlyBackendErrorMessage(err) + '</td></tr>';
+  });
+}
+
+function getAllMarkerRowsForReports() {
+  return [].concat(
+    (DATA.pjl || []).map(function(r) { return { context: 'pjl', category: 'pjl', label: POP_LABEL.pjl, row: r }; }),
+    (DATA.persemaian || []).map(function(r) { return { context: 'per', category: 'persemaian', label: POP_LABEL.per, row: r }; }),
+    (DATA.pegawai || []).map(function(r) { return { context: 'pegawai', category: 'pegawai', label: POP_LABEL.peg, row: r }; }),
+    (DATA.pegawaiBinaan || []).map(function(r) { return { context: 'pegawaiBinaan', category: 'pegawaibinaanformatsistem', label: POP_LABEL.pegb, row: r }; }),
+    (DATA.jumat || []).map(function(r) { return { context: 'juna', category: 'juna', label: POP_LABEL.jum, row: r }; }),
+    (POLYGON_FEATURES_CACHE || []).map(function(r) { return { context: 'polygon', category: 'polygon', label: 'Titik Kegiatan', row: r }; })
+  );
+}
+
+function buildMonthlyReportRows() {
+  var rows = [];
+  getAllMarkerRowsForReports().forEach(function(item) {
+    var r = item.row;
+    if (!r) return;
+    PHOTO_YEARS.forEach(function(year) {
+      var photos = getRowPhotos(r, year);
+      var dates = getRowDates(r, year);
+      var angles = getRowAngles(r, year);
+      photos.forEach(function(url, idx) {
+        rows.push({
+          category: item.category,
+          kategoriLabel: item.label,
+          nama: getWeeklyLocationLabel(r, item.context),
+          unit: r['Unit Kerja'] || r['UNIT KERJA'] || r._cdk || '',
+          waktu: dates[idx] || '',
+          tahun: year,
+          sudut: normalizePhotoAngle(angles[idx]),
+          fotoUrl: url
+        });
+      });
+    });
+  });
+  rows.sort(function(a, b) { return (parseExifDate(b.waktu) || 0) - (parseExifDate(a.waktu) || 0); });
+  return rows;
+}
+
+function passesReportFilters(row) {
+  var q = String((document.getElementById('report-search') || {}).value || '').toLowerCase();
+  var cat = String((document.getElementById('report-category-filter') || {}).value || '');
+  var month = String((document.getElementById('report-month-filter') || {}).value || '');
+  if (cat && row.category !== cat) return false;
+  var text = [row.kategoriLabel, row.nama, row.unit, row.pelaksana, row.lokasi, row.uraian, row.sudut, row.tahun].join(' ').toLowerCase();
+  if (q && text.indexOf(q) === -1) return false;
+  if (month) {
+    var ts = parseExifDate(row.waktu || row.fotoTanggal || '');
+    if (!ts) return false;
+    var d = new Date(ts);
+    var ym = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
+    if (ym !== month) return false;
+  }
+  return true;
+}
+
+function renderReportMonitorTable() {
+  var type = WEEKLY_REPORT_STATE.monitorType || 'weekly';
+  var rows = (WEEKLY_REPORT_STATE.monitorRows || []).filter(passesReportFilters);
+  var head = document.getElementById('report-monitor-head');
+  var body = document.getElementById('report-monitor-body');
+  var kpi = document.getElementById('report-kpi-row');
+  if (!head || !body) return;
+  if (kpi) {
+    var cats = {};
+    rows.forEach(function(r) { cats[r.category || r.kategoriLabel || '-'] = true; });
+    kpi.innerHTML = '<div><strong>' + rows.length + '</strong><span>Total Laporan</span></div>' +
+      '<div><strong>' + Object.keys(cats).length + '</strong><span>Kategori Aktif</span></div>' +
+      '<div><strong>' + (type === 'monthly' ? 'Bulanan' : 'Mingguan') + '</strong><span>Mode</span></div>';
+  }
+  if (type === 'monthly') {
+    head.innerHTML = '<tr><th>Kegiatan</th><th>Lokasi</th><th>Unit</th><th>Tahun</th><th>Sudut</th><th>Tanggal</th><th>Foto</th></tr>';
+    body.innerHTML = rows.length ? rows.map(function(r) {
+      return '<tr><td>' + (r.kategoriLabel || '-') + '</td><td>' + (r.nama || '-') + '</td><td>' + (r.unit || '-') + '</td><td>' + (r.tahun || '-') + '</td><td>' + (r.sudut || '-') + '</td><td>' + (formatDateIndo(r.waktu) || '-') + '</td><td><a target="_blank" href="' + (r.fotoUrl || '#') + '">Buka</a></td></tr>';
+    }).join('') : '<tr><td colspan="7" style="text-align:center;padding:24px;">Tidak ada data laporan bulanan.</td></tr>';
+  } else {
+    head.innerHTML = '<tr><th>Kegiatan</th><th>Pelaksana</th><th>Lokasi</th><th>Waktu</th><th>Tutupan</th><th>Vegetatif</th><th>Gangguan</th><th>Foto</th></tr>';
+    body.innerHTML = rows.length ? rows.map(function(r) {
+      return '<tr><td>' + (r.kategoriLabel || r.category || '-') + '</td><td>' + (r.pelaksana || '-') + '</td><td>' + (r.lokasi || r.nama || '-') + '</td><td>' + (formatDateIndo(r.waktu) || '-') + '</td><td>' + (r.tutupan || '-') + '</td><td>' + (r.kegiatanVegetatif || '-') + '</td><td>' + (r.adaGangguan || '-') + '</td><td>' + (r.fotoUrl ? '<a target="_blank" href="' + r.fotoUrl + '">Buka</a>' : '-') + '</td></tr>';
+    }).join('') : '<tr><td colspan="8" style="text-align:center;padding:24px;">Tidak ada data laporan mingguan.</td></tr>';
+  }
+}
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   ðŸŒ² POLYGON KEGIATAN & POHON MARKER
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 // ===== Coordinate helpers (supaya render polygon/titik kegiatan tidak tergantung file lain) =====
 function toFloat(v) {
@@ -4847,8 +5674,8 @@ var POLYGON_FEATURE_RENDER_TOKEN = 0;
 mapObj.addLayer(POLYGON_AREA_LAYER);
 mapObj.addLayer(POHON_MARKER_LAYER);
 
-var SVG_POHON_KECIL = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="20" viewBox="0 0 20 24"><ellipse cx="10" cy="8" rx="6" ry="7" fill="#388e3c" stroke="#fff" stroke-width="1"/><ellipse cx="10" cy="13" rx="4.5" ry="5" fill="#43a047" stroke="#fff" stroke-width="0.8"/><rect x="8.5" y="18" width="3" height="5" rx="1" fill="#5d4037"/></svg>';
-var ICON_POHON = L.divIcon({ html: SVG_POHON_KECIL, iconSize: [16, 20], iconAnchor: [8, 20], className: '' });
+var SVG_POHON_KECIL = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.5" fill="#00e676"/></svg>';
+var ICON_POHON = L.divIcon({ html: SVG_POHON_KECIL, iconSize: [16, 16], iconAnchor: [8, 8], className: 'leaflet-marker-lightweight' });
 
 function togglePolygonKegiatanLayer() {
   var cb = document.getElementById('toggle-polygon-kegiatan');
@@ -5064,7 +5891,7 @@ function addBibitRow() {
   div.style.marginBottom = '5px';
   div.innerHTML = '<input type="text" class="bibit-jenis" placeholder="Jenis Bibit (Mis: Mangga)" style="flex:2; padding:6px; border-radius:4px; border:1px solid #ccc;">' +
                   '<input type="number" class="bibit-jumlah" placeholder="Jumlah (Mis: 100)" style="flex:1; padding:6px; border-radius:4px; border:1px solid #ccc;">' +
-                  '<button type="button" class="btn-icon" onclick="removeBibitRow(this)" style="color:red; font-size:16px; border:none; background:none;">✖</button>';
+                  '<button type="button" class="btn-icon" onclick="removeBibitRow(this)" style="color:red; font-size:16px; border:none; background:none;">âœ–</button>';
   c.appendChild(div);
 }
 
@@ -5464,3 +6291,14 @@ function openDrawerFromFeature(featId, type) {
     openDrawer(type, feat);
   }
 }
+
+
+
+
+
+
+
+
+
+
+

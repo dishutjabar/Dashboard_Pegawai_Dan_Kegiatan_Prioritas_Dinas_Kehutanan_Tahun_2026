@@ -4,7 +4,7 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="referrer" content="no-referrer">
-<title>GeoHutan Jabar – Peta Sebaran Data Kehutanan</title>
+<title>GeoHutan Jabar - Peta Sebaran Data Kehutanan</title>
 <meta name="description" content="Dashboard WebGIS Dinas Kehutanan Provinsi Jawa Barat">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#2e7d32">
@@ -20,25 +20,25 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
-<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js" defer></script>
+<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js" defer></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
-<script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js" defer></script>
+<script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
+<script src="https://code.jquery.com/jquery-3.7.1.min.js" defer></script>
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
-<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
-<script src="https://unpkg.com/jszip@3.10.1/dist/jszip.min.js"></script>
-<script src="https://unpkg.com/leaflet-kmz@1.0.9/dist/leaflet-kmz.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/exif-js"></script>
-<script src="https://unpkg.com/shpjs@4.0.4/dist/shp.js"></script>
-<script src="https://unpkg.com/@tmcw/togeojson@5.8.1/dist/togeojson.umd.js"></script>
-<script src="https://unpkg.com/leaflet.vectorgrid@latest/dist/Leaflet.VectorGrid.bundled.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js" defer></script>
+<script src="https://unpkg.com/jszip@3.10.1/dist/jszip.min.js" defer></script>
+<script src="https://unpkg.com/leaflet-kmz@1.0.9/dist/leaflet-kmz.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/exif-js" defer></script>
+<script src="https://unpkg.com/shpjs@4.0.4/dist/shp.js" defer></script>
+<script src="https://unpkg.com/@tmcw/togeojson@5.8.1/dist/togeojson.umd.js" defer></script>
+<script src="https://unpkg.com/leaflet.vectorgrid@latest/dist/Leaflet.VectorGrid.bundled.js" defer></script>
 <link rel="stylesheet" href="styles.css"/>
 <link rel="stylesheet" href="css/ai.css"/>
 </head>
@@ -118,7 +118,13 @@
     <div id="clock">00:00:00</div>
     <button id="btn-spatial" class="btn-icon btn-spatial-upload" onclick="openSpatialModal()" title="Upload File Spasial (SHP, KML, GeoJSON, ZIP, Folder)">&#128205; <span class="d-none-mobile">Upload Spasial</span></button>
     <button id="btn-table" class="btn-icon" onclick="openTableModal()">&#128203; <span class="d-none-mobile">Tabel Data</span></button>
-    <button id="btn-source" class="btn-icon" onclick="openSourceModal()">&#128240; <span class="d-none-mobile">Sumber Data</span></button>
+    <div id="report-menu" class="report-menu">
+      <button id="btn-report" class="btn-icon" type="button" onclick="toggleReportMenu(event)">&#128202; <span class="d-none-mobile">Laporan</span></button>
+      <div id="report-dropdown" class="report-dropdown">
+        <button type="button" onclick="openReportMonitor('weekly')">Laporan Mingguan</button>
+        <button type="button" onclick="openReportMonitor('monthly')">Laporan Bulanan</button>
+      </div>
+    </div>
     <button id="btn-export" class="btn-icon" onclick="openExportModal()">&#128196; <span class="d-none-mobile">Export</span></button>
     <button class="btn-icon" onclick="goFullscreen()">&#9974; <span class="d-none-mobile">Fullscreen</span></button>
     <div class="profile-menu" id="profile-menu">
@@ -585,6 +591,14 @@
       <div id="upload-loc-info" style="font-size: 13px; font-weight: 600; margin-bottom: 15px; color: var(--primary);"></div>
       
       <div class="filter-group">
+        <label>Sudut Foto Linimasa:</label>
+        <div class="angle-segment">
+          <label><input type="radio" name="upload-angle" value="Sudut Foto #1" checked> Sudut Foto #1</label>
+          <label><input type="radio" name="upload-angle" value="Sudut Foto #2"> Sudut Foto #2</label>
+        </div>
+      </div>
+
+      <div class="filter-group">
         <label>Pilih Tahun Linimasa:</label>
         <div class="year-timeline" id="upload-year-pills" style="margin-top:5px; margin-bottom:15px; justify-content: flex-start;">
           <!-- Diisi JS dari PHOTO_YEARS -->
@@ -601,7 +615,7 @@
       <div class="filter-group">
         <label>Pilih File Foto (Bisa lebih dari 1 & bisa dari Kamera HP):</label>
         <input type="file" id="upload-files" accept="image/*, .heic, .heif" multiple style="font-size:12px; flex:1; width: 100%; border: 1px solid #ddd; padding: 10px; border-radius: 6px; background: #fafafa;">
-        <div style="font-size:10px; color:#666; margin-top:4px;">* Maks. 10 foto/sesi. Maks. 5MB/file (Total 30MB). Format gambar & HEIC. Tanggal foto diekstrak dari EXIF.</div>
+        <div style="font-size:10px; color:#666; margin-top:4px; line-height:1.45;">Minimal upload: 1 foto. Maksimal upload: 2 foto tiap 1 sesi upload. Ukuran tiap file: &le; 5 MB. Hanya menerima seluruh format gambar termasuk HEIC/HEIF dari Apple. File rusak atau tidak dapat dibaca akan ditolak.</div>
       </div>
 
       <div id="upload-monitoring-fields" class="monitoring-form" style="display:none;">
@@ -674,6 +688,133 @@
   </div>
 </div>
 
+<!-- 7b. Weekly Report Modal -->
+<div id="weekly-report-modal" class="modal-overlay" onclick="if(event.target==this) closeWeeklyReportModal()">
+  <div class="modal-content weekly-report-modal">
+    <div class="modal-head">
+      <h2>FORM LAPORAN MINGGUAN HUTAN BINAAN</h2>
+      <button class="close-modal" onclick="closeWeeklyReportModal()">&times;</button>
+    </div>
+    <form id="weekly-report-form" class="modal-body" onsubmit="submitWeeklyReport(event)">
+      <input type="hidden" id="weekly-report-id">
+      <input type="hidden" id="weekly-report-mode" value="create">
+      <div id="weekly-report-loc-info" class="weekly-loc-info"></div>
+
+      <div class="weekly-section">
+        <h3>A. Informasi Dasar</h3>
+        <div class="weekly-grid">
+          <label>Pelaksana<input type="text" id="wr-pelaksana" required></label>
+          <label>Lokasi Pelaksanaan<input type="text" id="wr-lokasi" required></label>
+          <label>Waktu Pelaksanaan<input type="datetime-local" id="wr-waktu" required></label>
+          <label>Kondisi Tutupan Lahan
+            <select id="wr-tutupan" required>
+              <option value="">Pilih kondisi</option>
+              <option>Baik</option>
+              <option>Perlu Perhatian</option>
+              <option>Gangguan</option>
+            </select>
+          </label>
+        </div>
+      </div>
+
+      <div class="weekly-section">
+        <h3>B. Kegiatan Minggu Ini</h3>
+        <div class="weekly-subtitle">Kegiatan Vegetatif</div>
+        <div class="weekly-checks">
+          <label><input type="checkbox" name="wr-vegetatif" value="Penanaman"> Penanaman</label>
+          <label><input type="checkbox" name="wr-vegetatif" value="Pemeliharaan"> Pemeliharaan</label>
+          <label><input type="checkbox" name="wr-vegetatif" value="Pendataan"> Pendataan</label>
+          <label><input type="checkbox" name="wr-vegetatif" value="Tidak ada kegiatan"> Tidak ada kegiatan</label>
+        </div>
+        <div class="weekly-grid">
+          <label>Jenis dan Jumlah Bibit<textarea id="wr-bibit" rows="3" placeholder="Contoh: Mahoni (100), Alpukat 50"></textarea></label>
+          <label>Total Bibit<input type="number" id="wr-total-bibit" readonly></label>
+        </div>
+        <div class="weekly-subtitle">Kondisi Tanaman</div>
+        <div class="weekly-checks">
+          <label><input type="checkbox" name="wr-kondisi-tanaman" value="Sehat"> Sehat</label>
+          <label><input type="checkbox" name="wr-kondisi-tanaman" value="Merana"> Merana</label>
+          <label><input type="checkbox" name="wr-kondisi-tanaman" value="Mati"> Mati</label>
+        </div>
+        <div class="weekly-subtitle">Kegiatan Monitoring</div>
+        <div class="weekly-checks">
+          <label><input type="checkbox" name="wr-monitoring" value="Koordinasi"> Koordinasi</label>
+          <label><input type="checkbox" name="wr-monitoring" value="Pembinaan"> Pembinaan</label>
+          <label><input type="checkbox" name="wr-monitoring" value="Perlindungan"> Perlindungan</label>
+          <label><input type="checkbox" name="wr-monitoring" value="Tidak ada kegiatan"> Tidak ada kegiatan</label>
+        </div>
+        <label class="weekly-full">Uraian Hasil Kegiatan<textarea id="wr-uraian" rows="4" required></textarea></label>
+      </div>
+
+      <div class="weekly-section">
+        <h3>C. Gangguan Ekosistem</h3>
+        <div class="weekly-grid">
+          <label>Ada Gangguan
+            <select id="wr-ada-gangguan" required>
+              <option value="">Pilih</option>
+              <option>Ya</option>
+              <option>Tidak</option>
+            </select>
+          </label>
+        </div>
+        <div class="weekly-checks">
+          <label><input type="checkbox" name="wr-jenis-gangguan" value="Perambahan"> Perambahan</label>
+          <label><input type="checkbox" name="wr-jenis-gangguan" value="Penebangan Liar"> Penebangan Liar</label>
+          <label><input type="checkbox" name="wr-jenis-gangguan" value="Kebakaran"> Kebakaran</label>
+          <label><input type="checkbox" name="wr-jenis-gangguan" value="Perburuan"> Perburuan</label>
+          <label><input type="checkbox" name="wr-jenis-gangguan" value="Pencemaran"> Pencemaran</label>
+          <label><input type="checkbox" name="wr-jenis-gangguan" value="Lainnya"> Lainnya</label>
+        </div>
+        <label class="weekly-full">Tindak Lanjut<textarea id="wr-tindak-lanjut" rows="3"></textarea></label>
+      </div>
+
+      <div class="weekly-section">
+        <h3>D. Lampiran Efiden Foto Kegiatan</h3>
+        <input type="file" id="wr-foto" accept="image/*, .heic, .heif">
+        <div class="weekly-help">Maksimal 1 foto, ukuran file &le; 5 MB, semua format gambar termasuk HEIC/HEIF. Tanggal foto akan dipakai untuk Waktu Pelaksanaan bila metadata tersedia.</div>
+      </div>
+
+      <div class="weekly-actions">
+        <button type="button" class="btn-reset" onclick="closeWeeklyReportModal()">Batal</button>
+        <button id="weekly-report-submit" class="btn-apply" type="submit">Simpan Laporan</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- 7c. Report Monitoring Modal -->
+<div id="report-monitor-modal" class="modal-overlay" onclick="if(event.target==this) closeReportMonitor()">
+  <div class="modal-content report-monitor-modal">
+    <div class="modal-head">
+      <h2 id="report-monitor-title">Monitoring Laporan</h2>
+      <button class="close-modal" onclick="closeReportMonitor()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="report-monitor-toolbar">
+        <input type="search" id="report-search" placeholder="Cari kegiatan, pelaksana, lokasi, unit..." oninput="renderReportMonitorTable()">
+        <select id="report-category-filter" onchange="renderReportMonitorTable()">
+          <option value="">Semua Kegiatan</option>
+          <option value="pjl">Petugas Jaga Leuweung</option>
+          <option value="persemaian">Lokasi Persemaian</option>
+          <option value="pegawai">Pegawai Dinas Kehutanan</option>
+          <option value="pegawaibinaanformatsistem">Data Hutan Binaan</option>
+          <option value="juna">Lokasi Juna Permanen</option>
+          <option value="polygon">Titik Kegiatan</option>
+        </select>
+        <input type="month" id="report-month-filter" onchange="renderReportMonitorTable()">
+        <button type="button" class="btn-apply" onclick="reloadReportMonitor()">Muat Ulang</button>
+      </div>
+      <div class="report-kpi-row" id="report-kpi-row"></div>
+      <div class="report-table-wrap">
+        <table class="report-table">
+          <thead id="report-monitor-head"></thead>
+          <tbody id="report-monitor-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Toast Container -->
 <div id="toast-container"></div>
 
@@ -692,6 +833,11 @@
       </div>
     </div>
     <div class="lightbox-img-wrap">
+      <div class="lightbox-angle-filter" id="lightbox-angle-filter">
+        <button type="button" class="active" data-angle="all" onclick="setGalleryAngleFilter('all')">Semua</button>
+        <button type="button" data-angle="Sudut Foto #1" onclick="setGalleryAngleFilter('Sudut Foto #1')">Sudut #1</button>
+        <button type="button" data-angle="Sudut Foto #2" onclick="setGalleryAngleFilter('Sudut Foto #2')">Sudut #2</button>
+      </div>
       <button class="lightbox-nav lb-prev" onclick="lightboxNav(-1)">&#8249;</button>
       <div class="lightbox-img-container">
         <img id="lightbox-img" src="" alt="Foto Lokasi" />
@@ -749,8 +895,8 @@
   </div>
 </div>
 
-<script src="app-core.js"></script>
-<script src="app-features.js"></script>
+<script src="app-core.js" defer></script>
+<script src="app-features.js" defer></script>
 <script src="js/ai.js" defer></script>
 
 <!-- ===== MODAL UPLOAD SPASIAL ===== -->
@@ -768,7 +914,7 @@
            ondrop="handleSpatialDrop(event)">
         <div class="spatial-dropzone-icon">&#128228;</div>
         <div class="spatial-dropzone-text">Seret & Lepas file di sini</div>
-        <div class="spatial-dropzone-sub">Mendukung: .shp saja, paket shapefile (sebagian/lengkap), .geojson, .json, .zip, folder, .kml, .kmz — atau pilih multi-file sekaligus</div>
+        <div class="spatial-dropzone-sub">Mendukung: .shp saja, paket shapefile (sebagian/lengkap), .geojson, .json, .zip, folder, .kml, .kmz â€” atau pilih multi-file sekaligus</div>
         <div class="spatial-upload-btns">
           <label class="btn-sp-upload" for="sp-file-input">&#128196; Pilih File / Multi-File</label>
           <input type="file" id="sp-file-input" style="display:none" multiple
@@ -823,3 +969,4 @@
 </div>
 </body>
 </html>
+
