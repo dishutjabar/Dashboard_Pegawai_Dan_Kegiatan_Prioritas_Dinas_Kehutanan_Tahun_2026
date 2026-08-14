@@ -1,4 +1,4 @@
-﻿// Custom ShapeMarker Extension for Canvas
+// Custom ShapeMarker Extension for Canvas
 if (typeof L !== 'undefined' && L.Canvas) {
     L.Canvas.include({
         _updateShapeMarker: function (layer) {
@@ -145,13 +145,17 @@ function getRoleGroup(role) {
   var g2 = ['kabid ppkh', 'kabid bupm', 'kabid pksdae'];
   var g3 = ['kepala tahura', 'kepala spth', 'kepala pphh', 'kepala cdk 1', 'kepala cdk 2', 'kepala cdk 3', 'kepala cdk 4', 'kepala cdk 5', 'kepala cdk 6', 'kepala cdk 7', 'kepala cdk 8', 'kepala cdk 9'];
   var g4 = ['pegwai madya', 'pegawai madya'];
-  var g5 = ['pegawai', 'kepala tu tahura', 'kepala tu spth', 'kepala tu pphh', 'kepala tu cdk 1', 'kepala tu cdk 2', 'kepala tu cdk 3', 'kepala tu cdk 4', 'kepala tu cdk 5', 'kepala tu cdk 6', 'kepala tu cdk 7', 'kepala tu cdk 8', 'kepala tu cdk 9', 'kepala tu sekretariat'];
+  var g5 = ['pegawai', 'kepala tu tahura', 'kepala tu spth', 'kepala tu pphh', 'kepala tu cdk 1', 'kepala tu cdk 2', 'kepala tu cdk 3', 'kepala tu cdk 4', 'kepala tu cdk 5', 'kepala tu cdk 6', 'kepala tu cdk 7', 'kepala tu cdk 8', 'kepala tu cdk 9', 'kepala tu sekretariat', 'kepala tu secretariat'];
   if (g1.indexOf(r) > -1) return 1;
   if (g2.indexOf(r) > -1) return 2;
   if (g3.indexOf(r) > -1) return 3;
   if (g4.indexOf(r) > -1) return 4;
   if (g5.indexOf(r) > -1) return 5;
   return 5;
+}
+
+function isAdminRole(role) {
+  return String(role || '').toLowerCase().trim().replace(/\s+/g, ' ') === 'admin';
 }
 
 function getCurrentAuthUser() {
@@ -253,19 +257,18 @@ function applyCurrentUserRoleDefaults(user) {
     else SPATIAL_ENABLED = true;
   }
 
+  if (!isAdminRole(user.role)) applyNonAdminMapDefaults_();
+
   if (group === 1) {
-    // Admin full access - no restrictions
+    if (!isAdminRole(user.role)) {
+      schedRender();
+      setTimeout(zoomToCurrentUserLocation, 450);
+    }
     return;
   }
 
   if (group === 2) {
-    // kabid ppkh, kabid bupm, kabid pksdae - see all, clustering ON
-    var clkToggle = document.getElementById('toggle-cluster');
-    if (clkToggle && !clkToggle.checked) {
-      clkToggle.checked = true;
-      if (typeof toggleClustering === 'function') toggleClustering();
-      else CLUSTER_ENABLED = true;
-    }
+    // kabid ppkh, kabid bupm, kabid pksdae - see all, clustering OFF by default
     setLayerVisibleState(['pjl', 'per', 'jum', 'peg', 'pegb'], true, false);
     schedRender();
     setTimeout(zoomToCurrentUserLocation, 450);
@@ -277,8 +280,7 @@ function applyCurrentUserRoleDefaults(user) {
     var clkToggle3 = document.getElementById('toggle-cluster');
     if (clkToggle3 && clkToggle3.checked) {
       clkToggle3.checked = false;
-      if (typeof toggleClustering === 'function') toggleClustering();
-      else CLUSTER_ENABLED = false;
+      CLUSTER_ENABLED = false;
     }
     setLayerVisibleState(['pjl', 'per', 'jum', 'peg', 'pegb'], true, false);
     schedRender();
@@ -292,8 +294,7 @@ function applyCurrentUserRoleDefaults(user) {
     var clkToggle4 = document.getElementById('toggle-cluster');
     if (clkToggle4 && clkToggle4.checked) {
       clkToggle4.checked = false;
-      if (typeof toggleClustering === 'function') toggleClustering();
-      else CLUSTER_ENABLED = false;
+      CLUSTER_ENABLED = false;
     }
     setLayerVisibleState(['pjl', 'per', 'jum'], false, false); 
     setLayerVisibleState(['peg', 'pegb'], true, false);
@@ -311,8 +312,7 @@ function applyCurrentUserRoleDefaults(user) {
     var clkToggle5 = document.getElementById('toggle-cluster');
     if (clkToggle5 && clkToggle5.checked) {
       clkToggle5.checked = false;
-      if (typeof toggleClustering === 'function') toggleClustering();
-      else CLUSTER_ENABLED = false;
+      CLUSTER_ENABLED = false;
     }
     setLayerVisibleState(['pjl', 'per', 'jum'], false, false);
     setLayerVisibleState(['peg', 'pegb'], true, false);
@@ -328,13 +328,13 @@ function zoomToCurrentUserLocation() {
   if (!nip || !mapObj) return;
   var targetLatLngs = [];
   var targetFirst = null;
-  if (DATA && Array.isArray(DATA.pegawai)) {
-    var peg = DATA.pegawai.filter(function(row) { return isOwnPegawaiRecord(row, 'pegawai', user) && row._lat && row._lng; });
-    peg.forEach(function(p) { targetLatLngs.push([p._lat, p._lng]); if(!targetFirst) { targetFirst = p; targetFirst._dataType = 'peg'; } });
-  }
   if (DATA && Array.isArray(DATA.pegawaiBinaan)) {
     var pegb = DATA.pegawaiBinaan.filter(function(row) { return isOwnPegawaiRecord(row, 'pegawaiBinaan', user) && row._lat && row._lng; });
     pegb.forEach(function(p) { targetLatLngs.push([p._lat, p._lng]); if(!targetFirst) { targetFirst = p; targetFirst._dataType = 'pegb'; } });
+  }
+  if (!targetLatLngs.length && DATA && Array.isArray(DATA.pegawai)) {
+    var peg = DATA.pegawai.filter(function(row) { return isOwnPegawaiRecord(row, 'pegawai', user) && row._lat && row._lng; });
+    peg.forEach(function(p) { targetLatLngs.push([p._lat, p._lng]); if(!targetFirst) { targetFirst = p; targetFirst._dataType = 'peg'; } });
   }
   if (targetLatLngs.length > 1) {
     mapObj.fitBounds(targetLatLngs, { padding: [20, 20], maxZoom: 16 });
@@ -419,7 +419,7 @@ function updateAuthUserUI(user) {
       var chkClust = document.getElementById("toggle-cluster");
       if (chkClust && chkClust.checked) {
         chkClust.checked = false;
-        if (typeof toggleClustering === 'function') toggleClustering();
+        CLUSTER_ENABLED = false;
       }
     }
     
@@ -478,6 +478,7 @@ function unlockDashboard(user) {
   document.body.classList.add("auth-unlocked");
   updateAuthUserUI(user);
   if (typeof fetchSpatialFileList === "function") fetchSpatialFileList();
+  ensureBackendDplColumns();
 }
 
 function lockDashboard(message) {
@@ -494,6 +495,16 @@ function postAuthAction(payload) {
     method: "POST",
     body: JSON.stringify(payload)
   }).then(function(r) { return r.json(); });
+}
+
+function ensureBackendDplColumns() {
+  var token = getAuthToken();
+  if (!token || GAS_WEB_APP_URL.indexOf("script.google.com") === -1) return;
+  try {
+    if (sessionStorage.getItem('geohutan_dpl_columns_checked') === '1') return;
+    sessionStorage.setItem('geohutan_dpl_columns_checked', '1');
+  } catch (e) {}
+  postAuthAction(withAuthPayload({ action: "ensureDplColumns" })).catch(function() {});
 }
 
 function initAuthPortal() {
@@ -606,6 +617,49 @@ function closeCredentialModal() {
   if (modal) modal.style.display = "none";
 }
 
+function openForgotPasswordModal() {
+  closeProfileMenu();
+  var modal = document.getElementById("forgot-password-modal");
+  var input = document.getElementById("forgot-password-value");
+  var status = document.getElementById("forgot-password-status");
+  if (input) { input.type = "password"; input.value = "*****"; }
+  if (status) status.textContent = "Memuat password terakhir...";
+  if (modal) modal.classList.add("open");
+
+  postAuthAction(withAuthPayload({ action: "getForgotPassword" }))
+    .then(function(res) {
+      if (!res.success) throw new Error(res.error || "Password belum bisa dimuat.");
+      var pw = String(res.password || "");
+      if (input) {
+        input.dataset.password = pw;
+        input.value = pw ? "*****" : "Belum terekam";
+      }
+      if (status) status.textContent = pw ? "Klik ikon mata untuk menampilkan password." : "Password lama belum terekam. Login atau ganti password sekali setelah update backend ini.";
+    })
+    .catch(function(err) {
+      if (status) status.textContent = err.message || "Gagal memuat password.";
+    });
+}
+
+function closeForgotPasswordModal() {
+  var modal = document.getElementById("forgot-password-modal");
+  if (modal) modal.classList.remove("open");
+}
+
+function toggleForgotPasswordVisibility() {
+  var input = document.getElementById("forgot-password-value");
+  if (!input) return;
+  var pw = input.dataset.password || "";
+  if (!pw) return;
+  if (input.type === "password") {
+    input.type = "text";
+    input.value = pw;
+  } else {
+    input.type = "password";
+    input.value = "*****";
+  }
+}
+
 function submitCredentialChange(event) {
   if (event) event.preventDefault();
   var oldUsername = (document.getElementById("old-username") || {}).value || "";
@@ -671,10 +725,16 @@ document.addEventListener("DOMContentLoaded", function() {
       if (e.target === credModal) closeCredentialModal();
     });
   }
+  var forgotModal = document.getElementById('forgot-password-modal');
+  if (forgotModal) {
+    forgotModal.addEventListener('click', function(e) {
+      if (e.target === forgotModal) closeForgotPasswordModal();
+    });
+  }
   
   document.addEventListener("click", closeProfileMenu);
   document.addEventListener("keydown", function(event) {
-    if (event.key === "Escape") { closeProfileMenu(); closeCredentialModal(); }
+    if (event.key === "Escape") { closeProfileMenu(); closeCredentialModal(); closeForgotPasswordModal(); }
   });
   var profileMenu = document.getElementById("profile-menu");
   if (profileMenu) {
@@ -2190,6 +2250,290 @@ function buildMarkerTipPanel(title, rows, titleColor) {
   return html + '</div>';
 }
 
+function getDplInfoForRow(row, lat, lng) {
+  row = row || {};
+  var dpl = getRowDplValue(row);
+  if (dpl === null) {
+    lat = lat || row._lat || row.Latitude || row.latitude;
+    lng = lng || row._lng || row.Longitude || row.longitude;
+    requestDplForRow(row, lat, lng);
+    dpl = getRowDplValue(row);
+  }
+  var cat = getDplCategory(dpl);
+  return {
+    dpl: dpl,
+    value: dpl === null ? 'DPL tidak tersedia' : dpl.toLocaleString('id-ID') + ' mdpl',
+    label: cat.label,
+    range: cat.range,
+    color: cat.color,
+    statusHtml: '<span class="dpl-status-pill" style="border-color:' + cat.color + ';color:' + cat.color + ';">' + cat.label + (cat.range !== '-' ? ' (' + cat.range + ')' : '') + '</span>'
+  };
+}
+
+function appendDplRows(rows, row, lat, lng) {
+  var info = getDplInfoForRow(row, lat, lng);
+  rows.push(['DPL', info.value]);
+  rows.push(['Status DPL', info.statusHtml]);
+  return rows;
+}
+
+function buildDplTooltipRowsHtml(row, lat, lng) {
+  var info = getDplInfoForRow(row, lat, lng);
+  return '<div class="pjl-tooltip-row"><span class="marker-tip-lbl">DPL</span><span class="marker-tip-val">' + info.value + '</span></div>' +
+    '<div class="pjl-tooltip-row"><span class="marker-tip-lbl">Status DPL</span><span class="marker-tip-val">' + info.statusHtml + '</span></div>';
+}
+
+var DPL_CACHE = {};
+try {
+  var stored = localStorage.getItem('GEOHUTAN_DPL_CACHE');
+  if (stored) DPL_CACHE = JSON.parse(stored);
+} catch (e) {}
+
+function saveDplCache() {
+  try { localStorage.setItem('GEOHUTAN_DPL_CACHE', JSON.stringify(DPL_CACHE)); } catch (e) {}
+}
+
+var DPL_PENDING = {};
+var DPL_ENQUEUED = {};
+var DPL_BATCH_TIMER = null;
+var DPL_BATCH_QUEUE = [];
+var CURRENT_DRAWER_ROW = null;
+var CURRENT_DRAWER_TYPE = null;
+var DPL_REMOTE_ENABLED = true;
+var DPL_READOUT_CONTROL_READY = false;
+var DPL_IS_FETCHING = false;
+var DPL_BACKOFF_TIME = 1000;
+var DPL_RATE_LIMITED_UNTIL = 0;
+try {
+  var rl = localStorage.getItem('GEOHUTAN_DPL_RATELIMIT');
+  if (rl) DPL_RATE_LIMITED_UNTIL = parseInt(rl, 10);
+} catch (e) {}
+
+function getDplCategory(value) {
+  if (value === null || value === undefined || value === '') return { label: 'DPL belum tersedia', color: '#78909c', range: '-' };
+  var n = Math.round(Number(value));
+  if (!isFinite(n)) return { label: 'DPL belum tersedia', color: '#78909c', range: '-' };
+  if (n < 500) return { label: 'Dataran Rendah', color: '#2e7d32', range: '< 500 mdpl' };
+  if (n < 1500) return { label: 'Dataran Menengah', color: '#fb8c00', range: '500 - < 1500 mdpl' };
+  return { label: 'Pegunungan', color: '#d32f2f', range: '>= 1500 mdpl' };
+}
+
+function getRowDplValue(row) {
+  if (!row) return null;
+  var raw = row.DPL || row.dpl || row['DPL (mdpl)'] || row['DPL_mdpl'] || row['Ketinggian_DPL'] || row['Ketinggian DPL'];
+  var n = toFloat(raw);
+  return n === null ? null : Math.round(n);
+}
+
+function estimateDplFromCoords(lat, lng) {
+  var la = Number(lat), lo = Number(lng);
+  if (!isFinite(la) || !isFinite(lo)) return null;
+
+  // Estimasi lokal Jawa Barat: cukup stabil untuk fallback saat API elevasi limit/offline.
+  var mountains = [
+    { lat: -6.77, lng: 106.96, h: 1800, r: 0.24 },
+    { lat: -6.77, lng: 107.60, h: 2100, r: 0.28 },
+    { lat: -7.24, lng: 107.88, h: 2200, r: 0.30 },
+    { lat: -7.32, lng: 108.08, h: 1700, r: 0.26 },
+    { lat: -6.89, lng: 108.41, h: 1200, r: 0.24 },
+    { lat: -6.72, lng: 106.72, h: 1200, r: 0.22 }
+  ];
+  var southRise = Math.max(0, (-la - 6.35)) * 185;
+  var inlandRise = Math.max(0, Math.min(1, (108.8 - lo) / 2.8)) * 80;
+  var value = 45 + southRise + inlandRise;
+  mountains.forEach(function(m) {
+    var dLat = la - m.lat;
+    var dLng = (lo - m.lng) * Math.cos(la * Math.PI / 180);
+    var d = Math.sqrt(dLat * dLat + dLng * dLng);
+    value += m.h * Math.exp(-(d * d) / (2 * m.r * m.r));
+  });
+  return Math.max(1, Math.min(3200, Math.round(value)));
+}
+
+function setRowDplValue(row, value) {
+  if (!row || value === null || value === undefined || !isFinite(Number(value))) return;
+  var dpl = Math.round(Number(value));
+  var cat = getDplCategory(dpl);
+  row.DPL = dpl;
+  row['DPL (mdpl)'] = dpl;
+  row.Status_DPL = cat.label;
+  row['Status DPL'] = cat.label;
+}
+
+function getDplCacheKey(lat, lng) {
+  var la = Number(lat), lo = Number(lng);
+  if (!isFinite(la) || !isFinite(lo)) return '';
+  return la.toFixed(5) + ',' + lo.toFixed(5);
+}
+
+function buildDplRows(row, lat, lng) {
+  var dpl = getRowDplValue(row);
+  if (row && dpl === null && lat && lng) {
+    requestDplForRow(row, lat, lng);
+    dpl = getRowDplValue(row);
+  }
+  var cat = getDplCategory(dpl);
+  var value = dpl === null ? 'DPL tidak tersedia' : dpl.toLocaleString('id-ID') + ' mdpl';
+  var status = '<span class="dpl-status-pill" style="border-color:' + cat.color + ';color:' + cat.color + ';">' + cat.label + (cat.range !== '-' ? ' (' + cat.range + ')' : '') + '</span>';
+  return [['DPL', value], ['Status DPL', status]];
+}
+
+function requestDplForRow(row, lat, lng, callback) {
+  var key = getDplCacheKey(lat, lng);
+  if (!key || !row) return;
+  if (DPL_CACHE.hasOwnProperty(key)) {
+    setRowDplValue(row, DPL_CACHE[key]);
+    if (callback) callback(DPL_CACHE[key]);
+    return;
+  }
+  if (!DPL_REMOTE_ENABLED || Date.now() < DPL_RATE_LIMITED_UNTIL) {
+    return; // Berhenti meminta jika API terkena limit 429
+  }
+  if (DPL_ENQUEUED[key]) return;
+  DPL_ENQUEUED[key] = true;
+  DPL_BATCH_QUEUE.push({ row: row, lat: Number(lat), lng: Number(lng), key: key, callback: callback });
+  if (!DPL_IS_FETCHING && !DPL_BATCH_TIMER) DPL_BATCH_TIMER = setTimeout(flushDplBatch, 350);
+}
+
+function flushDplBatch() {
+  DPL_BATCH_TIMER = null;
+  if (DPL_IS_FETCHING) return;
+  if (Date.now() < DPL_RATE_LIMITED_UNTIL) {
+    DPL_BATCH_QUEUE = []; // Kosongkan antrean jika sedang kena limit
+    DPL_ENQUEUED = {};
+    return;
+  }
+  if (!DPL_BATCH_QUEUE.length) return;
+  DPL_IS_FETCHING = true;
+  
+  var batch = DPL_BATCH_QUEUE.splice(0, 90);
+  var unique = [];
+  var seen = {};
+  
+  batch.forEach(function(item) {
+    delete DPL_ENQUEUED[item.key];
+    if (!item.key || seen[item.key]) return;
+    seen[item.key] = true;
+    unique.push(item);
+  });
+  
+  var pending = unique.filter(function(item) { return !DPL_PENDING[item.key] && !DPL_CACHE.hasOwnProperty(item.key); });
+  if (!pending.length) {
+    DPL_IS_FETCHING = false;
+    if (DPL_BATCH_QUEUE.length) DPL_BATCH_TIMER = setTimeout(flushDplBatch, DPL_BACKOFF_TIME);
+    return;
+  }
+  
+  pending.forEach(function(item) { DPL_PENDING[item.key] = true; });
+  var latParam = pending.map(function(item) { return item.lat.toFixed(5); }).join(',');
+  var lngParam = pending.map(function(item) { return item.lng.toFixed(5); }).join(',');
+  
+  fetch('https://api.open-meteo.com/v1/elevation?latitude=' + latParam + '&longitude=' + lngParam)
+    .then(function(res) {
+      if (res.status === 429) {
+        DPL_RATE_LIMITED_UNTIL = Date.now() + (5 * 60 * 1000); // Stop semua request selama 5 menit
+        try { localStorage.setItem('GEOHUTAN_DPL_RATELIMIT', DPL_RATE_LIMITED_UNTIL); } catch(e) {}
+        throw new Error('Rate Limited (429)');
+      }
+      if (!res.ok) throw new Error('API Error ' + res.status);
+      return res.json();
+    })
+    .then(function(data) {
+      if (!data || !Array.isArray(data.elevation)) throw new Error('Invalid response');
+      DPL_BACKOFF_TIME = 1000;
+      pending.forEach(function(item, idx) {
+        var val = Number(data.elevation[idx]);
+        if (isFinite(val)) {
+          var finalDpl = Math.round(val);
+          DPL_CACHE[item.key] = finalDpl;
+          batch.forEach(function(original) {
+            if (original.key !== item.key) return;
+            setRowDplValue(original.row, finalDpl);
+            if (original.callback) original.callback(finalDpl);
+          });
+        }
+      });
+      saveDplCache();
+      schedRender();
+      updateMapDplReadout();
+    })
+    .catch(function(err) {
+      if (err.message && err.message.indexOf('429') !== -1) {
+        // Drop queue secara elegan jika terkena rate limit
+        DPL_BATCH_QUEUE = [];
+        DPL_ENQUEUED = {};
+      } else {
+        DPL_BACKOFF_TIME = Math.min(DPL_BACKOFF_TIME * 2, 30000);
+        batch.forEach(function(item) {
+          if (!DPL_ENQUEUED[item.key] && !DPL_CACHE.hasOwnProperty(item.key)) {
+            DPL_ENQUEUED[item.key] = true;
+            DPL_BATCH_QUEUE.push(item);
+          }
+        });
+      }
+    })
+    .finally(function() {
+      DPL_IS_FETCHING = false;
+      pending.forEach(function(item) { delete DPL_PENDING[item.key]; });
+      if (DPL_BATCH_QUEUE.length && !DPL_BATCH_TIMER && Date.now() >= DPL_RATE_LIMITED_UNTIL) {
+        DPL_BATCH_TIMER = setTimeout(flushDplBatch, DPL_BACKOFF_TIME);
+      }
+    });
+}
+
+function hydrateDplForVisibleRows() {
+  // DPL dihitung lazy saat titik/panel/readout dibutuhkan agar tidak membanjiri layanan elevasi.
+}
+
+function updateMapDplReadout() {
+  var el = document.getElementById('map-dpl-readout');
+  if (!el || !mapObj) return;
+  var center = mapObj.getCenter();
+  if (!center) return;
+  var key = getDplCacheKey(center.lat, center.lng);
+  if (!key) return;
+  if (DPL_CACHE.hasOwnProperty(key)) {
+    var dpl = DPL_CACHE[key];
+    var cat = getDplCategory(dpl);
+    el.innerHTML = '<span style="color:' + cat.color + ';">DPL ' + Math.round(dpl).toLocaleString('id-ID') + ' mdpl</span> ' + cat.label;
+  } else {
+    var estimate = estimateDplFromCoords(center.lat, center.lng);
+    if (estimate !== null) {
+      DPL_CACHE[key] = estimate;
+      var estCat = getDplCategory(estimate);
+      el.innerHTML = '<span style="color:' + estCat.color + ';">DPL ' + estimate.toLocaleString('id-ID') + ' mdpl</span> ' + estCat.label;
+    } else {
+      el.textContent = 'DPL tidak tersedia';
+    }
+  }
+}
+
+function initDplReadoutControl() {
+  if (DPL_READOUT_CONTROL_READY || typeof L === 'undefined' || !mapObj) return;
+  var el = document.getElementById('map-dpl-readout');
+  if (!el) return;
+  var DplControl = L.Control.extend({
+    options: { position: 'topright' },
+    onAdd: function() {
+      var wrap = L.DomUtil.create('div', 'leaflet-control dpl-readout-control');
+      wrap.appendChild(el);
+      L.DomEvent.disableClickPropagation(wrap);
+      L.DomEvent.disableScrollPropagation(wrap);
+      return wrap;
+    }
+  });
+  mapObj.addControl(new DplControl());
+  DPL_READOUT_CONTROL_READY = true;
+}
+
+if (typeof mapObj !== 'undefined' && mapObj) {
+  initDplReadoutControl();
+  mapObj.on('zoomend moveend', function() {
+    clearTimeout(window.__dplReadoutTimer);
+    window.__dplReadoutTimer = setTimeout(updateMapDplReadout, 250);
+  });
+}
+
 function buildFeatureHoverTooltip(feat, mode) {
   if (!feat) return null;
   var title = feat.Nama || feat['Nama'] || feat['Nama Lengkap'] || feat['Nama Petugas'] || 'Detail Kegiatan';
@@ -2209,6 +2553,7 @@ function buildFeatureHoverTooltip(feat, mode) {
       ['Kabupaten', feat.Kabupaten || feat['Kabupaten'] || '-']
     ];
   }
+  appendDplRows(rows, feat, feat.Latitude || feat._lat, feat.Longitude || feat._lng);
   return buildMarkerTipPanel(title, rows, '#2e7d32');
 }
 
@@ -2324,6 +2669,8 @@ function normalizeBinaanRow(row) {
 
 /* Drawer */
 function openDrawer(type, r) {
+  CURRENT_DRAWER_TYPE = type;
+  CURRENT_DRAWER_ROW = r;
   var dr = document.getElementById('detail-drawer');
   if (dr) dr.classList.remove('minimized');
   var minBtn = document.getElementById('drawer-min-btn');
@@ -2470,6 +2817,10 @@ function openDrawer(type, r) {
     Object.keys(r).forEach(k => { if(!k.startsWith('_')) config.push([k, r[k]]); });
   }
 
+  if (cy && cx && ['pjl', 'per', 'persemaian', 'peg', 'pegawai', 'pegb', 'pegawaiBinaan', 'pohon', 'polygon_kegiatan', 'jum', 'jumat'].indexOf(type) !== -1) {
+    config = config.concat(buildDplRows(r, cy, cx));
+  }
+
   var html = '';
   config.forEach(function(item) {
     var v = item[1] || 'Data tidak tersedia';
@@ -2582,6 +2933,8 @@ function openDrawer(type, r) {
 function closeDrawer() { 
   var dr = document.getElementById('detail-drawer');
   if (dr) dr.classList.remove('open'); 
+  CURRENT_DRAWER_TYPE = null;
+  CURRENT_DRAWER_ROW = null;
   if (HIGHLIGHT_LAYER && typeof mapObj !== 'undefined') mapObj.removeLayer(HIGHLIGHT_LAYER); 
   if (BUFFER_LAYERS) BUFFER_LAYERS.clearLayers();
 }
@@ -2757,6 +3110,58 @@ function flyToLocalItem(t, idx) {
   }
 }
 
+function getSearchTextParts(item) {
+  var r = item && item.r ? item.r : {};
+  var t = item ? item.t : '';
+  if (t === 'pegb') {
+    return {
+      title: getBinaanField(r, 'pembina') || getName(r),
+      sub: [getBinaanField(r, 'kegiatan'), getBinaanKabupaten(r), getBinaanField(r, 'kecamatan'), getBinaanField(r, 'desa')].filter(Boolean).join(' - '),
+      text: [
+        getBinaanField(r, 'pembina'), getBinaanField(r, 'unit'), getBinaanField(r, 'jabatan'),
+        getBinaanField(r, 'kegiatan'), getBinaanKabupaten(r), getBinaanField(r, 'kecamatan'),
+        getBinaanField(r, 'desa'), getBinaanField(r, 'nip'), r._kab
+      ].join(' ')
+    };
+  }
+  if (t === 'per') {
+    return {
+      title: r['Nama Persemaian'] || r['Nama Personil Jaga leuweung'] || r['Nama Personil Jaga Leuweung'] || r['Nama'] || getName(r),
+      sub: [r['Unit Kerja'], r['Kecamatan'], r['Desa/ Kelurahan'] || r['Desa/Kelurahan'] || r['Desa'], r['Status Persemaian']].filter(Boolean).join(' - '),
+      text: [
+        r['Nama Persemaian'], r['Nama Personil Jaga leuweung'], r['Nama Personil Jaga Leuweung'], r['Nama'],
+        r['Unit Kerja'], r['Kecamatan'], r['Desa/ Kelurahan'], r['Desa/Kelurahan'], r['Desa'],
+        r['Blok'], r['Status Persemaian'], r._kab
+      ].join(' ')
+    };
+  }
+  if (t === 'jum') {
+    return {
+      title: r['Nama Lokasi'] || r['Lokasi Penanaman'] || r['Lokasi'] || getName(r),
+      sub: [r['Unit Kerja'], r['Kabupaten/Kota'] || r._kab, r['Kecamatan'], r['Desa/Kelurahan'] || r['Desa/ Kelurahan'] || r['Desa']].filter(Boolean).join(' - '),
+      text: [
+        r['Nama Lokasi'], r['Lokasi Penanaman'], r['Lokasi'], r['Unit Kerja'], r['Kabupaten/Kota'], r._kab,
+        r['Kecamatan'], r['Desa/Kelurahan'], r['Desa/ Kelurahan'], r['Desa'], r['Blok'], r['Kategori Lojuna']
+      ].join(' ')
+    };
+  }
+  if (t === 'pjl') {
+    return {
+      title: r['Nama Lengkap'] || r['Nama Personil Jaga leuweung'] || r['Nama Personil Jaga Leuweung'] || r['Nama Petugas'] || getName(r),
+      sub: [r['Unit Kerja'], r['Penyuluh Kehutanan'], r['Kawasan Leuweung/ Gunung'], r._kab].filter(Boolean).join(' - '),
+      text: [
+        r['Nama Lengkap'], r['Nama Personil Jaga leuweung'], r['Nama Personil Jaga Leuweung'], r['Nama Petugas'],
+        r['Penyuluh Kehutanan'], r['Unit Kerja'], r['Kawasan Leuweung/ Gunung'], r['Alamat'], r._kab
+      ].join(' ')
+    };
+  }
+  return {
+    title: r['Nama'] || r['NAMA'] || getName(r),
+    sub: [r['Unit Kerja'] || r['UNIT KERJA'], r['Nama Jabatan'] || r['Jabatan'] || r['JABATAN'], r._kab].filter(Boolean).join(' - '),
+    text: [r['Nama'], r['NAMA'], r['Unit Kerja'], r['UNIT KERJA'], r['Nama Jabatan'], r['Jabatan'], r['JABATAN'], r['Alamat'], r._kab].join(' ')
+  };
+}
+
 function performGlobalSearch(q, resultsContainer) {
   var html = ''; var count = 0;
   var coord = parseCoordinate(q);
@@ -2780,9 +3185,10 @@ function performGlobalSearch(q, resultsContainer) {
     if (!r || !r._lat || !r._lng) continue;
     var fType = item.t === 'per' ? 'persemaian' : (item.t === 'jum' ? 'jumat' : (item.t === 'peg' ? 'pegawai' : (item.t === 'pegb' ? 'pegawaiBinaan' : item.t)));
     if (!passFilter(r, fType)) continue;
-    var name = safe(r['Nama Petugas'] || r['Nama Persemaian'] || r['Nama'] || r['Lokasi'] || '');
-    var unit = safe(r['Unit Kerja'] || r['UNIT KERJA']);
-    var textSearch = (name + ' ' + unit + ' ' + (r._kab||'')).toLowerCase();
+    var meta = getSearchTextParts(item);
+    var name = safe(meta.title);
+    var unit = safe(meta.sub || r['Unit Kerja'] || r['UNIT KERJA']);
+    var textSearch = String(meta.text || '').toLowerCase();
     
     if (textSearch.indexOf(qLower) > -1) {
       count++;
@@ -3096,6 +3502,8 @@ function onLoaded() {
   if (LOADED >= TOTAL) {
     fillDropdown(); schedRender();
     applyCurrentUserRoleDefaults(getCurrentAuthUser());
+    hydrateDplForVisibleRows();
+    updateMapDplReadout();
     setTimeout(function() { 
       var overlay = document.getElementById('loader-overlay');
       if (overlay) {
@@ -3241,7 +3649,6 @@ function doRender() {
             if (kat === 'Lokasi Juna Biasa') { fillCol = '#82b1ff'; shapeType = 'triangle'; }
             else { fillCol = '#d500f9'; shapeType = 'star'; }
           }
-          
           var mk;
           if (!CLUSTER_ENABLED) {
             mk = L.shapeMarker([r._lat, r._lng], {
@@ -3280,6 +3687,7 @@ function doRender() {
                            '<b>CDK:</b> ' + cdk + '<br>' +
                            '<b>Desa:</b> ' + desa + '<br>' +
                            '<div style="white-space:normal;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;"><b>Ket:</b> ' + ket + '</div>' +
+                           buildDplTooltipRowsHtml(r, r._lat, r._lng) +
                            '</div>';
 
             if (thumbUrl) {
@@ -3309,6 +3717,7 @@ function doRender() {
               '<div class="pjl-tooltip-row"><span class="marker-tip-lbl">Alamat</span><span class="marker-tip-val">' + pjlAlamat + '</span></div>' +
               '<div class="pjl-tooltip-row"><span class="marker-tip-lbl">Koord. Penanaman</span><span class="marker-tip-val">' + cPen + '</span></div>' +
               '<div class="pjl-tooltip-row"><span class="marker-tip-lbl">Koord. Persemaian</span><span class="marker-tip-val">' + cPer + '</span></div>' +
+              buildDplTooltipRowsHtml(r, r._lat, r._lng) +
               '</div>';
             if (pjlThumb) {
               hoverHTML = '<div class="jum-tooltip-thumb pjl-tooltip-thumb">' +
@@ -3335,7 +3744,7 @@ function doRender() {
 
             hoverHTML = buildMarkerTipPanel(
               name || 'Lokasi Persemaian',
-              [
+              appendDplRows([
                 ['Unit Kerja', r['Unit Kerja']],
                 ['Kecamatan', r['Kecamatan']],
                 ['Desa/Kelurahan', r['Desa/ Kelurahan'] || r['Desa/Kelurahan'] || r['Desa']],
@@ -3348,7 +3757,7 @@ function doRender() {
                 ['Realisasi', r['Realisasi Bibit'] || r['Realisasi']],
                 ['Ket.(Jenis & Jumlah Bibit) :', ketTip],
                 ['Total Bibit', totalBibitTip > 0 ? totalBibitStrTip : '0']
-              ],
+              ], r, r._lat, r._lng),
               '#1e88e5'
             );
           } else if (type === 'peg') {
@@ -3362,6 +3771,7 @@ function doRender() {
               '<div class="pjl-tooltip-row"><span class="marker-tip-lbl">Unit</span><span class="marker-tip-val">' + pegUnit + '</span></div>' +
               '<div class="pjl-tooltip-row"><span class="marker-tip-lbl">Jabatan</span><span class="marker-tip-val">' + pegJabatan + '</span></div>' +
               '<div class="pjl-tooltip-row"><span class="marker-tip-lbl">Alamat</span><span class="marker-tip-val">' + String(pegAlamat).substring(0,50) + (pegAlamat.length>50?'...':'') + '</span></div>' +
+              buildDplTooltipRowsHtml(r, r._lat, r._lng) +
               '</div>';
             if (pegThumb) {
               hoverHTML = '<div class="jum-tooltip-thumb pjl-tooltip-thumb" style="border-top:2px solid #fb8c00;">' +
@@ -3399,6 +3809,7 @@ function doRender() {
               '<div class="pjl-tooltip-row"><span class="marker-tip-lbl">Kegiatan</span><span class="marker-tip-val">' + pegbKeg + '</span></div>' +
               '<div class="pjl-tooltip-row"><span class="marker-tip-lbl">Unit</span><span class="marker-tip-val">' + pegbUnit + '</span></div>' +
               '<div class="pjl-tooltip-row"><span class="marker-tip-lbl">Jabatan</span><span class="marker-tip-val">' + pegbJabatan + '</span></div>' +
+              buildDplTooltipRowsHtml(r, r._lat, r._lng) +
               '</div>';
             if (pegbThumb) {
               hoverHTML = '<div class="jum-tooltip-thumb pjl-tooltip-thumb" style="border-top:2px solid #00897b;">' +
@@ -3878,7 +4289,21 @@ var BULAN_ID = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustu
 var PHOTO_GALLERY = { context: 'juna', row: null, year: '2026', idx: 0, photos: [], dates: [], years: [], angles: [], sheetCount: 0, localCount: 0, angleFilter: 'all' };
 var JUM_GALLERY = PHOTO_GALLERY;
 var LB_STATE = { photos: [], dates: [], years: [], angles: [], idx: 0, year: '2026', locName: '', context: 'juna' };
-var WEEKLY_REPORT_STATE = { row: null, context: 'juna', reports: [], monitorType: 'weekly', monitorRows: [] };
+var WEEKLY_REPORT_STATE = { row: null, context: 'juna', reports: [], listPage: 1, listPageSize: 5, monitorType: 'weekly', monitorRows: [], monitorPage: 1, monitorPageSize: 10, detailRows: [], currentDetailReport: null };
+
+function escapeHtml(value) {
+  return String(value == null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function displayPhotoAngle(angle) {
+  var normalized = normalizePhotoAngle(angle);
+  return normalized === 'Sudut Foto #2' ? 'Foto Tambahan' : 'Foto Utama';
+}
 
 function getPhotoContextPrefix(context) {
   if (context === 'pjl') return 'pjl';
@@ -3914,7 +4339,7 @@ function formatDateIndo(dStr) {
     var year = m[3];
     if (monthIdx >= 0 && monthIdx < 12) {
       var out = day + ' ' + BULAN_ID[monthIdx] + ' ' + year;
-      if (m[4]) out += ' Ãƒâ€šÃ‚Â· ' + String(m[4]).padStart(2, '0') + ':' + m[5];
+      if (m[4]) out += ' pukul ' + String(m[4]).padStart(2, '0') + ':' + m[5];
       return out;
     }
   }
@@ -3924,9 +4349,18 @@ function formatDateIndo(dStr) {
     var monthIdx2 = parseInt(m[2], 10) - 1;
     if (monthIdx2 >= 0 && monthIdx2 < 12) {
       var out2 = day2 + ' ' + BULAN_ID[monthIdx2] + ' ' + m[1];
-      if (m[4]) out2 += ' Ãƒâ€šÃ‚Â· ' + m[4] + ':' + m[5];
+      if (m[4]) out2 += ' pukul ' + m[4] + ':' + m[5];
       return out2;
     }
+  }
+  var ts = Date.parse(s);
+  if (!isNaN(ts)) {
+    var d = new Date(ts);
+    var out3 = d.getDate() + ' ' + BULAN_ID[d.getMonth()] + ' ' + d.getFullYear();
+    if (s.match(/\d{1,2}:\d{2}/)) {
+      out3 += ' pukul ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+    }
+    return out3;
   }
   return s;
 }
@@ -4053,9 +4487,9 @@ function buildPhotoSection(r, context) {
     '</div>';
 
   html += '<div class="photo-angle-filter">' +
-    '<button type="button" class="active" data-angle="all" onclick="setGalleryAngleFilter(\'all\')">Semua Sudut</button>' +
-    '<button type="button" data-angle="Sudut Foto #1" onclick="setGalleryAngleFilter(\'Sudut Foto #1\')">Sudut Foto #1</button>' +
-    '<button type="button" data-angle="Sudut Foto #2" onclick="setGalleryAngleFilter(\'Sudut Foto #2\')">Sudut Foto #2</button>' +
+    '<button type="button" class="active" data-angle="all" onclick="setGalleryAngleFilter(\'all\')">Semua</button>' +
+    '<button type="button" data-angle="Sudut Foto #1" onclick="setGalleryAngleFilter(\'Sudut Foto #1\')">Foto Utama</button>' +
+    '<button type="button" data-angle="Sudut Foto #2" onclick="setGalleryAngleFilter(\'Sudut Foto #2\')">Foto Tambahan</button>' +
     '</div>';
 
   html += '<div id="' + ids.carousel + '" class="jum-carousel-wrap">' +
@@ -4094,7 +4528,7 @@ function buildReportHubSection(r, context) {
   return '<div class="drawer-report-hub" id="report-hub-' + safeContext + '">' +
     '<div class="report-category-title">Kategori Laporan</div>' +
     '<div class="report-category-buttons">' +
-      '<button type="button" onclick="showMarkerReportPanel(\'monthly\', \'' + context + '\')">Laporan Bulanan</button>' +
+      '<button type="button" onclick="showMarkerReportPanel(\'monthly\', \'' + context + '\')">Laporan 3 Bulanan</button>' +
       '<button type="button" onclick="showMarkerReportPanel(\'weekly\', \'' + context + '\')">Laporan Mingguan</button>' +
     '</div>' +
     '<div class="report-panel monthly-panel" id="report-monthly-panel-' + safeContext + '" style="display:none;">' +
@@ -4254,7 +4688,7 @@ function refreshGalleryForYear(year) {
       wrap.innerHTML = '<div class="jum-no-photo">' +
         '<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>' +
         '<span>Belum ada foto pada filter yang dipilih</span>' +
-        '<span style="font-size:10px;opacity:0.6;">Tambahkan foto di Laporan Bulanan atau ubah filter sudut/rentang waktu.</span>' +
+        '<span style="font-size:10px;opacity:0.6;">Tambahkan foto di Laporan 3 Bulanan atau ubah filter sudut/rentang waktu.</span>' +
         '</div>';
       return;
     }
@@ -4359,7 +4793,7 @@ function renderCarousel(photos, dates) {
     '<div class="jum-carousel-footer">' +
       '<div class="jum-photo-timestamp">' +
         localBadge +
-        '<span class="photo-angle-badge">' + photoAngle.replace('Sudut Foto ', 'Sudut ') + '</span>' +
+        '<span class="photo-angle-badge">' + displayPhotoAngle(photoAngle) + '</span>' +
         '<span class="photo-year-badge">' + photoYear + '</span>' +
         (dateDisplay ? '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> ' + dateDisplay : '<span style="opacity:0.4;">Tanggal tidak tersedia</span>') +
       '</div>' +
@@ -4490,7 +4924,14 @@ function refreshLightbox() {
   var counter = document.getElementById('lightbox-counter');
   var stamp = document.getElementById('lightbox-timestamp');
   var locInfo = document.getElementById('lightbox-loc-info');
-  if (yBadge) yBadge.textContent = 'Foto ' + currentYear + ' - ' + currentAngle.replace('Sudut Foto ', 'Sudut ');
+  var angleFilter = document.getElementById('lightbox-angle-filter');
+  if (angleFilter) {
+    angleFilter.style.display = (LB_STATE.context === 'weekly' || LB_STATE.context === 'single') ? 'none' : '';
+    angleFilter.querySelectorAll('button').forEach(function(btn) {
+      btn.classList.toggle('active', String(btn.getAttribute('data-angle') || 'all') === String(PHOTO_GALLERY.angleFilter || 'all'));
+    });
+  }
+  if (yBadge) yBadge.textContent = LB_STATE.context === 'weekly' ? 'Laporan Mingguan' : (LB_STATE.context === 'single' ? 'Preview Foto' : ('Foto ' + currentYear + ' - ' + displayPhotoAngle(currentAngle)));
   if (counter) counter.textContent = (idx + 1) + ' dari ' + total;
   if (stamp) stamp.innerHTML = date ?
     '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> ' + formatDateIndo(date) :
@@ -4543,7 +4984,7 @@ function refreshLightbox() {
   var monWrap = document.getElementById('lightbox-monitoring');
   var monCont = document.getElementById('lightbox-monitoring-content');
   if (monWrap && monCont) {
-    if (LB_STATE.context === 'weekly') {
+    if (LB_STATE.context === 'weekly' || LB_STATE.context === 'single') {
       monWrap.style.display = 'none';
       return;
     }
@@ -4913,6 +5354,7 @@ function openUploadModal(r) {
   if (fi) fi.value = '';
   var angle1 = document.querySelector('input[name="upload-angle"][value="Sudut Foto #1"]');
   if (angle1) angle1.checked = true;
+  renderUploadLastPhotoPreview();
   
   var monDiv = document.getElementById('upload-monitoring-fields');
   if (monDiv) {
@@ -4921,6 +5363,39 @@ function openUploadModal(r) {
   }
 
   m.classList.add('open');
+}
+
+function getLatestTimelinePhotoForAngle(row, context, angle) {
+  var best = null;
+  PHOTO_YEARS.forEach(function(yr) {
+    var merged = getMergedData(row, yr, context);
+    (merged.photos || []).forEach(function(photo, idx) {
+      var itemAngle = normalizePhotoAngle((merged.angles || [])[idx]);
+      if (angle && itemAngle !== normalizePhotoAngle(angle)) return;
+      var date = (merged.dates || [])[idx] || '';
+      var ts = parseExifDate(date) || Date.parse(yr + '-01-01') || 0;
+      if (!best || ts >= best.ts) {
+        best = { url: photo, date: date, year: yr, angle: itemAngle, ts: ts };
+      }
+    });
+  });
+  return best;
+}
+
+function renderUploadLastPhotoPreview() {
+  var wrap = document.getElementById('upload-last-photo-preview');
+  if (!wrap || !PHOTO_GALLERY.row) return;
+  var selectedAngle = getSelectedUploadAngle();
+  var latest = getLatestTimelinePhotoForAngle(PHOTO_GALLERY.row, PHOTO_GALLERY.context || 'juna', selectedAngle);
+  if (!latest || !latest.url) {
+    wrap.innerHTML = '<div class="upload-last-empty">Belum ada foto sebelumnya untuk ' + displayPhotoAngle(selectedAngle) + '.</div>';
+    return;
+  }
+  wrap.innerHTML = '<div class="upload-last-title">Foto terakhir sebagai pembanding</div>' +
+    '<div class="upload-last-card">' +
+      '<img src="' + normalizeImageUrl(latest.url) + '" alt="Foto terakhir" onclick="openPhotoPreviewFromUrl(\'' + encodeURIComponent(normalizeImageUrl(latest.url)) + '\', \'' + encodeURIComponent(latest.date || '') + '\')" onerror="handleDriveImageError(this)">' +
+      '<div><strong>' + displayPhotoAngle(latest.angle) + '</strong><span>' + (formatDateIndo(latest.date) || 'Tanggal tidak tersedia') + '</span><small>Tahun ' + escapeHtml(latest.year || '-') + '</small></div>' +
+    '</div>';
 }
 
 function resetMonitoringInputs() {
@@ -5190,6 +5665,27 @@ function selectUploadYear(year) {
     p.classList.remove('active');
     if (p.getAttribute('data-year') === year) p.classList.add('active');
   });
+  renderUploadLastPhotoPreview();
+}
+
+document.querySelectorAll('input[name="upload-angle"]').forEach(function(el) {
+  el.addEventListener('change', renderUploadLastPhotoPreview);
+});
+
+function openPhotoPreviewFromUrl(encodedUrl, encodedDate) {
+  var url = decodeURIComponent(encodedUrl || '');
+  if (!url) return;
+  LB_STATE.photos = [url];
+  LB_STATE.dates = [decodeURIComponent(encodedDate || '')];
+  LB_STATE.years = [''];
+  LB_STATE.angles = [''];
+  LB_STATE.idx = 0;
+  LB_STATE.year = '';
+  LB_STATE.context = 'single';
+  LB_STATE.locName = '';
+  document.getElementById('photo-lightbox').classList.add('open');
+  document.body.style.overflow = 'hidden';
+  refreshLightbox();
 }
 
 function getBackendCategoryForContext(context) {
@@ -5242,6 +5738,8 @@ function resetWeeklyReportForm() {
   document.getElementById('weekly-report-mode').value = 'create';
   var totalEl = document.getElementById('wr-total-bibit');
   if (totalEl) totalEl.value = '0';
+  var oldPhoto = document.getElementById('wr-existing-photo');
+  if (oldPhoto) oldPhoto.innerHTML = '';
   var user = getCurrentAuthUser();
   var pelaksana = document.getElementById('wr-pelaksana');
   if (pelaksana && user) pelaksana.value = user.nama || user.username || '';
@@ -5251,6 +5749,7 @@ function resetWeeklyReportForm() {
     var now = new Date();
     waktu.value = now.getFullYear() + '-' + ('0' + (now.getMonth() + 1)).slice(-2) + '-' + ('0' + now.getDate()).slice(-2) + 'T' + ('0' + now.getHours()).slice(-2) + ':' + ('0' + now.getMinutes()).slice(-2);
   }
+  updateWeeklyGangguanVisibility();
 }
 
 function getWeeklyLocationLabel(r, context) {
@@ -5290,7 +5789,9 @@ function openWeeklyReportModal(report) {
     document.getElementById('wr-ada-gangguan').value = report.adaGangguan || '';
     setWeeklyCheckedValues('wr-jenis-gangguan', report.jenisGangguan);
     document.getElementById('wr-tindak-lanjut').value = report.tindakLanjut || '';
+    renderWeeklyExistingPhoto(report);
   }
+  updateWeeklyGangguanVisibility();
   modal.classList.add('open');
   // Cek versi backend satu kali; tampilkan warning jika perlu
   checkBackendVersion(function(ok) {
@@ -5310,6 +5811,34 @@ function openWeeklyReportModal(report) {
       if (submitBtn) { submitBtn.disabled = false; submitBtn.title = ''; }
     }
   });
+}
+
+function renderWeeklyExistingPhoto(report) {
+  var wrap = document.getElementById('wr-existing-photo');
+  if (!wrap) return;
+  if (!report || !report.fotoUrl) {
+    wrap.innerHTML = '<div class="weekly-existing-empty">Belum ada foto tersimpan.</div>';
+    return;
+  }
+  var img = normalizeImageUrl(report.fotoUrl);
+  wrap.innerHTML = '<div class="weekly-existing-card">' +
+    '<img src="' + img + '" alt="Foto laporan sebelumnya" onclick="previewWeeklyPhotoById(\'' + escapeHtml(report.id || '') + '\')" onerror="handleDriveImageError(this)">' +
+    '<div><strong>Foto terakhir laporan ini</strong><span>' + (formatDateIndo(report.fotoTanggal || report.waktu) || 'Tanggal tidak tersedia') + '</span><small>Biarkan kosong jika foto tidak diganti.</small></div>' +
+    '</div>';
+}
+
+function updateWeeklyGangguanVisibility() {
+  var sel = document.getElementById('wr-ada-gangguan');
+  var show = !sel || String(sel.value || '').toLowerCase() === 'ya';
+  var fields = document.getElementById('wr-gangguan-fields');
+  var tindak = document.getElementById('wr-tindak-lanjut-wrap');
+  if (fields) fields.style.display = show ? '' : 'none';
+  if (tindak) tindak.style.display = show ? '' : 'none';
+  if (!show) {
+    document.querySelectorAll('input[name="wr-jenis-gangguan"]').forEach(function(el) { el.checked = false; });
+    var tl = document.getElementById('wr-tindak-lanjut');
+    if (tl) tl.value = '';
+  }
 }
 
 function closeWeeklyReportModal() {
@@ -5391,8 +5920,8 @@ function submitWeeklyReport(event) {
         kegiatanMonitoring: getWeeklyCheckedValues('wr-monitoring'),
         uraian: document.getElementById('wr-uraian').value,
         adaGangguan: document.getElementById('wr-ada-gangguan').value,
-        jenisGangguan: getWeeklyCheckedValues('wr-jenis-gangguan'),
-        tindakLanjut: document.getElementById('wr-tindak-lanjut').value,
+        jenisGangguan: String(document.getElementById('wr-ada-gangguan').value || '').toLowerCase() === 'ya' ? getWeeklyCheckedValues('wr-jenis-gangguan') : '',
+        tindakLanjut: String(document.getElementById('wr-ada-gangguan').value || '').toLowerCase() === 'ya' ? document.getElementById('wr-tindak-lanjut').value : '',
         fotoTanggal: photo.exifDate
       }
     };
@@ -5423,6 +5952,7 @@ function loadWeeklyReportsForMarker(showLoading) {
   fetch(appendAuthParam(url)).then(function(res) { return res.json(); }).then(function(data) {
     if (!data.success) throw new Error(data.error || 'Gagal memuat laporan.');
     WEEKLY_REPORT_STATE.reports = data.reports || [];
+    WEEKLY_REPORT_STATE.listPage = 1;
     renderWeeklyReportList();
   }).catch(function(err) {
     list.innerHTML = '<div class="weekly-empty error">' + getFriendlyBackendErrorMessage(err) + '</div>';
@@ -5437,35 +5967,118 @@ function renderWeeklyReportList() {
     list.innerHTML = '<div class="weekly-empty">Belum ada laporan mingguan untuk titik ini.</div>';
     return;
   }
-  list.innerHTML = reports.map(function(rep, idx) {
+  var pageSize = WEEKLY_REPORT_STATE.listPageSize || 5;
+  var totalPages = Math.max(1, Math.ceil(reports.length / pageSize));
+  WEEKLY_REPORT_STATE.listPage = Math.max(1, Math.min(totalPages, WEEKLY_REPORT_STATE.listPage || 1));
+  var start = (WEEKLY_REPORT_STATE.listPage - 1) * pageSize;
+  var pageRows = reports.slice(start, start + pageSize);
+  var rowsHtml = pageRows.map(function(rep, localIdx) {
+    var idx = start + localIdx;
     var photo = rep.fotoUrl ? '<button type="button" onclick="previewWeeklyPhoto(' + idx + ')">Lihat Foto</button>' : '';
     return '<div class="weekly-report-card">' +
-      '<div><strong>' + (formatDateIndo(rep.waktu) || '-') + '</strong><span>' + (rep.pelaksana || '-') + '</span></div>' +
-      '<p>' + (rep.uraian || '-').substring(0, 180) + '</p>' +
+      '<div class="weekly-card-head"><strong>' + escapeHtml(formatDateIndo(rep.waktu) || '-') + '</strong><span>' + escapeHtml(rep.pelaksana || '-') + '</span></div>' +
+      '<p>' + escapeHtml((rep.uraian || '-').substring(0, 180)) + '</p>' +
       '<div class="weekly-report-actions">' + photo +
         '<button type="button" onclick="viewWeeklyReportDetail(' + idx + ')">Detail</button>' +
         '<button type="button" onclick="openWeeklyReportModal(WEEKLY_REPORT_STATE.reports[' + idx + '])">Edit</button>' +
         '<button type="button" class="danger" onclick="deleteWeeklyReport(\'' + (rep.id || '') + '\')">Hapus</button>' +
       '</div></div>';
   }).join('');
+  var pager = totalPages > 1 ? '<div class="weekly-list-pager">' +
+    '<button type="button" onclick="changeWeeklyListPage(-1)" ' + (WEEKLY_REPORT_STATE.listPage <= 1 ? 'disabled' : '') + '>Sebelumnya</button>' +
+    '<span>Halaman ' + WEEKLY_REPORT_STATE.listPage + ' dari ' + totalPages + '</span>' +
+    '<button type="button" onclick="changeWeeklyListPage(1)" ' + (WEEKLY_REPORT_STATE.listPage >= totalPages ? 'disabled' : '') + '>Berikutnya</button>' +
+    '</div>' : '';
+  list.innerHTML = rowsHtml + pager;
+}
+
+function changeWeeklyListPage(delta) {
+  WEEKLY_REPORT_STATE.listPage = (WEEKLY_REPORT_STATE.listPage || 1) + delta;
+  renderWeeklyReportList();
 }
 
 function viewWeeklyReportDetail(idx) {
   var rep = (WEEKLY_REPORT_STATE.reports || [])[idx];
   if (!rep) return;
-  alert([
-    'Pelaksana: ' + (rep.pelaksana || '-'),
-    'Lokasi: ' + (rep.lokasi || '-'),
-    'Waktu: ' + (formatDateIndo(rep.waktu) || '-'),
-    'Tutupan: ' + (rep.tutupan || '-'),
-    'Kegiatan Vegetatif: ' + (rep.kegiatanVegetatif || '-'),
-    'Bibit: ' + (rep.jenisJumlahBibit || '-') + ' | Total: ' + (rep.totalBibit || 0),
-    'Kondisi Tanaman: ' + (rep.kondisiTanaman || '-'),
-    'Monitoring: ' + (rep.kegiatanMonitoring || '-'),
-    'Uraian: ' + (rep.uraian || '-'),
-    'Gangguan: ' + (rep.adaGangguan || '-') + ' | ' + (rep.jenisGangguan || '-'),
-    'Tindak Lanjut: ' + (rep.tindakLanjut || '-')
-  ].join('\n'));
+  openWeeklyDetailModal(rep);
+}
+
+function closeWeeklyDetailModal() {
+  var modal = document.getElementById('weekly-detail-modal');
+  if (modal) modal.classList.remove('open');
+}
+
+function buildDetailKV(label, value) {
+  return '<div class="weekly-detail-kv"><span>' + escapeHtml(label) + '</span><strong>' + escapeHtml(value || '-') + '</strong></div>';
+}
+
+function openWeeklyDetailModal(rep) {
+  var modal = document.getElementById('weekly-detail-modal');
+  var body = document.getElementById('weekly-detail-body');
+  if (!modal || !body || !rep) return;
+  WEEKLY_REPORT_STATE.currentDetailReport = rep;
+  var coords = getPhotoCoords(WEEKLY_REPORT_STATE.row || PHOTO_GALLERY.row || {});
+  var coordLabel = rep.koordinat || ((coords.lat && coords.lng) ? coordText(coords.lat, coords.lng) : '-');
+  var photoHtml = rep.fotoUrl ? '<button type="button" class="weekly-detail-photo" onclick="previewCurrentWeeklyDetailPhoto()"><img src="' + normalizeImageUrl(rep.fotoUrl) + '" alt="Foto laporan mingguan" onerror="handleDriveImageError(this)"><span>Lihat Foto</span></button>' :
+    '<div class="weekly-detail-no-photo">Foto belum tersedia</div>';
+  body.innerHTML = '<div class="weekly-detail-hero">' +
+      '<div><span>Laporan Mingguan</span><h3>' + escapeHtml(rep.kategoriLabel || rep.category || 'Kegiatan') + '</h3><p>' + escapeHtml(rep.lokasi || rep.nama || '-') + '</p></div>' +
+      '<div class="weekly-detail-date">' + escapeHtml(formatDateIndo(rep.waktu) || '-') + '</div>' +
+    '</div>' +
+    '<div class="weekly-detail-layout">' +
+      '<div class="weekly-detail-main">' +
+        '<div class="weekly-detail-grid">' +
+          buildDetailKV('Nama Pegawai/Pembina', rep.pelaksana || rep.pembina || rep.namaPegawai || '-') +
+          buildDetailKV('Jabatan Pegawai', rep.jabatan || '-') +
+          buildDetailKV('Unit CDK/UPTD', rep.unit || '-') +
+          buildDetailKV('Luas Wilayah Binaan', rep.luas || rep.luasHa || '-') +
+          buildDetailKV('Koordinat', coordLabel) +
+          buildDetailKV('Waktu Foto', formatDateIndo(rep.fotoTanggal) || '-') +
+        '</div>' +
+        '<h4>Isi Laporan</h4>' +
+        '<div class="weekly-detail-grid">' +
+          buildDetailKV('Kondisi Tutupan Lahan', rep.tutupan || '-') +
+          buildDetailKV('Kegiatan Vegetatif', rep.kegiatanVegetatif || '-') +
+          buildDetailKV('Jenis/Jumlah Bibit', rep.jenisJumlahBibit || '-') +
+          buildDetailKV('Total Bibit', rep.totalBibit || '0') +
+          buildDetailKV('Kondisi Tanaman', rep.kondisiTanaman || '-') +
+          buildDetailKV('Kegiatan Monitoring', rep.kegiatanMonitoring || '-') +
+          buildDetailKV('Ada Gangguan', rep.adaGangguan || '-') +
+          buildDetailKV('Jenis Gangguan', String(rep.adaGangguan || '').toLowerCase() === 'tidak' ? '-' : (rep.jenisGangguan || '-')) +
+        '</div>' +
+        '<div class="weekly-detail-text"><span>Uraian Hasil Kegiatan</span><p>' + escapeHtml(rep.uraian || '-') + '</p></div>' +
+        '<div class="weekly-detail-text"><span>Tindak Lanjut</span><p>' + escapeHtml(String(rep.adaGangguan || '').toLowerCase() === 'tidak' ? '-' : (rep.tindakLanjut || '-')) + '</p></div>' +
+      '</div>' +
+      '<aside class="weekly-detail-side">' + photoHtml +
+        '<button type="button" class="weekly-detail-map" onclick="focusCurrentWeeklyDetailMap()">Buka Titik di Peta</button>' +
+      '</aside>' +
+    '</div>';
+  modal.classList.add('open');
+}
+
+function previewCurrentWeeklyDetailPhoto() {
+  var rep = WEEKLY_REPORT_STATE.currentDetailReport;
+  if (!rep || !rep.fotoUrl) return;
+  LB_STATE.photos = [normalizeImageUrl(rep.fotoUrl)];
+  LB_STATE.dates = [rep.fotoTanggal || rep.waktu || ''];
+  LB_STATE.years = [''];
+  LB_STATE.angles = ['Laporan Mingguan'];
+  LB_STATE.idx = 0;
+  LB_STATE.year = '';
+  LB_STATE.context = 'weekly';
+  LB_STATE.locName = '<strong style="color:#fff;">Laporan Mingguan</strong><br/>' + escapeHtml(rep.lokasi || '');
+  document.getElementById('photo-lightbox').classList.add('open');
+  document.body.style.overflow = 'hidden';
+  refreshLightbox();
+}
+
+function previewWeeklyPhotoById(reportId) {
+  var idx = (WEEKLY_REPORT_STATE.reports || []).findIndex(function(rep) { return String(rep.id || '') === String(reportId || ''); });
+  if (idx >= 0) previewWeeklyPhoto(idx);
+}
+
+function focusCurrentWeeklyDetailMap() {
+  focusReportOnMapFromObject(WEEKLY_REPORT_STATE.currentDetailReport || {});
 }
 
 function previewWeeklyPhoto(idx) {
@@ -5478,7 +6091,7 @@ function previewWeeklyPhoto(idx) {
   LB_STATE.idx = 0;
   LB_STATE.year = '';
   LB_STATE.context = 'weekly';
-  LB_STATE.locName = '<strong style="color:#fff;">Laporan Mingguan</strong><br/>' + (rep.lokasi || '');
+  LB_STATE.locName = '<strong style="color:#fff;">Laporan Mingguan</strong><br/>' + escapeHtml(rep.lokasi || '');
   document.getElementById('photo-lightbox').classList.add('open');
   document.body.style.overflow = 'hidden';
   refreshLightbox();
@@ -5524,10 +6137,107 @@ if (wrFotoEl) wrFotoEl.addEventListener('change', function() {
     if (exifDate && waktu && !waktu.dataset.userEdited) waktu.value = parsePhotoDateToInputValue(exifDate) || waktu.value;
   });
 });
+var wrAdaGangguanEl = document.getElementById('wr-ada-gangguan');
+if (wrAdaGangguanEl) wrAdaGangguanEl.addEventListener('change', updateWeeklyGangguanVisibility);
 
 function canAccessReportMonitor() {
   var user = getCurrentAuthUser();
   return !!(user && user.username && getRoleGroup(user.role) <= 3);
+}
+
+function normalizeReportText(value) {
+  return String(value || '').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+function getReportAccessAliases(user) {
+  user = user || getCurrentAuthUser();
+  var aliases = [];
+  function add(v) {
+    v = normalizeReportText(v);
+    if (v && aliases.indexOf(v) === -1) aliases.push(v);
+  }
+  add(getCurrentUserUnit(user));
+  add(user && user.unit);
+  var role = normalizeReportText(user && user.role);
+  var m = role.match(/kepala cdk ([1-9])/);
+  if (m) {
+    var roman = ['', 'i', 'ii', 'iii', 'iv', 'v', 'vi', 'vii', 'viii', 'ix'][parseInt(m[1], 10)];
+    add('cdk ' + m[1]);
+    add('cdk wilayah ' + m[1]);
+    add('cdk wilayah ' + roman);
+  }
+  if (role.indexOf('tahura') !== -1) add('tahura');
+  if (role.indexOf('spth') !== -1) add('spth');
+  if (role.indexOf('pphh') !== -1) add('pphh');
+  return aliases;
+}
+
+function getReportRowUnit(row) {
+  if (!row) return '';
+  if (row.unit) return String(row.unit).trim();
+  if (row._sourceRow) return getReportRowUnit(row._sourceRow);
+  return String(row['Unit Kerja'] || row['UNIT KERJA'] || row._cdk || getBinaanField(row, 'unit') || '').trim();
+}
+
+function getReportRowPerson(row) {
+  if (!row) return '';
+  if (row.pembina || row.pelaksana || row.namaPegawai) return String(row.pembina || row.pelaksana || row.namaPegawai).trim();
+  if (row._sourceRow) return getReportRowPerson(row._sourceRow);
+  return String(getBinaanField(row, 'pembina') || row['Nama Lengkap'] || row['Nama Petugas'] || row['Nama'] || row['NAMA'] || '').trim();
+}
+
+function getReportRowLuas(row) {
+  if (!row) return 0;
+  if (row.luasHa != null) return parseLuasHa(row.luasHa);
+  if (row.luas) return parseLuasHa(row.luas);
+  if (row._sourceRow) return getReportRowLuas(row._sourceRow);
+  return parseLuasHa(getBinaanLuasRaw(row) || row['Luas (Ha)'] || row['Luas_Ha'] || row['Luas'] || row['Luas Rencana Penanaman  (Ha)'] || row['Luas Rencana Penanaman (Ha)']);
+}
+
+function getReportDateTs(row) {
+  return parseExifDate((row && (row.waktu || row.fotoTanggal || row.updatedAt)) || '');
+}
+
+function getWeekInputRange(value, endOfWeek) {
+  var m = String(value || '').match(/^(\d{4})-W(\d{2})$/);
+  if (!m) return 0;
+  var year = parseInt(m[1], 10);
+  var week = parseInt(m[2], 10);
+  var simple = new Date(year, 0, 1 + (week - 1) * 7);
+  var dow = simple.getDay();
+  var monday = new Date(simple);
+  monday.setDate(simple.getDate() - ((dow + 6) % 7));
+  monday.setHours(endOfWeek ? 23 : 0, endOfWeek ? 59 : 0, endOfWeek ? 59 : 0, 0);
+  if (endOfWeek) monday.setDate(monday.getDate() + 6);
+  return monday.getTime();
+}
+
+function userCanSeeReportRow(row) {
+  var user = getCurrentAuthUser();
+  if (!user || !user.username) return false;
+  if (getRoleGroup(user.role) <= 2) return true;
+  var aliases = getReportAccessAliases(user);
+  if (!aliases.length) return true;
+  var rowUnit = normalizeReportText(getReportRowUnit(row));
+  var rowLoc = normalizeReportText(row && (row.lokasi || row.nama || ''));
+  return aliases.some(function(userUnit) {
+    return !!(rowUnit && (rowUnit.indexOf(userUnit) !== -1 || userUnit.indexOf(rowUnit) !== -1)) || rowLoc.indexOf(userUnit) !== -1;
+  });
+}
+
+function applyNonAdminMapDefaults_() {
+  var clusterToggle = document.getElementById('toggle-cluster');
+  if (clusterToggle && clusterToggle.checked) clusterToggle.checked = false;
+  CLUSTER_ENABLED = false;
+
+  AUTOPOLY_ENABLED = false;
+  var autoLeg = document.getElementById('leg-autopoly');
+  if (autoLeg) autoLeg.classList.add('leg-hidden');
+}
+
+function onReportFilterChanged() {
+  WEEKLY_REPORT_STATE.monitorPage = 1;
+  renderReportMonitorTable();
 }
 
 function openReportMonitor(type) {
@@ -5537,9 +6247,18 @@ function openReportMonitor(type) {
     return;
   }
   WEEKLY_REPORT_STATE.monitorType = type || 'weekly';
+  WEEKLY_REPORT_STATE.monitorPage = 1;
   var modal = document.getElementById('report-monitor-modal');
   var title = document.getElementById('report-monitor-title');
-  if (title) title.textContent = type === 'monthly' ? 'Monitoring Laporan Bulanan' : 'Monitoring Laporan Mingguan';
+  if (title) title.textContent = type === 'monthly' ? 'Monitoring Laporan 3 Bulanan' : 'Monitoring Laporan Mingguan';
+  var weekStart = document.getElementById('report-week-start-filter');
+  var weekEnd = document.getElementById('report-week-end-filter');
+  if (weekStart) weekStart.style.display = type === 'monthly' ? 'none' : '';
+  if (weekEnd) weekEnd.style.display = type === 'monthly' ? 'none' : '';
+  if (type === 'monthly') {
+    if (weekStart) weekStart.value = '';
+    if (weekEnd) weekEnd.value = '';
+  }
   if (modal) modal.classList.add('open');
   reloadReportMonitor();
 }
@@ -5552,18 +6271,66 @@ function closeReportMonitor() {
 function reloadReportMonitor() {
   if (WEEKLY_REPORT_STATE.monitorType === 'monthly') {
     WEEKLY_REPORT_STATE.monitorRows = buildMonthlyReportRows();
+    WEEKLY_REPORT_STATE.monitorPage = 1;
+    populateReportFilterOptions();
     renderReportMonitorTable();
     return;
   }
   var body = document.getElementById('report-monitor-body');
-  if (body) body.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;">Memuat laporan mingguan...</td></tr>';
+  if (body) body.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:24px;">Memuat laporan mingguan...</td></tr>';
   fetch(appendAuthParam(GAS_WEB_APP_URL + '?action=getAllWeeklyReports')).then(function(res) { return res.json(); }).then(function(data) {
     if (!data.success) throw new Error(data.error || 'Gagal memuat laporan mingguan.');
-    WEEKLY_REPORT_STATE.monitorRows = data.reports || [];
+    WEEKLY_REPORT_STATE.monitorRows = (data.reports || []).map(enrichWeeklyMonitorRow);
+    WEEKLY_REPORT_STATE.monitorPage = 1;
+    populateReportFilterOptions();
     renderReportMonitorTable();
   }).catch(function(err) {
-    if (body) body.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:#c62828;">' + getFriendlyBackendErrorMessage(err) + '</td></tr>';
+    if (body) body.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:24px;color:#c62828;">' + getFriendlyBackendErrorMessage(err) + '</td></tr>';
   });
+}
+
+function enrichWeeklyMonitorRow(rep) {
+  rep = rep || {};
+  var coords = { lat: toFloat(rep.lat || rep.latitude), lng: toFloat(rep.lng || rep.longitude) };
+  var match = null;
+  if ((!rep.unit || !rep.pembina || !coords.lat || !coords.lng) && rep.category) {
+    match = findReportSourceRow(rep);
+  }
+  if (match) {
+    rep._sourceContext = match.context;
+    rep._sourceRow = match.row;
+    rep.unit = rep.unit || getReportRowUnit(match.row);
+    rep.pembina = rep.pembina || getReportRowPerson(match.row);
+    rep.jabatan = rep.jabatan || getBinaanField(match.row, 'jabatan') || match.row['Nama Jabatan'] || match.row['Jabatan'] || '';
+    rep.luas = rep.luas || (getReportRowLuas(match.row) ? formatLuasHa(getReportRowLuas(match.row)) + ' Ha' : '');
+    var c = getPhotoCoords(match.row);
+    rep.lat = rep.lat || c.lat;
+    rep.lng = rep.lng || c.lng;
+  }
+  rep.unit = rep.unit || '';
+  rep.pembina = rep.pembina || rep.pelaksana || '';
+  return rep;
+}
+
+function findReportSourceRow(rep) {
+  var rows = getAllMarkerRowsForReports();
+  var targetCat = String(rep.category || '');
+  var targetRowIndex = String(rep.rowIndex || '');
+  var targetFeature = String(rep.featureId || '');
+  var loc = normalizeReportText(rep.lokasi || rep.nama || '');
+  var lat = toFloat(rep.lat || rep.latitude);
+  var lng = toFloat(rep.lng || rep.longitude);
+  for (var i = 0; i < rows.length; i++) {
+    var item = rows[i];
+    var r = item.row;
+    if (targetCat && item.category !== targetCat) continue;
+    if (targetRowIndex && String(r._row_idx || '') === targetRowIndex) return item;
+    if (targetFeature && String(r['ID'] || r.featureId || '') === targetFeature) return item;
+    var c = getPhotoCoords(r);
+    if (lat && lng && Math.abs((c.lat || 0) - lat) < 0.00001 && Math.abs((c.lng || 0) - lng) < 0.00001) return item;
+    if (loc && normalizeReportText(getWeeklyLocationLabel(r, item.context)).indexOf(loc.substring(0, 24)) !== -1) return item;
+  }
+  return null;
 }
 
 function getAllMarkerRowsForReports() {
@@ -5582,20 +6349,47 @@ function buildMonthlyReportRows() {
   getAllMarkerRowsForReports().forEach(function(item) {
     var r = item.row;
     if (!r) return;
+    var coords = getPhotoCoords(r);
+    var unit = getReportRowUnit(r);
+    var person = getReportRowPerson(r);
+    var luasHa = getReportRowLuas(r);
     PHOTO_YEARS.forEach(function(year) {
       var photos = getRowPhotos(r, year);
       var dates = getRowDates(r, year);
       var angles = getRowAngles(r, year);
       photos.forEach(function(url, idx) {
+        var monAt = function(key) {
+          var arr = parsePipeField(r[key + '_' + year] || '');
+          return arr[idx] || '';
+        };
         rows.push({
           category: item.category,
           kategoriLabel: item.label,
           nama: getWeeklyLocationLabel(r, item.context),
-          unit: r['Unit Kerja'] || r['UNIT KERJA'] || r._cdk || '',
+          unit: unit,
+          pembina: person,
+          kegiatan: getBinaanField(r, 'kegiatan') || r['Kegiatan'] || item.label,
+          administrasi: [
+            getBinaanKabupaten(r) || r['Kabupaten/Kota'] || r['Kabupaten'] || r._kab || '',
+            getBinaanField(r, 'kecamatan') || r['Kecamatan'] || '',
+            getBinaanField(r, 'desa') || r['Desa/Kelurahan'] || r['Desa/ Kelurahan'] || r['Desa'] || ''
+          ].filter(Boolean).join(', '),
+          luasHa: luasHa,
+          luas: luasHa ? formatLuasHa(luasHa) + ' Ha' : '',
+          lat: coords.lat,
+          lng: coords.lng,
           waktu: dates[idx] || '',
           tahun: year,
           sudut: normalizePhotoAngle(angles[idx]),
-          fotoUrl: url
+          fotoUrl: url,
+          tutupan: monAt('Tutupan'),
+          jenis: monAt('Jenis'),
+          kerapatan: monAt('Kerapatan'),
+          lereng: monAt('Lereng'),
+          pengelolaan: monAt('Pengelolaan'),
+          usulan: monAt('Usulan'),
+          _sourceContext: item.context,
+          _sourceRow: r
         });
       });
     });
@@ -5607,18 +6401,91 @@ function buildMonthlyReportRows() {
 function passesReportFilters(row) {
   var q = String((document.getElementById('report-search') || {}).value || '').toLowerCase();
   var cat = String((document.getElementById('report-category-filter') || {}).value || '');
-  var month = String((document.getElementById('report-month-filter') || {}).value || '');
+  var unit = String((document.getElementById('report-unit-filter') || {}).value || '');
+  var person = String((document.getElementById('report-person-filter') || {}).value || '');
+  var start = parseDateInputToTs(String((document.getElementById('report-start-filter') || {}).value || ''), false);
+  var end = parseDateInputToTs(String((document.getElementById('report-end-filter') || {}).value || ''), true);
+  var weekStart = getWeekInputRange(String((document.getElementById('report-week-start-filter') || {}).value || ''), false);
+  var weekEnd = getWeekInputRange(String((document.getElementById('report-week-end-filter') || {}).value || ''), true);
+  if (!userCanSeeReportRow(row)) return false;
   if (cat && row.category !== cat) return false;
-  var text = [row.kategoriLabel, row.nama, row.unit, row.pelaksana, row.lokasi, row.uraian, row.sudut, row.tahun].join(' ').toLowerCase();
+  if (unit && getReportRowUnit(row) !== unit) return false;
+  if (person && getReportRowPerson(row) !== person) return false;
+  var text = [row.kategoriLabel, row.nama, row.unit, row.pembina, row.pelaksana, row.lokasi, row.uraian, row.sudut, row.tahun, row.kegiatan, row.administrasi].join(' ').toLowerCase();
   if (q && text.indexOf(q) === -1) return false;
-  if (month) {
-    var ts = parseExifDate(row.waktu || row.fotoTanggal || '');
-    if (!ts) return false;
-    var d = new Date(ts);
-    var ym = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
-    if (ym !== month) return false;
-  }
+  var ts = getReportDateTs(row);
+  if ((start || end || weekStart || weekEnd) && !ts) return false;
+  if (start && ts < start) return false;
+  if (end && ts > end) return false;
+  if (weekStart && ts < weekStart) return false;
+  if (weekEnd && ts > weekEnd) return false;
   return true;
+}
+
+function populateReportFilterOptions() {
+  var rows = (WEEKLY_REPORT_STATE.monitorRows || []).filter(userCanSeeReportRow);
+  var unitEl = document.getElementById('report-unit-filter');
+  var personEl = document.getElementById('report-person-filter');
+  function fill(el, values, label) {
+    if (!el) return;
+    var current = el.value;
+    var html = '<option value="">' + label + '</option>';
+    values.sort(function(a, b) { return a.localeCompare(b); }).forEach(function(v) {
+      html += '<option value="' + escapeHtml(v) + '">' + escapeHtml(v) + '</option>';
+    });
+    el.innerHTML = html;
+    if (values.indexOf(current) !== -1) el.value = current;
+  }
+  var units = {};
+  var persons = {};
+  rows.forEach(function(r) {
+    var u = getReportRowUnit(r);
+    var p = getReportRowPerson(r);
+    if (u) units[u] = true;
+    if (p) persons[p] = true;
+  });
+  fill(unitEl, Object.keys(units), 'Semua Unit');
+  fill(personEl, Object.keys(persons), 'Semua Pembina/Pegawai');
+}
+
+function changeReportMonitorPage(delta) {
+  WEEKLY_REPORT_STATE.monitorPage = (WEEKLY_REPORT_STATE.monitorPage || 1) + delta;
+  renderReportMonitorTable();
+}
+
+function renderReportPagination(totalRows, totalPages) {
+  var pager = document.getElementById('report-pagination');
+  if (!pager) return;
+  if (totalRows <= (WEEKLY_REPORT_STATE.monitorPageSize || 10)) {
+    pager.innerHTML = '';
+    return;
+  }
+  pager.innerHTML = '<button type="button" onclick="changeReportMonitorPage(-1)" ' + (WEEKLY_REPORT_STATE.monitorPage <= 1 ? 'disabled' : '') + '>Sebelumnya</button>' +
+    '<span>Halaman ' + WEEKLY_REPORT_STATE.monitorPage + ' dari ' + totalPages + ' (' + totalRows + ' laporan)</span>' +
+    '<button type="button" onclick="changeReportMonitorPage(1)" ' + (WEEKLY_REPORT_STATE.monitorPage >= totalPages ? 'disabled' : '') + '>Berikutnya</button>';
+}
+
+function focusReportOnMapFromObject(row) {
+  if (!row) return;
+  closeReportMonitor();
+  closeWeeklyDetailModal();
+  var lat = toFloat(row.lat || row.latitude);
+  var lng = toFloat(row.lng || row.longitude);
+  if ((!lat || !lng) && row._sourceRow) {
+    var c = getPhotoCoords(row._sourceRow);
+    lat = c.lat;
+    lng = c.lng;
+  }
+  var source = row._sourceRow ? { row: row._sourceRow, context: row._sourceContext } : findReportSourceRow(row);
+  if (lat && lng && typeof mapObj !== 'undefined') {
+    mapObj.setView([lat, lng], 16);
+    highlightMarker(lat, lng, source ? source.context : (row.category || 'jum'));
+  }
+  if (source && source.row) {
+    var drawerType = source.context === 'juna' ? 'jum' : (source.context === 'pegawaiBinaan' ? 'pegb' : source.context);
+    openDrawer(drawerType, source.row);
+    setTimeout(function() { showMarkerReportPanel(WEEKLY_REPORT_STATE.monitorType === 'monthly' ? 'monthly' : 'weekly', source.context); }, 120);
+  }
 }
 
 function renderReportMonitorTable() {
@@ -5628,24 +6495,51 @@ function renderReportMonitorTable() {
   var body = document.getElementById('report-monitor-body');
   var kpi = document.getElementById('report-kpi-row');
   if (!head || !body) return;
+  var pageSize = WEEKLY_REPORT_STATE.monitorPageSize || 10;
+  var totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+  WEEKLY_REPORT_STATE.monitorPage = Math.max(1, Math.min(totalPages, WEEKLY_REPORT_STATE.monitorPage || 1));
+  var start = (WEEKLY_REPORT_STATE.monitorPage - 1) * pageSize;
+  var pageRows = rows.slice(start, start + pageSize);
   if (kpi) {
     var cats = {};
     rows.forEach(function(r) { cats[r.category || r.kategoriLabel || '-'] = true; });
+    var totalLuas = rows.reduce(function(sum, r) { return sum + (getReportRowLuas(r) || 0); }, 0);
     kpi.innerHTML = '<div><strong>' + rows.length + '</strong><span>Total Laporan</span></div>' +
       '<div><strong>' + Object.keys(cats).length + '</strong><span>Kategori Aktif</span></div>' +
+      '<div><strong>' + (totalLuas ? formatLuasHa(totalLuas) + ' Ha' : '-') + '</strong><span>Akumulasi Luasan</span></div>' +
       '<div><strong>' + (type === 'monthly' ? 'Bulanan' : 'Mingguan') + '</strong><span>Mode</span></div>';
   }
   if (type === 'monthly') {
-    head.innerHTML = '<tr><th>Kegiatan</th><th>Lokasi</th><th>Unit</th><th>Tahun</th><th>Sudut</th><th>Tanggal</th><th>Foto</th></tr>';
-    body.innerHTML = rows.length ? rows.map(function(r) {
-      return '<tr><td>' + (r.kategoriLabel || '-') + '</td><td>' + (r.nama || '-') + '</td><td>' + (r.unit || '-') + '</td><td>' + (r.tahun || '-') + '</td><td>' + (r.sudut || '-') + '</td><td>' + (formatDateIndo(r.waktu) || '-') + '</td><td><a target="_blank" href="' + (r.fotoUrl || '#') + '">Buka</a></td></tr>';
-    }).join('') : '<tr><td colspan="7" style="text-align:center;padding:24px;">Tidak ada data laporan bulanan.</td></tr>';
+    head.innerHTML = '<tr><th>Kegiatan</th><th>Lokasi & Administratif</th><th>Unit</th><th>Pembina/Pegawai</th><th>Luas</th><th>Foto</th><th>Tanggal</th><th>Aksi</th></tr>';
+    body.innerHTML = pageRows.length ? pageRows.map(function(r, localIdx) {
+      var idx = start + localIdx;
+      return '<tr><td>' + escapeHtml(r.kategoriLabel || '-') + '<br><span class="report-muted">' + escapeHtml(r.kegiatan || '') + '</span></td><td>' + escapeHtml(r.nama || '-') + '<br><span class="report-muted">' + escapeHtml(r.administrasi || coordText(r.lat, r.lng) || '-') + '</span></td><td>' + escapeHtml(r.unit || '-') + '</td><td>' + escapeHtml(r.pembina || '-') + '</td><td>' + escapeHtml(r.luas || '-') + '</td><td>' + escapeHtml(displayPhotoAngle(r.sudut)) + '</td><td>' + escapeHtml(formatDateIndo(r.waktu) || '-') + '</td><td class="report-actions"><button type="button" onclick="previewMonthlyMonitorPhoto(' + idx + ')">Foto</button><button type="button" onclick="focusReportOnMapFromObject(WEEKLY_REPORT_STATE.detailRows[' + idx + '])">Peta</button></td></tr>';
+    }).join('') : '<tr><td colspan="8" style="text-align:center;padding:24px;">Tidak ada data laporan 3 bulanan.</td></tr>';
   } else {
-    head.innerHTML = '<tr><th>Kegiatan</th><th>Pelaksana</th><th>Lokasi</th><th>Waktu</th><th>Tutupan</th><th>Vegetatif</th><th>Gangguan</th><th>Foto</th></tr>';
-    body.innerHTML = rows.length ? rows.map(function(r) {
-      return '<tr><td>' + (r.kategoriLabel || r.category || '-') + '</td><td>' + (r.pelaksana || '-') + '</td><td>' + (r.lokasi || r.nama || '-') + '</td><td>' + (formatDateIndo(r.waktu) || '-') + '</td><td>' + (r.tutupan || '-') + '</td><td>' + (r.kegiatanVegetatif || '-') + '</td><td>' + (r.adaGangguan || '-') + '</td><td>' + (r.fotoUrl ? '<a target="_blank" href="' + r.fotoUrl + '">Buka</a>' : '-') + '</td></tr>';
-    }).join('') : '<tr><td colspan="8" style="text-align:center;padding:24px;">Tidak ada data laporan mingguan.</td></tr>';
+    head.innerHTML = '<tr><th>Kegiatan</th><th>Pelaksana</th><th>Unit</th><th>Lokasi</th><th>Waktu</th><th>Tutupan</th><th>Gangguan</th><th>Ringkasan</th><th>Aksi</th></tr>';
+    body.innerHTML = pageRows.length ? pageRows.map(function(r, localIdx) {
+      var idx = start + localIdx;
+      return '<tr><td>' + escapeHtml(r.kategoriLabel || r.category || '-') + '</td><td>' + escapeHtml(r.pelaksana || '-') + '</td><td>' + escapeHtml(r.unit || '-') + '</td><td>' + escapeHtml(r.lokasi || r.nama || '-') + '<br><span class="report-muted">' + escapeHtml(r.luas || '') + '</span></td><td>' + escapeHtml(formatDateIndo(r.waktu) || '-') + '</td><td>' + escapeHtml(r.tutupan || '-') + '</td><td>' + escapeHtml(r.adaGangguan || '-') + '</td><td>' + escapeHtml((r.uraian || '-').substring(0, 95)) + '</td><td class="report-actions"><button type="button" onclick="openWeeklyDetailModal(WEEKLY_REPORT_STATE.detailRows[' + idx + '])">Detail</button><button type="button" onclick="focusReportOnMapFromObject(WEEKLY_REPORT_STATE.detailRows[' + idx + '])">Peta</button></td></tr>';
+    }).join('') : '<tr><td colspan="9" style="text-align:center;padding:24px;">Tidak ada data laporan mingguan.</td></tr>';
   }
+  WEEKLY_REPORT_STATE.detailRows = rows;
+  renderReportPagination(rows.length, totalPages);
+}
+
+function previewMonthlyMonitorPhoto(idx) {
+  var row = (WEEKLY_REPORT_STATE.detailRows || [])[idx];
+  if (!row || !row.fotoUrl) return;
+  LB_STATE.photos = [normalizeImageUrl(row.fotoUrl)];
+  LB_STATE.dates = [row.waktu || ''];
+  LB_STATE.years = [row.tahun || ''];
+  LB_STATE.angles = [row.sudut || ''];
+  LB_STATE.idx = 0;
+  LB_STATE.year = row.tahun || '';
+  LB_STATE.context = 'single';
+  LB_STATE.locName = '<strong style="color:#fff;">' + escapeHtml(row.nama || row.kategoriLabel || 'Laporan 3 Bulanan') + '</strong><br/>' + escapeHtml(row.unit || '');
+  document.getElementById('photo-lightbox').classList.add('open');
+  document.body.style.overflow = 'hidden';
+  refreshLightbox();
 }
 /* ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â
    ÃƒÂ°Ã…Â¸Ã…â€™Ã‚Â² POLYGON KEGIATAN & POHON MARKER
@@ -5859,6 +6753,7 @@ function openPolygonForm(type, lat, lng, geojsonObj, areaHa) {
   document.getElementById('pg-lat').value = lat;
   document.getElementById('pg-lng').value = lng;
   document.getElementById('pg-kabupaten').value = getKab(lat, lng) || '';
+  requestDplForRow({}, lat, lng);
   if (type === 'polygon' && areaHa > 0) {
     document.getElementById('pg-luas').value = areaHa.toFixed(2);
   } else {
@@ -5976,6 +6871,11 @@ function savePolygonFeature() {
     longitude: document.getElementById('pg-lng').value,
     keterangan: document.getElementById('pg-keterangan').value
   };
+  var dplKey = getDplCacheKey(payload.latitude, payload.longitude);
+  if (dplKey && DPL_CACHE.hasOwnProperty(dplKey)) {
+    payload.dpl = DPL_CACHE[dplKey];
+    payload.status_dpl = getDplCategory(DPL_CACHE[dplKey]).label;
+  }
   
   var gjStr = document.getElementById('pg-geojson').value;
   if (gjStr) {
@@ -6177,6 +7077,7 @@ function renderPolygonFeatures(features) {
 
     var lat = toFloat(feat.Latitude);
     var lng = toFloat(feat.Longitude);
+    if (lat && lng && getRowDplValue(feat) === null) requestDplForRow(feat, lat, lng);
 
     // Bersihkan layer lama untuk featureId ini (aman bila render dipanggil ulang)
     clearLayersForFeatureId(featId);
@@ -6198,6 +7099,8 @@ function renderPolygonFeatures(features) {
     if (!hasGeo || (feat.Type !== 'polygon' && feat.Type !== 'marker')) {
       if (lat && lng) {
         var mk = L.marker([lat, lng], { icon: ICON_POHON }).bindPopup(pop);
+        var mkHoverHtml = buildFeatureHoverTooltip(feat, 'point');
+        if (mkHoverHtml) mk.bindTooltip(mkHoverHtml, {sticky: true, direction: 'top', opacity: 0.95, className: 'feature-hover-tooltip'});
         mk.featureData = feat;
         mk.on('click', function() { openDrawer('polygon_kegiatan', feat); });
         POHON_MARKER_LAYER.addLayer(mk);

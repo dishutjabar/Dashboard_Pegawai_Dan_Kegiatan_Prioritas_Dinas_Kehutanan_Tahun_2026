@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
 <meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="referrer" content="no-referrer">
 <title>GeoHutan Jabar - Peta Sebaran Data Kehutanan</title>
 <meta name="description" content="Dashboard WebGIS Dinas Kehutanan Provinsi Jawa Barat">
@@ -39,7 +39,7 @@
 <script src="https://unpkg.com/shpjs@4.0.4/dist/shp.js" defer></script>
 <script src="https://unpkg.com/@tmcw/togeojson@5.8.1/dist/togeojson.umd.js" defer></script>
 <script src="https://unpkg.com/leaflet.vectorgrid@latest/dist/Leaflet.VectorGrid.bundled.js" defer></script>
-<link rel="stylesheet" href="styles.css"/>
+<link rel="stylesheet" href="styles.css?v=20260814-dpl-marker-fix"/>
 <link rel="stylesheet" href="css/ai.css"/>
 </head>
 <body>
@@ -90,6 +90,7 @@
 </div>
 
 <div id="map"></div>
+<div id="map-dpl-readout" aria-live="polite"></div>
 
 <!-- Topbar -->
 <header id="topbar" class="glass-panel">
@@ -122,7 +123,7 @@
       <button id="btn-report" class="btn-icon" type="button" onclick="toggleReportMenu(event)">&#128202; <span class="d-none-mobile">Laporan</span></button>
       <div id="report-dropdown" class="report-dropdown">
         <button type="button" onclick="openReportMonitor('weekly')">Laporan Mingguan</button>
-        <button type="button" onclick="openReportMonitor('monthly')">Laporan Bulanan</button>
+        <button type="button" onclick="openReportMonitor('monthly')">Laporan 3 Bulanan</button>
       </div>
     </div>
     <button id="btn-export" class="btn-icon" onclick="openExportModal()">&#128196; <span class="d-none-mobile">Export</span></button>
@@ -137,6 +138,7 @@
         <div class="profile-name" id="profile-name">GeoHutan</div>
         <div class="profile-role" id="profile-role">Pengguna Dashboard</div>
         <button class="profile-logout" type="button" onclick="openCredentialModal()" style="margin-bottom: 6px; background: transparent; color: var(--primary); border: 1px solid var(--primary);">Ganti Username/Password</button>
+        <button class="profile-logout" type="button" onclick="openForgotPasswordModal()" style="margin-bottom: 6px; background: transparent; color: #1565c0; border: 1px solid #1565c0;">Lupa Password</button>
         <button class="profile-logout" type="button" onclick="logoutGeoHutan()">Keluar</button>
       </div>
     </div>
@@ -591,12 +593,14 @@
       <div id="upload-loc-info" style="font-size: 13px; font-weight: 600; margin-bottom: 15px; color: var(--primary);"></div>
       
       <div class="filter-group">
-        <label>Sudut Foto Linimasa:</label>
+        <label>Foto Linimasa:</label>
         <div class="angle-segment">
-          <label><input type="radio" name="upload-angle" value="Sudut Foto #1" checked> Sudut Foto #1</label>
-          <label><input type="radio" name="upload-angle" value="Sudut Foto #2"> Sudut Foto #2</label>
+          <label><input type="radio" name="upload-angle" value="Sudut Foto #1" checked> Foto Utama</label>
+          <label><input type="radio" name="upload-angle" value="Sudut Foto #2"> Foto Tambahan</label>
         </div>
       </div>
+
+      <div id="upload-last-photo-preview" class="upload-last-photo-preview"></div>
 
       <div class="filter-group">
         <label>Pilih Tahun Linimasa:</label>
@@ -757,7 +761,7 @@
             </select>
           </label>
         </div>
-        <div class="weekly-checks">
+        <div class="weekly-checks" id="wr-gangguan-fields">
           <label><input type="checkbox" name="wr-jenis-gangguan" value="Perambahan"> Perambahan</label>
           <label><input type="checkbox" name="wr-jenis-gangguan" value="Penebangan Liar"> Penebangan Liar</label>
           <label><input type="checkbox" name="wr-jenis-gangguan" value="Kebakaran"> Kebakaran</label>
@@ -765,11 +769,12 @@
           <label><input type="checkbox" name="wr-jenis-gangguan" value="Pencemaran"> Pencemaran</label>
           <label><input type="checkbox" name="wr-jenis-gangguan" value="Lainnya"> Lainnya</label>
         </div>
-        <label class="weekly-full">Tindak Lanjut<textarea id="wr-tindak-lanjut" rows="3"></textarea></label>
+        <label class="weekly-full" id="wr-tindak-lanjut-wrap">Tindak Lanjut<textarea id="wr-tindak-lanjut" rows="3"></textarea></label>
       </div>
 
       <div class="weekly-section">
         <h3>D. Lampiran Efiden Foto Kegiatan</h3>
+        <div id="wr-existing-photo" class="weekly-existing-photo"></div>
         <input type="file" id="wr-foto" accept="image/*, .heic, .heif">
         <div class="weekly-help">Maksimal 1 foto, ukuran file &le; 5 MB, semua format gambar termasuk HEIC/HEIF. Tanggal foto akan dipakai untuk Waktu Pelaksanaan bila metadata tersedia.</div>
       </div>
@@ -791,8 +796,8 @@
     </div>
     <div class="modal-body">
       <div class="report-monitor-toolbar">
-        <input type="search" id="report-search" placeholder="Cari kegiatan, pelaksana, lokasi, unit..." oninput="renderReportMonitorTable()">
-        <select id="report-category-filter" onchange="renderReportMonitorTable()">
+        <input type="search" id="report-search" placeholder="Cari kegiatan, pelaksana, pembina, lokasi, unit..." oninput="onReportFilterChanged()">
+        <select id="report-category-filter" onchange="onReportFilterChanged()">
           <option value="">Semua Kegiatan</option>
           <option value="pjl">Petugas Jaga Leuweung</option>
           <option value="persemaian">Lokasi Persemaian</option>
@@ -801,7 +806,16 @@
           <option value="juna">Lokasi Juna Permanen</option>
           <option value="polygon">Titik Kegiatan</option>
         </select>
-        <input type="month" id="report-month-filter" onchange="renderReportMonitorTable()">
+        <select id="report-unit-filter" onchange="onReportFilterChanged()">
+          <option value="">Semua Unit</option>
+        </select>
+        <select id="report-person-filter" onchange="onReportFilterChanged()">
+          <option value="">Semua Pembina/Pegawai</option>
+        </select>
+        <input type="date" id="report-start-filter" onchange="onReportFilterChanged()" title="Tanggal mulai">
+        <input type="date" id="report-end-filter" onchange="onReportFilterChanged()" title="Tanggal sampai">
+        <input type="week" id="report-week-start-filter" onchange="onReportFilterChanged()" title="Minggu mulai">
+        <input type="week" id="report-week-end-filter" onchange="onReportFilterChanged()" title="Minggu sampai">
         <button type="button" class="btn-apply" onclick="reloadReportMonitor()">Muat Ulang</button>
       </div>
       <div class="report-kpi-row" id="report-kpi-row"></div>
@@ -811,7 +825,18 @@
           <tbody id="report-monitor-body"></tbody>
         </table>
       </div>
+      <div id="report-pagination" class="report-pagination"></div>
     </div>
+  </div>
+</div>
+
+<div id="weekly-detail-modal" class="modal-overlay" onclick="if(event.target==this) closeWeeklyDetailModal()">
+  <div class="modal-content weekly-detail-modal">
+    <div class="modal-head">
+      <h2>Detail Laporan Mingguan</h2>
+      <button class="close-modal" onclick="closeWeeklyDetailModal()">&times;</button>
+    </div>
+    <div class="modal-body" id="weekly-detail-body"></div>
   </div>
 </div>
 
@@ -835,8 +860,8 @@
     <div class="lightbox-img-wrap">
       <div class="lightbox-angle-filter" id="lightbox-angle-filter">
         <button type="button" class="active" data-angle="all" onclick="setGalleryAngleFilter('all')">Semua</button>
-        <button type="button" data-angle="Sudut Foto #1" onclick="setGalleryAngleFilter('Sudut Foto #1')">Sudut #1</button>
-        <button type="button" data-angle="Sudut Foto #2" onclick="setGalleryAngleFilter('Sudut Foto #2')">Sudut #2</button>
+        <button type="button" data-angle="Sudut Foto #1" onclick="setGalleryAngleFilter('Sudut Foto #1')">Foto Utama</button>
+        <button type="button" data-angle="Sudut Foto #2" onclick="setGalleryAngleFilter('Sudut Foto #2')">Foto Tambahan</button>
       </div>
       <button class="lightbox-nav lb-prev" onclick="lightboxNav(-1)">&#8249;</button>
       <div class="lightbox-img-container">
@@ -895,8 +920,25 @@
   </div>
 </div>
 
+<div id="forgot-password-modal" class="modal-overlay">
+  <div class="modal-content" style="max-width: 380px; padding: 24px;">
+    <div class="modal-header">
+      <h3>Lupa Password</h3>
+      <button type="button" class="btn-close" onclick="closeForgotPasswordModal()">&times;</button>
+    </div>
+    <div class="forgot-password-box">
+      <div class="forgot-password-label">Password terakhir</div>
+      <div class="forgot-password-row">
+        <input id="forgot-password-value" type="password" readonly value="*****">
+        <button id="forgot-password-eye" type="button" onclick="toggleForgotPasswordVisibility()" title="Tampilkan/Sembunyikan password">&#128065;</button>
+      </div>
+      <div id="forgot-password-status" class="forgot-password-status"></div>
+    </div>
+  </div>
+</div>
+
 <script src="app-core.js" defer></script>
-<script src="app-features.js" defer></script>
+<script src="app-features.js?v=20260814-dpl-marker-fix" defer></script>
 <script src="js/ai.js" defer></script>
 
 <!-- ===== MODAL UPLOAD SPASIAL ===== -->
