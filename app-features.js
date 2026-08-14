@@ -2325,31 +2325,6 @@ function getRowDplValue(row) {
   return n === null ? null : Math.round(n);
 }
 
-function estimateDplFromCoords(lat, lng) {
-  var la = Number(lat), lo = Number(lng);
-  if (!isFinite(la) || !isFinite(lo)) return null;
-
-  // Estimasi lokal Jawa Barat: cukup stabil untuk fallback saat API elevasi limit/offline.
-  var mountains = [
-    { lat: -6.77, lng: 106.96, h: 1800, r: 0.24 },
-    { lat: -6.77, lng: 107.60, h: 2100, r: 0.28 },
-    { lat: -7.24, lng: 107.88, h: 2200, r: 0.30 },
-    { lat: -7.32, lng: 108.08, h: 1700, r: 0.26 },
-    { lat: -6.89, lng: 108.41, h: 1200, r: 0.24 },
-    { lat: -6.72, lng: 106.72, h: 1200, r: 0.22 }
-  ];
-  var southRise = Math.max(0, (-la - 6.35)) * 185;
-  var inlandRise = Math.max(0, Math.min(1, (108.8 - lo) / 2.8)) * 80;
-  var value = 45 + southRise + inlandRise;
-  mountains.forEach(function(m) {
-    var dLat = la - m.lat;
-    var dLng = (lo - m.lng) * Math.cos(la * Math.PI / 180);
-    var d = Math.sqrt(dLat * dLat + dLng * dLng);
-    value += m.h * Math.exp(-(d * d) / (2 * m.r * m.r));
-  });
-  return Math.max(1, Math.min(3200, Math.round(value)));
-}
-
 function setRowDplValue(row, value) {
   if (!row || value === null || value === undefined || !isFinite(Number(value))) return;
   var dpl = Math.round(Number(value));
@@ -2380,17 +2355,23 @@ function buildDplRows(row, lat, lng) {
 
 function requestDplForRow(row, lat, lng, callback) {
   var key = getDplCacheKey(lat, lng);
-  if (!key || !row) return;
+  if (!key) return;
   if (DPL_CACHE.hasOwnProperty(key)) {
-    setRowDplValue(row, DPL_CACHE[key]);
+    if (row) setRowDplValue(row, DPL_CACHE[key]);
     if (callback) callback(DPL_CACHE[key]);
     return;
   }
   if (!DPL_REMOTE_ENABLED || Date.now() < DPL_RATE_LIMITED_UNTIL) {
     // API kena limit, jangan berikan estimasi ngawur. Biarkan kosong agar tidak anomali.
+    if (callback) callback(null);
     return;
   }
-  if (DPL_ENQUEUED[key]) return;
+  if (DPL_ENQUEUED[key]) {
+    // Jika sudah ada dalam antrean tapi butuh callback baru, tambahkan ke antrean baru dengan key yang sama
+    // agar callback tereksekusi
+    DPL_BATCH_QUEUE.push({ row: row, lat: Number(lat), lng: Number(lng), key: key, callback: callback });
+    return;
+  }
   DPL_ENQUEUED[key] = true;
   DPL_BATCH_QUEUE.push({ row: row, lat: Number(lat), lng: Number(lng), key: key, callback: callback });
   if (!DPL_IS_FETCHING && !DPL_BATCH_TIMER) DPL_BATCH_TIMER = setTimeout(flushDplBatch, 350);
@@ -2504,14 +2485,20 @@ function updateMapDplReadout() {
     var cat = getDplCategory(dpl);
     el.innerHTML = '<span style="color:' + cat.color + ';">DPL ' + Math.round(dpl).toLocaleString('id-ID') + ' mdpl</span> ' + cat.label;
   } else {
-    var estimate = estimateDplFromCoords(center.lat, center.lng);
-    if (estimate !== null) {
-      DPL_CACHE[key] = estimate;
-      var estCat = getDplCategory(estimate);
-      el.innerHTML = '<span style="color:' + estCat.color + ';">DPL ' + estimate.toLocaleString('id-ID') + ' mdpl</span> ' + estCat.label;
-    } else {
-      el.textContent = 'DPL tidak tersedia';
-    }
+    el.innerHTML = '<span style="color:#78909c;">Memuat DPL...</span>';
+    requestDplForRow(null, center.lat, center.lng, function(val) {
+      // Pastikan posisi center belum bergeser drastis saat request kembali
+      var currCenter = mapObj.getCenter();
+      var currKey = getDplCacheKey(currCenter.lat, currCenter.lng);
+      if (currKey !== key) return;
+      
+      if (val !== null) {
+        var cat = getDplCategory(val);
+        el.innerHTML = '<span style="color:' + cat.color + ';">DPL ' + Math.round(val).toLocaleString('id-ID') + ' mdpl</span> ' + cat.label;
+      } else {
+        el.textContent = 'DPL tidak tersedia';
+      }
+    });
   }
 }
 
