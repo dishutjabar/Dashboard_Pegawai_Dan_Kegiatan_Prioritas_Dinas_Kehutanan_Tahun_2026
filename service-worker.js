@@ -1,6 +1,6 @@
 /* GeoHutan Service Worker */
 
-const CACHE_VERSION = 'geohutan-2026-v1.1.v1.0.v11';
+const CACHE_VERSION = 'geohutan-2026-v1.1.v1.0.v1.1.1.0';
 const CACHE_NAME = `geohutan-static-${CACHE_VERSION}`;
 const CACHE_DYNAMIC = `geohutan-dynamic-${CACHE_VERSION}`;
 

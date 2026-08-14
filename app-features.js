@@ -2387,7 +2387,8 @@ function requestDplForRow(row, lat, lng, callback) {
     return;
   }
   if (!DPL_REMOTE_ENABLED || Date.now() < DPL_RATE_LIMITED_UNTIL) {
-    return; // Berhenti meminta jika API terkena limit 429
+    // API kena limit, jangan berikan estimasi ngawur. Biarkan kosong agar tidak anomali.
+    return;
   }
   if (DPL_ENQUEUED[key]) return;
   DPL_ENQUEUED[key] = true;
@@ -2398,9 +2399,13 @@ function requestDplForRow(row, lat, lng, callback) {
 function flushDplBatch() {
   DPL_BATCH_TIMER = null;
   if (DPL_IS_FETCHING) return;
+  
   if (Date.now() < DPL_RATE_LIMITED_UNTIL) {
-    DPL_BATCH_QUEUE = []; // Kosongkan antrean jika sedang kena limit
-    DPL_ENQUEUED = {};
+    if (DPL_BATCH_QUEUE.length) {
+      DPL_BATCH_QUEUE = [];
+      DPL_ENQUEUED = {};
+      schedRender();
+    }
     return;
   }
   if (!DPL_BATCH_QUEUE.length) return;
@@ -2431,7 +2436,7 @@ function flushDplBatch() {
   fetch('https://api.open-meteo.com/v1/elevation?latitude=' + latParam + '&longitude=' + lngParam)
     .then(function(res) {
       if (res.status === 429) {
-        DPL_RATE_LIMITED_UNTIL = Date.now() + (5 * 60 * 1000); // Stop semua request selama 5 menit
+        DPL_RATE_LIMITED_UNTIL = Date.now() + (5 * 60 * 1000); // Limit 5 menit
         try { localStorage.setItem('GEOHUTAN_DPL_RATELIMIT', DPL_RATE_LIMITED_UNTIL); } catch(e) {}
         throw new Error('Rate Limited (429)');
       }
@@ -2459,9 +2464,11 @@ function flushDplBatch() {
     })
     .catch(function(err) {
       if (err.message && err.message.indexOf('429') !== -1) {
-        // Drop queue secara elegan jika terkena rate limit
+        // Drop antrean jika terkena rate limit, jangan berikan estimasi.
         DPL_BATCH_QUEUE = [];
         DPL_ENQUEUED = {};
+        schedRender();
+        updateMapDplReadout();
       } else {
         DPL_BACKOFF_TIME = Math.min(DPL_BACKOFF_TIME * 2, 30000);
         batch.forEach(function(item) {
