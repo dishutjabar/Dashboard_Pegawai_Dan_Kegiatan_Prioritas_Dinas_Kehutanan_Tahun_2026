@@ -87,8 +87,11 @@ function toFloat(v) {
 
 function getCDK(val) {
   if (!val) return '';
-  var m = String(val).match(/CDK\s*(?:WILAYAH\s*)?([IVX]+)/i);
-  return m ? 'CDK WILAYAH ' + m[1].toUpperCase() : '';
+  var m = String(val).match(/CDK\s*(?:WILAYAH\s*)?([IVX]+|\d+)/i);
+  if (!m) return '';
+  var s = String(m[1] || '').toUpperCase();
+  var romanMap = { I: 1, II: 2, III: 3, IV: 4, V: 5, VI: 6, VII: 7, VIII: 8, IX: 9, X: 10 };
+  return 'CDK Wilayah ' + (/^\d+$/.test(s) ? parseInt(s, 10) : (romanMap[s] || s));
 }
 function getName(r) {
   if (!r) return 'Data tidak tersedia';

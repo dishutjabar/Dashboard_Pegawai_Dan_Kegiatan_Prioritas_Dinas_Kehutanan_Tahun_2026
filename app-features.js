@@ -78,7 +78,7 @@ if (typeof L !== 'undefined' && L.Canvas) {
 /* ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â GeoHutan Jabar ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“ Features ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â */
 /** URL Web App Google Apps Script */
 var GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwCdFIZ3y9BbBiRHJItturR5cSt2RvoQKEbePXXhogpusq_8oID6v6pN654k85sI1kb/exec";
-var REQUIRED_BACKEND_VERSION = "2026-08-02-weekly-report-v3";
+var REQUIRED_BACKEND_VERSION = "2026-08-20-weekly-report-v5";
 var _backendVersionChecked = false;
 var _backendVersionOk = null;
 var AUTH_TOKEN_STORAGE_KEY = "geohutan_auth_token";
@@ -141,7 +141,7 @@ function getRoleGroup(role) {
   if (!role) return 5; // default most restrictive (group 5)
   var r = String(role).toLowerCase().trim().replace(/\s+/g, ' ');
   r = r.replace(/\bcdk\s*([1-9])\b/g, 'cdk $1');
-  var g1 = ['admin', 'kadis', 'sekdis', 'kabid pdas'];
+  var g1 = ['admin', 'superadmin', 'kadis', 'sekdis', 'kabid pdas'];
   var g2 = ['kabid ppkh', 'kabid bupm', 'kabid pksdae'];
   var g3 = ['kepala tahura', 'kepala spth', 'kepala pphh', 'kepala cdk 1', 'kepala cdk 2', 'kepala cdk 3', 'kepala cdk 4', 'kepala cdk 5', 'kepala cdk 6', 'kepala cdk 7', 'kepala cdk 8', 'kepala cdk 9'];
   var g4 = ['pegwai madya', 'pegawai madya'];
@@ -233,6 +233,17 @@ function resetRbacUiVisibility_() {
     var el = document.getElementById(id);
     if (el) el.style.display = '';
   });
+  setStaffSimpleFilterMode_(false);
+}
+
+function setStaffSimpleFilterMode_(enabled) {
+  var filterTab = document.getElementById('tab-filter');
+  if (!filterTab) return;
+  filterTab.querySelectorAll('.filter-group, #binaan-filter-title, .btn-row').forEach(function(el) {
+    el.style.display = enabled ? 'none' : '';
+  });
+  var mapControls = filterTab.querySelector('.map-controls');
+  if (mapControls) mapControls.style.display = '';
 }
 
 function applyCurrentUserRoleDefaults(user) {
@@ -303,6 +314,7 @@ function applyCurrentUserRoleDefaults(user) {
       if (typeof togglePjlPolygons === 'function') togglePjlPolygons();
     }
     schedRender();
+    setStaffSimpleFilterMode_(true);
     setTimeout(zoomToCurrentUserLocation, 450);
     return;
   }
@@ -317,6 +329,7 @@ function applyCurrentUserRoleDefaults(user) {
     setLayerVisibleState(['pjl', 'per', 'jum'], false, false);
     setLayerVisibleState(['peg', 'pegb'], true, false);
     if (pjlPolyToggle && pjlPolyToggle.closest('label')) pjlPolyToggle.closest('label').style.display = 'none';
+    setStaffSimpleFilterMode_(true);
     schedRender();
     setTimeout(zoomToCurrentUserLocation, 450);
   }
@@ -2666,7 +2679,11 @@ function openDrawer(type, r) {
   CURRENT_DRAWER_TYPE = type;
   CURRENT_DRAWER_ROW = r;
   var dr = document.getElementById('detail-drawer');
-  if (dr) dr.classList.remove('minimized');
+  if (dr) {
+    dr.style.display = '';
+    dr.style.visibility = 'visible';
+    dr.classList.remove('minimized');
+  }
   var minBtn = document.getElementById('drawer-min-btn');
   if (minBtn) minBtn.innerHTML = '&minus;';
 
@@ -2811,7 +2828,7 @@ function openDrawer(type, r) {
     Object.keys(r).forEach(k => { if(!k.startsWith('_')) config.push([k, r[k]]); });
   }
 
-  if (cy && cx && ['pjl', 'per', 'persemaian', 'peg', 'pegawai', 'pegb', 'pegawaiBinaan', 'pohon', 'polygon_kegiatan', 'jum', 'jumat'].indexOf(type) !== -1) {
+  if (cy && cx && ['pjl', 'per', 'persemaian', 'pegb', 'pegawaiBinaan', 'pohon', 'polygon_kegiatan', 'jum', 'jumat'].indexOf(type) !== -1) {
     config = config.concat(buildDplRows(r, cy, cx));
   }
 
@@ -2838,9 +2855,6 @@ function openDrawer(type, r) {
   }
   if (type === 'pjl' && typeof _pjlPhotoRow !== 'undefined') {
     html += buildReportHubSection(_pjlPhotoRow, 'pjl');
-  }
-  if ((type === 'peg' || type === 'pegawai') && typeof _pegPhotoRow !== 'undefined') {
-    html += buildReportHubSection(_pegPhotoRow, 'pegawai');
   }
   if ((type === 'pegb' || type === 'pegawaiBinaan') && typeof _pegbPhotoRow !== 'undefined') {
     html += buildReportHubSection(_pegbPhotoRow, 'pegawaiBinaan');
@@ -2874,15 +2888,6 @@ function openDrawer(type, r) {
     WEEKLY_REPORT_STATE.row = _pjlPhotoRow;
     refreshGalleryForYear(PHOTO_GALLERY.year);
   }
-  if ((type === 'peg' || type === 'pegawai') && typeof _pegPhotoRow !== 'undefined') {
-    PHOTO_GALLERY.context = 'pegawai';
-    PHOTO_GALLERY.row = _pegPhotoRow;
-    PHOTO_GALLERY.year = getCurrentPhotoYear(_pegPhotoRow, 'pegawai');
-    PHOTO_GALLERY.idx = 0;
-    WEEKLY_REPORT_STATE.context = 'pegawai';
-    WEEKLY_REPORT_STATE.row = _pegPhotoRow;
-    refreshGalleryForYear(PHOTO_GALLERY.year);
-  }
   if ((type === 'pohon' || type === 'polygon_kegiatan') && typeof _pohonPhotoRow !== 'undefined') {
     PHOTO_GALLERY.context = 'polygon';
     PHOTO_GALLERY.row = _pohonPhotoRow;
@@ -2911,7 +2916,10 @@ function openDrawer(type, r) {
     refreshGalleryForYear(PHOTO_GALLERY.year);
   }
   
-  if (dr) dr.classList.add('open');
+  if (dr) {
+    dr.classList.remove('minimized');
+    dr.classList.add('open');
+  }
 
   // ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Inject AI Assistant card FIRST, then reset scroll ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
   if (typeof GeoHutanAI !== 'undefined' && typeof GeoHutanAI.injectCard === 'function') {
@@ -2972,14 +2980,14 @@ function checkBackendVersion(callback) {
   fetch(GAS_WEB_APP_URL + '?action=getVersion')
     .then(function(res) { return res.json(); })
     .then(function(data) {
-      var ok = !!(data && data.success && data.features && data.features.indexOf('saveWeeklyReport') !== -1);
+      var ok = !!(data && data.success && data.version === REQUIRED_BACKEND_VERSION && data.features && data.features.indexOf('saveWeeklyReport') !== -1);
       _backendVersionOk = ok;
       _backendVersionChecked = true;
       if (callback) callback(ok);
     })
     .catch(function() {
       _backendVersionChecked = true;
-      if (callback) callback(false);
+      if (callback) callback(!navigator.onLine);
     });
 }
 
@@ -3281,10 +3289,10 @@ function getCDKExtended(unitKerja) {
   if (u.includes('P2HH') || u.includes('PPPH') || u.includes('PPHH') || u.includes('PENGOLAHAN HASIL HUTAN')) return 'PPPH';
   if (u.includes('TAHURA') || u.includes('TAMAN HUTAN RAYA')) return 'TAHURA';
   // Handle 'CABANG DINAS KEHUTANAN WILAYAH I BOGOR' ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ 'CDK WILAYAH I'
-  var m = u.match(/CABANG\s+DINAS\s+KEHUTANAN\s+WILAYAH\s+([IVX]+)/i) ||
-          u.match(/CABANG\s+DINAS\s+(?:KE)?HUT(?:ANAN)?\s+WIL(?:AYAH)?\s+([IVX]+)/i) ||
-          u.match(/CDK\s*(?:WILAYAH\s*)?([IVX]+)/i);
-  if (m) return 'CDK WILAYAH ' + m[1].toUpperCase();
+  var m = u.match(/CABANG\s+DINAS\s+KEHUTANAN\s+WILAYAH\s+([IVX]+|\d+)/i) ||
+          u.match(/CABANG\s+DINAS\s+(?:KE)?HUT(?:ANAN)?\s+WIL(?:AYAH)?\s+([IVX]+|\d+)/i) ||
+          u.match(/CDK\s*(?:WILAYAH\s*)?([IVX]+|\d+)/i);
+  if (m) return 'CDK Wilayah ' + romanOrNumberToInt(m[1]);
   return getCDK(u);
 }
 
@@ -3292,9 +3300,14 @@ function formatCDKChartLabel(label) {
   var s = String(label || '').trim();
   var m = s.match(/^CDK\s*(?:WILAYAH\s*)?([IVX]+|\d+)$/i);
   if (!m) return s;
-  var n = m[1].toUpperCase();
+  return 'CDK Wilayah ' + romanOrNumberToInt(m[1]);
+}
+
+function romanOrNumberToInt(value) {
+  var s = String(value || '').trim().toUpperCase();
+  if (/^\d+$/.test(s)) return String(parseInt(s, 10));
   var romanMap = { I: 1, II: 2, III: 3, IV: 4, V: 5, VI: 6, VII: 7, VIII: 8, IX: 9, X: 10 };
-  return 'CDK Wilayah ' + (romanMap[n] || n);
+  return romanMap[s] || s;
 }
 
 function normalizeFilterType(type) {
@@ -4048,15 +4061,20 @@ function removeSource(idx) {
 }
 
 /* Exports & Fullscreen */
-function downloadFile(rows, filename) {
-  var fmt = document.querySelector('input[name="export-fmt"]:checked').value;
+function downloadFile(rows, filename, forcedFmt) {
+  var fmtEl = document.querySelector('input[name="export-fmt"]:checked');
+  var fmt = forcedFmt || (fmtEl ? fmtEl.value : 'csv');
   if (fmt === 'xlsx') {
     var ws = XLSX.utils.aoa_to_sheet(rows);
     var wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Data");
     XLSX.writeFile(wb, filename.replace('.csv', '.xlsx'));
   } else {
-    var csv = rows.map(function(r) { return '"' + String(r).replace(/"/g, '""') + '"'; }).join('\n');
+    var csv = rows.map(function(row) {
+      return (row || []).map(function(cell) {
+        return '"' + String(cell == null ? '' : cell).replace(/"/g, '""') + '"';
+      }).join(',');
+    }).join('\n');
     var blob = new Blob([csv], { type: 'text/csv' });
     var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename; a.click();
   }
@@ -4283,7 +4301,12 @@ var BULAN_ID = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustu
 var PHOTO_GALLERY = { context: 'juna', row: null, year: '2026', idx: 0, photos: [], dates: [], years: [], angles: [], sheetCount: 0, localCount: 0, angleFilter: 'all' };
 var JUM_GALLERY = PHOTO_GALLERY;
 var LB_STATE = { photos: [], dates: [], years: [], angles: [], idx: 0, year: '2026', locName: '', context: 'juna' };
-var WEEKLY_REPORT_STATE = { row: null, context: 'juna', reports: [], listPage: 1, listPageSize: 5, monitorType: 'weekly', monitorRows: [], monitorPage: 1, monitorPageSize: 10, detailRows: [], currentDetailReport: null };
+var WEEKLY_REPORT_STATE = { row: null, context: 'juna', reports: [], listPage: 1, listPageSize: 5, monitorType: 'weekly', monitorRows: [], monitorPage: 1, monitorPageSize: 10, detailRows: [], currentDetailReport: null, currentPhotoMeta: null, currentGpsMeta: null, weeklyGpsPromise: null, allowCameraOpen: false, weeklyMonitorFetchedAt: 0, weeklyMonitorCacheMs: 180000, weeklyMonitorLoading: false };
+
+function invalidateWeeklyMonitorCache() {
+  WEEKLY_REPORT_STATE.weeklyMonitorFetchedAt = 0;
+  WEEKLY_REPORT_STATE.monitorRows = [];
+}
 
 function escapeHtml(value) {
   return String(value == null ? '' : value)
@@ -5455,6 +5478,57 @@ function getFileExifDate(file) {
   });
 }
 
+function exifRationalToNumber(value) {
+  if (value == null) return null;
+  if (typeof value === 'number') return value;
+  if (value.numerator != null && value.denominator) return value.numerator / value.denominator;
+  if (Array.isArray(value) && value.length >= 2 && value[1]) return value[0] / value[1];
+  var n = parseFloat(value);
+  return isNaN(n) ? null : n;
+}
+
+function exifDmsToDecimal(dms, ref) {
+  if (!dms || dms.length < 3) return null;
+  var deg = exifRationalToNumber(dms[0]);
+  var min = exifRationalToNumber(dms[1]);
+  var sec = exifRationalToNumber(dms[2]);
+  if (deg == null || min == null || sec == null) return null;
+  var val = deg + (min / 60) + (sec / 3600);
+  ref = String(ref || '').toUpperCase();
+  if (ref === 'S' || ref === 'W') val *= -1;
+  return parseFloat(val.toFixed(7));
+}
+
+function getFileExifMetadata(file) {
+  return new Promise(function(resolve) {
+    var result = { date: '', lat: null, lng: null };
+    var settled = false;
+    function finish(value) {
+      if (settled) return;
+      settled = true;
+      resolve(value || result);
+    }
+    var fallbackTimer = setTimeout(function() { finish(result); }, 2000);
+    try {
+      if (typeof EXIF === 'undefined' || !EXIF.getData) {
+        clearTimeout(fallbackTimer);
+        finish(result);
+        return;
+      }
+      EXIF.getData(file, function() {
+        var rawDate = EXIF.getTag(this, "DateTimeOriginal") || EXIF.getTag(this, "DateTime") || EXIF.getTag(this, "DateTimeDigitized");
+        var lat = exifDmsToDecimal(EXIF.getTag(this, "GPSLatitude"), EXIF.getTag(this, "GPSLatitudeRef"));
+        var lng = exifDmsToDecimal(EXIF.getTag(this, "GPSLongitude"), EXIF.getTag(this, "GPSLongitudeRef"));
+        clearTimeout(fallbackTimer);
+        finish({ date: parseExifDateString(rawDate), lat: lat, lng: lng });
+      });
+    } catch (e) {
+      clearTimeout(fallbackTimer);
+      finish(result);
+    }
+  });
+}
+
 function readFileAsDataUrl(file) {
   return new Promise(function(resolve, reject) {
     var reader = new FileReader();
@@ -5725,6 +5799,226 @@ function calculateWeeklyTotalBibit(text) {
   return total;
 }
 
+function getWeeklyDraftKey() {
+  var r = WEEKLY_REPORT_STATE.row || PHOTO_GALLERY.row || {};
+  var context = WEEKLY_REPORT_STATE.context || PHOTO_GALLERY.context || 'juna';
+  var coords = getPhotoCoords(r);
+  return 'geohutan_weekly_draft_' + context + '_' + (r._row_idx || r['ID'] || r.featureId || '') + '_' + (coords.lat || '') + '_' + (coords.lng || '');
+}
+
+function getWeeklyPendingQueue() {
+  try { return JSON.parse(localStorage.getItem('geohutan_weekly_pending_queue') || '[]') || []; }
+  catch (e) { return []; }
+}
+
+function setWeeklyPendingQueue(queue) {
+  try { localStorage.setItem('geohutan_weekly_pending_queue', JSON.stringify(queue || [])); }
+  catch (e) { showToast('Penyimpanan sementara penuh. Kurangi ukuran foto lalu coba lagi.', 'error'); }
+  updateWeeklyDraftStatus();
+}
+
+function updateWeeklyDraftStatus() {
+  var el = document.getElementById('weekly-draft-status');
+  if (!el) return;
+  var count = getWeeklyPendingQueue().length;
+  el.textContent = count ? count + ' draft menunggu sinyal' : 'Draft otomatis aktif';
+  el.className = 'weekly-draft-status' + (count ? ' has-pending' : '');
+}
+
+function collectWeeklyFormDraft() {
+  function val(id) { var el = document.getElementById(id); return el ? el.value : ''; }
+  return {
+    reportId: val('weekly-report-id'),
+    mode: val('weekly-report-mode') || 'create',
+    pelaksana: val('wr-pelaksana'),
+    lokasi: val('wr-lokasi'),
+    waktu: val('wr-waktu'),
+    tutupan: val('wr-tutupan'),
+    kegiatanVegetatif: getWeeklyCheckedValues('wr-vegetatif'),
+    kondisiTanaman: getWeeklyCheckedValues('wr-kondisi-tanaman'),
+    kegiatanMonitoring: getWeeklyCheckedValues('wr-monitoring'),
+    jenisJumlahBibit: val('wr-bibit'),
+    totalBibit: val('wr-total-bibit'),
+    tinggiTanaman: val('wr-tinggi-tanaman'),
+    sumberBibit: val('wr-sumber-bibit'),
+    kebutuhanBibitCukup: val('wr-kebutuhan-bibit'),
+    kekuranganJenisJumlahBibit: val('wr-bibit-kurang'),
+    kekuranganTotalBibit: val('wr-total-bibit-kurang'),
+    kekuranganTinggiTanaman: val('wr-tinggi-tanaman-kurang'),
+    kekuranganSumberBibit: val('wr-sumber-bibit-kurang'),
+    uraian: val('wr-uraian'),
+    adaGangguan: val('wr-ada-gangguan'),
+    jenisGangguan: getWeeklyCheckedValues('wr-jenis-gangguan'),
+    tindakLanjut: val('wr-tindak-lanjut')
+  };
+}
+
+function saveWeeklyFormDraft() {
+  var form = document.getElementById('weekly-report-form');
+  if (!form || !document.getElementById('weekly-report-modal').classList.contains('open')) return;
+  try { localStorage.setItem(getWeeklyDraftKey(), JSON.stringify(collectWeeklyFormDraft())); } catch (e) {}
+  updateWeeklyDraftStatus();
+}
+
+function restoreWeeklyFormDraft() {
+  var raw = '';
+  try { raw = localStorage.getItem(getWeeklyDraftKey()) || ''; } catch (e) {}
+  if (!raw) return;
+  try {
+    var d = JSON.parse(raw);
+    if (!d || d.reportId) return;
+    function set(id, value) { var el = document.getElementById(id); if (el && value != null) el.value = value; }
+    set('wr-pelaksana', d.pelaksana);
+    set('wr-lokasi', d.lokasi);
+    set('wr-waktu', d.waktu);
+    set('wr-tutupan', d.tutupan);
+    setWeeklyCheckedValues('wr-vegetatif', d.kegiatanVegetatif);
+    setWeeklyCheckedValues('wr-kondisi-tanaman', d.kondisiTanaman);
+    setWeeklyCheckedValues('wr-monitoring', d.kegiatanMonitoring);
+    set('wr-bibit', d.jenisJumlahBibit);
+    set('wr-total-bibit', d.totalBibit || calculateWeeklyTotalBibit(d.jenisJumlahBibit));
+    set('wr-tinggi-tanaman', d.tinggiTanaman);
+    set('wr-sumber-bibit', d.sumberBibit);
+    set('wr-kebutuhan-bibit', d.kebutuhanBibitCukup);
+    set('wr-bibit-kurang', d.kekuranganJenisJumlahBibit);
+    set('wr-total-bibit-kurang', d.kekuranganTotalBibit || calculateWeeklyTotalBibit(d.kekuranganJenisJumlahBibit));
+    set('wr-tinggi-tanaman-kurang', d.kekuranganTinggiTanaman);
+    set('wr-sumber-bibit-kurang', d.kekuranganSumberBibit);
+    set('wr-uraian', d.uraian);
+    set('wr-ada-gangguan', d.adaGangguan);
+    setWeeklyCheckedValues('wr-jenis-gangguan', d.jenisGangguan);
+    set('wr-tindak-lanjut', d.tindakLanjut);
+    updateWeeklyKebutuhanBibitVisibility();
+    updateWeeklyGangguanVisibility();
+  } catch (e) {}
+}
+
+function clearWeeklyFormDraft() {
+  try { localStorage.removeItem(getWeeklyDraftKey()); } catch (e) {}
+  updateWeeklyDraftStatus();
+}
+
+function formatWeeklyGpsDate_(value) {
+  var d = value instanceof Date && !isNaN(value.getTime()) ? value : new Date(value || Date.now());
+  if (isNaN(d.getTime())) d = new Date();
+  return ('0' + d.getDate()).slice(-2) + '/' +
+    ('0' + (d.getMonth() + 1)).slice(-2) + '/' +
+    d.getFullYear() + ' ' +
+    ('0' + d.getHours()).slice(-2) + ':' +
+    ('0' + d.getMinutes()).slice(-2);
+}
+
+function isFreshWeeklyGpsMeta(meta) {
+  return !!(meta && meta.lat != null && meta.lng != null && meta.timestamp && (Date.now() - meta.timestamp) < 10 * 60 * 1000);
+}
+
+function requestWeeklyGpsLocation(silent) {
+  if (!navigator.geolocation) {
+    return Promise.reject(new Error('Perangkat atau browser tidak mendukung GPS lokasi.'));
+  }
+  if (isFreshWeeklyGpsMeta(WEEKLY_REPORT_STATE.currentGpsMeta)) {
+    return Promise.resolve(WEEKLY_REPORT_STATE.currentGpsMeta);
+  }
+  if (WEEKLY_REPORT_STATE.weeklyGpsPromise) return WEEKLY_REPORT_STATE.weeklyGpsPromise;
+  if (!silent) showToast('Mengaktifkan GPS lokasi akurat. Izinkan akses lokasi jika diminta.', 'info');
+  WEEKLY_REPORT_STATE.weeklyGpsPromise = new Promise(function(resolve, reject) {
+    navigator.geolocation.getCurrentPosition(function(pos) {
+      var coords = pos && pos.coords ? pos.coords : {};
+      var meta = {
+        lat: coords.latitude,
+        lng: coords.longitude,
+        accuracy: coords.accuracy,
+        timestamp: pos.timestamp || Date.now(),
+        date: formatWeeklyGpsDate_(pos.timestamp || Date.now()),
+        source: 'GPS lokasi perangkat'
+      };
+      WEEKLY_REPORT_STATE.currentGpsMeta = meta;
+      WEEKLY_REPORT_STATE.weeklyGpsPromise = null;
+      resolve(meta);
+    }, function(err) {
+      WEEKLY_REPORT_STATE.weeklyGpsPromise = null;
+      var msg = err && err.code === 1
+        ? 'Izin lokasi ditolak. Aktifkan GPS/lokasi dan izinkan akses lokasi untuk mengambil foto laporan mingguan.'
+        : 'GPS lokasi belum berhasil didapatkan. Pastikan lokasi/GPS aktif lalu coba lagi.';
+      reject(new Error(msg));
+    }, { enableHighAccuracy: true, timeout: 18000, maximumAge: 0 });
+  });
+  return WEEKLY_REPORT_STATE.weeklyGpsPromise;
+}
+
+function prefetchWeeklyGpsLocation() {
+  requestWeeklyGpsLocation(true).catch(function() {});
+}
+
+function shouldRequireWeeklyGpsBeforeCamera() {
+  var ua = navigator.userAgent || '';
+  var mobileUA = /Android|iPhone|iPad|iPod|Mobile/i.test(ua);
+  var touchMobile = navigator.maxTouchPoints > 1 && window.innerWidth <= 950;
+  return mobileUA || touchMobile;
+}
+
+function mergeWeeklyPhotoMetadata(exifMeta, gpsMeta) {
+  exifMeta = exifMeta || {};
+  var gpsOk = gpsMeta && gpsMeta.lat != null && gpsMeta.lng != null;
+  return {
+    date: gpsOk && gpsMeta.date ? gpsMeta.date : (exifMeta.date || ''),
+    lat: gpsOk ? gpsMeta.lat : exifMeta.lat,
+    lng: gpsOk ? gpsMeta.lng : exifMeta.lng,
+    source: gpsOk ? 'GPS lokasi perangkat' : 'Metadata kamera/EXIF',
+    accuracy: gpsOk ? gpsMeta.accuracy : '',
+    exifDate: exifMeta.date || '',
+    exifLat: exifMeta.lat,
+    exifLng: exifMeta.lng
+  };
+}
+
+function getWeeklyPhotoFinalMetadata(file) {
+  return getFileExifMetadata(file).then(function(exifMeta) {
+    return requestWeeklyGpsLocation(false).then(function(gpsMeta) {
+      return mergeWeeklyPhotoMetadata(exifMeta, gpsMeta);
+    }).catch(function(gpsErr) {
+      var meta = mergeWeeklyPhotoMetadata(exifMeta, null);
+      meta.gpsError = gpsErr && (gpsErr.message || String(gpsErr));
+      return meta;
+    });
+  });
+}
+
+function renderWeeklyPhotoMetaStatus(meta, file, errorText) {
+  var wrap = document.getElementById('wr-photo-meta-status');
+  if (!wrap) return;
+  if (!file && !errorText) {
+    wrap.innerHTML = '';
+    return;
+  }
+  var ok = meta && meta.date && meta.lat != null && meta.lng != null && !errorText;
+  var thumb = file ? '<img src="' + URL.createObjectURL(file) + '" alt="Preview foto laporan">' : '';
+  var source = meta && meta.source ? meta.source : '-';
+  var accuracy = meta && meta.accuracy ? ' (akurasi +/- ' + Math.round(Number(meta.accuracy)) + ' m)' : '';
+  wrap.className = 'weekly-photo-meta-status ' + (ok ? 'ok' : 'bad');
+  wrap.innerHTML = '<div class="weekly-meta-card">' + thumb +
+    '<div><strong>' + (ok ? 'Foto Ini memiliki metadata Lengkap' : 'Foto Tidak memiliki metadata Koordinat Latitude Longitude atau Tanggal Waktu') + '</strong>' +
+    '<span>Latitude: ' + escapeHtml(meta && meta.lat != null ? meta.lat : '-') + '</span>' +
+    '<span>Longitude: ' + escapeHtml(meta && meta.lng != null ? meta.lng : '-') + '</span>' +
+    '<span>Tanggal waktu: ' + escapeHtml(meta && meta.date ? formatDateIndo(meta.date) : '-') + '</span>' +
+    '<span>Sumber koordinat: ' + escapeHtml(source + accuracy) + '</span>' +
+    (meta && meta.note ? '<small>' + escapeHtml(meta.note) + '</small>' : '') +
+    (errorText ? '<small>' + escapeHtml(errorText) + '</small>' : '') + '</div></div>';
+}
+
+function updateWeeklyKebutuhanBibitVisibility() {
+  var sel = document.getElementById('wr-kebutuhan-bibit');
+  var show = sel && String(sel.value || '').toLowerCase() === 'tidak';
+  var fields = document.getElementById('wr-kebutuhan-kurang-fields');
+  if (fields) fields.style.display = show ? 'block' : 'none';
+  if (!show) {
+    ['wr-bibit-kurang', 'wr-total-bibit-kurang', 'wr-tinggi-tanaman-kurang', 'wr-sumber-bibit-kurang'].forEach(function(id) {
+      var el = document.getElementById(id);
+      if (el) el.value = id === 'wr-total-bibit-kurang' ? '0' : '';
+    });
+  }
+}
+
 function resetWeeklyReportForm() {
   var form = document.getElementById('weekly-report-form');
   if (form) form.reset();
@@ -5732,6 +6026,12 @@ function resetWeeklyReportForm() {
   document.getElementById('weekly-report-mode').value = 'create';
   var totalEl = document.getElementById('wr-total-bibit');
   if (totalEl) totalEl.value = '0';
+  var totalKurangEl = document.getElementById('wr-total-bibit-kurang');
+  if (totalKurangEl) totalKurangEl.value = '0';
+  WEEKLY_REPORT_STATE.currentPhotoMeta = null;
+  WEEKLY_REPORT_STATE.currentGpsMeta = null;
+  WEEKLY_REPORT_STATE.allowCameraOpen = false;
+  renderWeeklyPhotoMetaStatus(null, null);
   var oldPhoto = document.getElementById('wr-existing-photo');
   if (oldPhoto) oldPhoto.innerHTML = '';
   var user = getCurrentAuthUser();
@@ -5743,7 +6043,9 @@ function resetWeeklyReportForm() {
     var now = new Date();
     waktu.value = now.getFullYear() + '-' + ('0' + (now.getMonth() + 1)).slice(-2) + '-' + ('0' + now.getDate()).slice(-2) + 'T' + ('0' + now.getHours()).slice(-2) + ':' + ('0' + now.getMinutes()).slice(-2);
   }
+  updateWeeklyKebutuhanBibitVisibility();
   updateWeeklyGangguanVisibility();
+  updateWeeklyDraftStatus();
 }
 
 function getWeeklyLocationLabel(r, context) {
@@ -5777,6 +6079,13 @@ function openWeeklyReportModal(report) {
     setWeeklyCheckedValues('wr-vegetatif', report.kegiatanVegetatif);
     document.getElementById('wr-bibit').value = report.jenisJumlahBibit || '';
     document.getElementById('wr-total-bibit').value = report.totalBibit || calculateWeeklyTotalBibit(report.jenisJumlahBibit);
+    document.getElementById('wr-tinggi-tanaman').value = report.tinggiTanaman || '';
+    document.getElementById('wr-sumber-bibit').value = report.sumberBibit || '';
+    document.getElementById('wr-kebutuhan-bibit').value = report.kebutuhanBibitCukup || '';
+    document.getElementById('wr-bibit-kurang').value = report.kekuranganJenisJumlahBibit || '';
+    document.getElementById('wr-total-bibit-kurang').value = report.kekuranganTotalBibit || calculateWeeklyTotalBibit(report.kekuranganJenisJumlahBibit);
+    document.getElementById('wr-tinggi-tanaman-kurang').value = report.kekuranganTinggiTanaman || '';
+    document.getElementById('wr-sumber-bibit-kurang').value = report.kekuranganSumberBibit || '';
     setWeeklyCheckedValues('wr-kondisi-tanaman', report.kondisiTanaman);
     setWeeklyCheckedValues('wr-monitoring', report.kegiatanMonitoring);
     document.getElementById('wr-uraian').value = report.uraian || '';
@@ -5784,9 +6093,13 @@ function openWeeklyReportModal(report) {
     setWeeklyCheckedValues('wr-jenis-gangguan', report.jenisGangguan);
     document.getElementById('wr-tindak-lanjut').value = report.tindakLanjut || '';
     renderWeeklyExistingPhoto(report);
+  } else {
+    restoreWeeklyFormDraft();
   }
+  updateWeeklyKebutuhanBibitVisibility();
   updateWeeklyGangguanVisibility();
   modal.classList.add('open');
+  prefetchWeeklyGpsLocation();
   // Cek versi backend satu kali; tampilkan warning jika perlu
   checkBackendVersion(function(ok) {
     var submitBtn = document.getElementById('weekly-report-submit');
@@ -5862,69 +6175,181 @@ function validateSingleImageFile(file) {
   });
 }
 
+function buildWeeklyReportPayload(photo) {
+  var r = WEEKLY_REPORT_STATE.row || PHOTO_GALLERY.row;
+  var context = WEEKLY_REPORT_STATE.context || PHOTO_GALLERY.context || 'juna';
+  var coords = getPhotoCoords(r);
+  var bibitText = document.getElementById('wr-bibit').value || '';
+  var bibitKurangText = document.getElementById('wr-bibit-kurang').value || '';
+  var kebutuhan = document.getElementById('wr-kebutuhan-bibit').value || '';
+  var adaGangguan = document.getElementById('wr-ada-gangguan').value || '';
+  return {
+    action: 'saveWeeklyReport',
+    mode: document.getElementById('weekly-report-mode').value || 'create',
+    reportId: document.getElementById('weekly-report-id').value || '',
+    category: getBackendCategoryForContext(context),
+    lat: coords.lat,
+    lng: coords.lng,
+    rowIndex: r._row_idx || '',
+    sheetGid: r._source_gid || '',
+    featureId: r['ID'] || r.featureId || '',
+    photoBase64: photo.base64,
+    photoMimeType: photo.mimeType,
+    photoFilename: photo.filename || '',
+    report: {
+      pelaksana: document.getElementById('wr-pelaksana').value,
+      lokasi: document.getElementById('wr-lokasi').value,
+      waktu: getIsoDateFromInput(document.getElementById('wr-waktu').value),
+      tutupan: document.getElementById('wr-tutupan').value,
+      kegiatanVegetatif: getWeeklyCheckedValues('wr-vegetatif'),
+      kondisiTanaman: getWeeklyCheckedValues('wr-kondisi-tanaman'),
+      kegiatanMonitoring: getWeeklyCheckedValues('wr-monitoring'),
+      jenisJumlahBibit: bibitText,
+      totalBibit: calculateWeeklyTotalBibit(bibitText),
+      tinggiTanaman: document.getElementById('wr-tinggi-tanaman').value,
+      sumberBibit: document.getElementById('wr-sumber-bibit').value,
+      kebutuhanBibitCukup: kebutuhan,
+      kekuranganJenisJumlahBibit: String(kebutuhan).toLowerCase() === 'tidak' ? bibitKurangText : '',
+      kekuranganTotalBibit: String(kebutuhan).toLowerCase() === 'tidak' ? calculateWeeklyTotalBibit(bibitKurangText) : '',
+      kekuranganTinggiTanaman: String(kebutuhan).toLowerCase() === 'tidak' ? document.getElementById('wr-tinggi-tanaman-kurang').value : '',
+      kekuranganSumberBibit: String(kebutuhan).toLowerCase() === 'tidak' ? document.getElementById('wr-sumber-bibit-kurang').value : '',
+      uraian: document.getElementById('wr-uraian').value,
+      adaGangguan: adaGangguan,
+      jenisGangguan: String(adaGangguan).toLowerCase() === 'ya' ? getWeeklyCheckedValues('wr-jenis-gangguan') : '',
+      tindakLanjut: String(adaGangguan).toLowerCase() === 'ya' ? document.getElementById('wr-tindak-lanjut').value : '',
+      fotoTanggal: photo.date || photo.exifDate,
+      fotoLat: photo.lat == null ? '' : photo.lat,
+      fotoLng: photo.lng == null ? '' : photo.lng
+    }
+  };
+}
+
+function postWeeklyReportPayload(payload) {
+  payload.authToken = getAuthToken();
+  return fetch(GAS_WEB_APP_URL, { method: 'POST', body: JSON.stringify(payload) })
+    .then(function(res) { return res.json(); })
+    .then(function(res) {
+      if (!res.success) throw new Error(res.error || 'Gagal menyimpan laporan.');
+      return res;
+    });
+}
+
+function queuePendingWeeklyPayload(payload) {
+  var queue = getWeeklyPendingQueue();
+  payload._queuedAt = new Date().toISOString();
+  queue.push(payload);
+  try {
+    localStorage.setItem('geohutan_weekly_pending_queue', JSON.stringify(queue));
+    updateWeeklyDraftStatus();
+    return true;
+  } catch (e) {
+    showToast('Gagal menyimpan draft offline. Ruang penyimpanan browser penuh.', 'error');
+    return false;
+  }
+}
+
+function syncPendingWeeklyReports() {
+  var queue = getWeeklyPendingQueue();
+  if (!queue.length) {
+    updateWeeklyDraftStatus();
+    showToast('Tidak ada draft laporan mingguan yang menunggu.', 'success');
+    return;
+  }
+  if (!navigator.onLine) {
+    showToast('Perangkat masih offline. Draft tetap tersimpan sementara.', 'warning');
+    return;
+  }
+  var sent = 0;
+  function next() {
+    if (!queue.length) {
+      setWeeklyPendingQueue([]);
+      if (sent) invalidateWeeklyMonitorCache();
+      showToast(sent + ' draft laporan mingguan berhasil dikirim.', 'success');
+      if (document.getElementById('weekly-report-list')) loadWeeklyReportsForMarker(true);
+      return;
+    }
+    var payload = queue[0];
+    postWeeklyReportPayload(payload).then(function() {
+      sent++;
+      queue.shift();
+      setWeeklyPendingQueue(queue);
+      next();
+    }).catch(function(err) {
+      setWeeklyPendingQueue(queue);
+      showToast('Sinkronisasi berhenti: ' + getFriendlyBackendErrorMessage(err), 'error');
+    });
+  }
+  next();
+}
+
 function submitWeeklyReport(event) {
   if (event) event.preventDefault();
   var r = WEEKLY_REPORT_STATE.row || PHOTO_GALLERY.row;
-  var context = WEEKLY_REPORT_STATE.context || PHOTO_GALLERY.context || 'juna';
   if (!r) return;
   var btn = document.getElementById('weekly-report-submit');
   var old = btn ? btn.textContent : '';
   var fileInput = document.getElementById('wr-foto');
   var file = fileInput && fileInput.files ? fileInput.files[0] : null;
+  var mode = document.getElementById('weekly-report-mode').value || 'create';
   if (fileInput && fileInput.files && fileInput.files.length > 1) {
     showToast('Maksimal 1 foto untuk laporan mingguan.', 'error');
+    return;
+  }
+  if (!file && mode !== 'edit') {
+    showToast('Foto kamera wajib dilampirkan untuk laporan mingguan baru.', 'error');
     return;
   }
   if (btn) { btn.disabled = true; btn.textContent = 'Menyimpan...'; }
 
   validateSingleImageFile(file).then(function(err) {
     if (err) throw new Error(err);
-    return file ? getFileExifDate(file).then(function(exifDate) {
-      var waktu = document.getElementById('wr-waktu');
-      if (exifDate && waktu && !waktu.dataset.userEdited) waktu.value = parsePhotoDateToInputValue(exifDate) || waktu.value;
-      return readFileAsDataUrl(file).then(function(dataUrl) {
-        return { base64: String(dataUrl).split(',')[1] || '', mimeType: file.type || 'image/jpeg', filename: file.name || '', exifDate: exifDate };
-      });
-    }) : Promise.resolve({ base64: '', mimeType: '', exifDate: '' });
-  }).then(function(photo) {
-    var coords = getPhotoCoords(r);
-    var bibitText = document.getElementById('wr-bibit').value || '';
-    var payload = {
-      action: 'saveWeeklyReport',
-      mode: document.getElementById('weekly-report-mode').value || 'create',
-      reportId: document.getElementById('weekly-report-id').value || '',
-      category: getBackendCategoryForContext(context),
-      lat: coords.lat,
-      lng: coords.lng,
-      rowIndex: r._row_idx || '',
-      sheetGid: r._source_gid || '',
-      featureId: r['ID'] || r.featureId || '',
-      photoBase64: photo.base64,
-      photoMimeType: photo.mimeType,
-      photoFilename: photo.filename || '',
-      report: {
-        pelaksana: document.getElementById('wr-pelaksana').value,
-        lokasi: document.getElementById('wr-lokasi').value,
-        waktu: getIsoDateFromInput(document.getElementById('wr-waktu').value),
-        tutupan: document.getElementById('wr-tutupan').value,
-        kegiatanVegetatif: getWeeklyCheckedValues('wr-vegetatif'),
-        jenisJumlahBibit: bibitText,
-        totalBibit: calculateWeeklyTotalBibit(bibitText),
-        kondisiTanaman: getWeeklyCheckedValues('wr-kondisi-tanaman'),
-        kegiatanMonitoring: getWeeklyCheckedValues('wr-monitoring'),
-        uraian: document.getElementById('wr-uraian').value,
-        adaGangguan: document.getElementById('wr-ada-gangguan').value,
-        jenisGangguan: String(document.getElementById('wr-ada-gangguan').value || '').toLowerCase() === 'ya' ? getWeeklyCheckedValues('wr-jenis-gangguan') : '',
-        tindakLanjut: String(document.getElementById('wr-ada-gangguan').value || '').toLowerCase() === 'ya' ? document.getElementById('wr-tindak-lanjut').value : '',
-        fotoTanggal: photo.exifDate
+    if (!file) return { base64: '', mimeType: '', filename: '', date: '', exifDate: '', lat: '', lng: '' };
+    return getWeeklyPhotoFinalMetadata(file).then(function(meta) {
+      WEEKLY_REPORT_STATE.currentPhotoMeta = meta;
+      var missing = [];
+      if (!meta.date) missing.push('tanggal waktu');
+      if (meta.lat == null || meta.lng == null) missing.push('koordinat latitude/longitude');
+      var metaError = missing.length ? 'Metadata tidak lengkap: ' + missing.join(', ') : '';
+      if (meta.gpsError && meta.source !== 'GPS lokasi perangkat' && missing.length) {
+        metaError += (metaError ? '. ' : '') + meta.gpsError;
+      } else if (meta.gpsError && meta.source !== 'GPS lokasi perangkat') {
+        meta.note = 'GPS live belum tersedia, sistem memakai metadata kamera/EXIF yang lengkap.';
       }
-    };
-    return fetch(GAS_WEB_APP_URL, { method: 'POST', body: JSON.stringify(withAuthPayload(payload)) }).then(function(res) { return res.json(); });
-  }).then(function(res) {
-    if (!res.success) throw new Error(res.error || 'Gagal menyimpan laporan.');
-    closeWeeklyReportModal();
-    showToast('Laporan mingguan berhasil disimpan.', 'success');
-    loadWeeklyReportsForMarker(true);
+      renderWeeklyPhotoMetaStatus(meta, file, metaError);
+      if (missing.length) throw new Error('Foto Tidak memiliki metadata Koordinat Latitude Longitude atau Tanggal Waktu.');
+      var waktu = document.getElementById('wr-waktu');
+      if (meta.date && waktu && !waktu.dataset.userEdited) waktu.value = parsePhotoDateToInputValue(meta.date) || waktu.value;
+      return readFileAsDataUrl(file).then(function(dataUrl) {
+        return { base64: String(dataUrl).split(',')[1] || '', mimeType: file.type || 'image/jpeg', filename: file.name || '', date: meta.date, exifDate: meta.exifDate || meta.date, lat: meta.lat, lng: meta.lng, source: meta.source || '', accuracy: meta.accuracy || '' };
+      });
+    });
+  }).then(function(photo) {
+    var payload = withAuthPayload(buildWeeklyReportPayload(photo));
+    if (!navigator.onLine) {
+      if (queuePendingWeeklyPayload(payload)) {
+        closeWeeklyReportModal();
+        showToast('Jaringan offline. Laporan disimpan sementara dan siap dikirim saat ada sinyal.', 'warning');
+      }
+      return null;
+    }
+    return postWeeklyReportPayload(payload).then(function(res) {
+      clearWeeklyFormDraft();
+      closeWeeklyReportModal();
+      invalidateWeeklyMonitorCache();
+      showToast('Laporan mingguan berhasil disimpan.', 'success');
+      loadWeeklyReportsForMarker(true);
+      return res;
+    }).catch(function(err) {
+      var msg = err && (err.message || String(err));
+      if (!navigator.onLine || err.name === 'TypeError' || /failed to fetch|network/i.test(msg)) {
+        if (queuePendingWeeklyPayload(payload)) {
+          closeWeeklyReportModal();
+          showToast('Koneksi bermasalah. Laporan disimpan sementara untuk dikirim ulang.', 'warning');
+          return null;
+        }
+      }
+      throw err;
+    });
   }).catch(function(err) {
     showToast(getFriendlyBackendErrorMessage(err), 'error');
   }).finally(function() {
@@ -6033,10 +6458,17 @@ function openWeeklyDetailModal(rep) {
         '<div class="weekly-detail-grid">' +
           buildDetailKV('Kondisi Tutupan Lahan', rep.tutupan || '-') +
           buildDetailKV('Kegiatan Vegetatif', rep.kegiatanVegetatif || '-') +
-          buildDetailKV('Jenis/Jumlah Bibit', rep.jenisJumlahBibit || '-') +
-          buildDetailKV('Total Bibit', rep.totalBibit || '0') +
           buildDetailKV('Kondisi Tanaman', rep.kondisiTanaman || '-') +
           buildDetailKV('Kegiatan Monitoring', rep.kegiatanMonitoring || '-') +
+          buildDetailKV('Jenis/Jumlah Bibit', rep.jenisJumlahBibit || '-') +
+          buildDetailKV('Total Bibit', rep.totalBibit || '0') +
+          buildDetailKV('Tinggi Tanaman (cm)', rep.tinggiTanaman || '-') +
+          buildDetailKV('Sumber Bibit', rep.sumberBibit || '-') +
+          buildDetailKV('Kebutuhan Bibit Mencukupi', rep.kebutuhanBibitCukup || '-') +
+          buildDetailKV('Kekurangan Jenis/Jumlah Bibit', String(rep.kebutuhanBibitCukup || '').toLowerCase() === 'tidak' ? (rep.kekuranganJenisJumlahBibit || '-') : '-') +
+          buildDetailKV('Kekurangan Total Bibit', String(rep.kebutuhanBibitCukup || '').toLowerCase() === 'tidak' ? (rep.kekuranganTotalBibit || '0') : '-') +
+          buildDetailKV('Kekurangan Tinggi Tanaman (cm)', String(rep.kebutuhanBibitCukup || '').toLowerCase() === 'tidak' ? (rep.kekuranganTinggiTanaman || '-') : '-') +
+          buildDetailKV('Kekurangan Sumber Bibit', String(rep.kebutuhanBibitCukup || '').toLowerCase() === 'tidak' ? (rep.kekuranganSumberBibit || '-') : '-') +
           buildDetailKV('Ada Gangguan', rep.adaGangguan || '-') +
           buildDetailKV('Jenis Gangguan', String(rep.adaGangguan || '').toLowerCase() === 'tidak' ? '-' : (rep.jenisGangguan || '-')) +
         '</div>' +
@@ -6110,6 +6542,7 @@ function deleteWeeklyReport(reportId) {
     }))
   }).then(function(res) { return res.json(); }).then(function(res) {
     if (!res.success) throw new Error(res.error || 'Gagal menghapus laporan.');
+    invalidateWeeklyMonitorCache();
     showToast('Laporan mingguan dihapus.', 'success');
     loadWeeklyReportsForMarker(true);
   }).catch(function(err) { showToast(err.message || String(err), 'error'); });
@@ -6119,20 +6552,85 @@ var wrBibitEl = document.getElementById('wr-bibit');
 if (wrBibitEl) wrBibitEl.addEventListener('input', function() {
   var totalEl = document.getElementById('wr-total-bibit');
   if (totalEl) totalEl.value = calculateWeeklyTotalBibit(this.value);
+  saveWeeklyFormDraft();
+});
+var wrBibitKurangEl = document.getElementById('wr-bibit-kurang');
+if (wrBibitKurangEl) wrBibitKurangEl.addEventListener('input', function() {
+  var totalEl = document.getElementById('wr-total-bibit-kurang');
+  if (totalEl) totalEl.value = calculateWeeklyTotalBibit(this.value);
+  saveWeeklyFormDraft();
 });
 var wrWaktuEl = document.getElementById('wr-waktu');
-if (wrWaktuEl) wrWaktuEl.addEventListener('input', function() { this.dataset.userEdited = '1'; });
+if (wrWaktuEl) wrWaktuEl.addEventListener('input', function() { this.dataset.userEdited = '1'; saveWeeklyFormDraft(); });
 var wrFotoEl = document.getElementById('wr-foto');
-if (wrFotoEl) wrFotoEl.addEventListener('change', function() {
-  var f = this.files && this.files[0];
-  if (!f) return;
-  getFileExifDate(f).then(function(exifDate) {
-    var waktu = document.getElementById('wr-waktu');
-    if (exifDate && waktu && !waktu.dataset.userEdited) waktu.value = parsePhotoDateToInputValue(exifDate) || waktu.value;
+if (wrFotoEl) {
+  wrFotoEl.addEventListener('click', function(e) {
+    var input = this;
+    if (!shouldRequireWeeklyGpsBeforeCamera()) {
+      if (!input.files || !input.files.length) renderWeeklyPhotoMetaStatus(null, null);
+      WEEKLY_REPORT_STATE.allowCameraOpen = false;
+      return;
+    }
+    if (WEEKLY_REPORT_STATE.allowCameraOpen || isFreshWeeklyGpsMeta(WEEKLY_REPORT_STATE.currentGpsMeta)) {
+      WEEKLY_REPORT_STATE.allowCameraOpen = false;
+      return;
+    }
+    e.preventDefault();
+    input.disabled = true;
+    renderWeeklyPhotoMetaStatus(null, null, 'Mengambil koordinat GPS lokasi perangkat sebelum kamera dibuka...');
+    requestWeeklyGpsLocation(false).then(function() {
+      input.disabled = false;
+      WEEKLY_REPORT_STATE.allowCameraOpen = true;
+      showToast('GPS lokasi siap. Kamera akan dibuka; jika belum muncul, klik tombol foto sekali lagi.', 'success');
+      setTimeout(function() {
+        try { input.click(); } catch (clickErr) {}
+        setTimeout(function() { WEEKLY_REPORT_STATE.allowCameraOpen = false; }, 500);
+      }, 50);
+    }).catch(function(err) {
+      input.disabled = false;
+      WEEKLY_REPORT_STATE.allowCameraOpen = false;
+      var msg = err && (err.message || String(err));
+      renderWeeklyPhotoMetaStatus(null, null, msg);
+      showToast(msg, 'error');
+    });
   });
-});
+  wrFotoEl.addEventListener('change', function() {
+    var f = this.files && this.files[0];
+    if (!f) {
+      WEEKLY_REPORT_STATE.currentPhotoMeta = null;
+      renderWeeklyPhotoMetaStatus(null, null);
+      return;
+    }
+    getWeeklyPhotoFinalMetadata(f).then(function(meta) {
+      WEEKLY_REPORT_STATE.currentPhotoMeta = meta;
+      var missing = [];
+      if (!meta.date) missing.push('tanggal waktu');
+      if (meta.lat == null || meta.lng == null) missing.push('koordinat latitude/longitude');
+      var metaError = missing.length ? 'Metadata tidak lengkap: ' + missing.join(', ') : '';
+      if (meta.gpsError && meta.source !== 'GPS lokasi perangkat' && missing.length) {
+        metaError += (metaError ? '. ' : '') + meta.gpsError;
+      } else if (meta.gpsError && meta.source !== 'GPS lokasi perangkat') {
+        meta.note = 'GPS live belum tersedia, sistem memakai metadata kamera/EXIF yang lengkap.';
+      }
+      renderWeeklyPhotoMetaStatus(meta, f, metaError);
+      var waktu = document.getElementById('wr-waktu');
+      if (meta.date && waktu && !waktu.dataset.userEdited) waktu.value = parsePhotoDateToInputValue(meta.date) || waktu.value;
+      saveWeeklyFormDraft();
+    });
+  });
+}
 var wrAdaGangguanEl = document.getElementById('wr-ada-gangguan');
-if (wrAdaGangguanEl) wrAdaGangguanEl.addEventListener('change', updateWeeklyGangguanVisibility);
+if (wrAdaGangguanEl) wrAdaGangguanEl.addEventListener('change', function() { updateWeeklyGangguanVisibility(); saveWeeklyFormDraft(); });
+var wrKebutuhanBibitEl = document.getElementById('wr-kebutuhan-bibit');
+if (wrKebutuhanBibitEl) wrKebutuhanBibitEl.addEventListener('change', function() { updateWeeklyKebutuhanBibitVisibility(); saveWeeklyFormDraft(); });
+var wrFormEl = document.getElementById('weekly-report-form');
+if (wrFormEl) wrFormEl.addEventListener('input', function(e) {
+  if (e && e.target && e.target.id === 'wr-foto') return;
+  saveWeeklyFormDraft();
+});
+window.addEventListener('online', function() {
+  if (getWeeklyPendingQueue().length) syncPendingWeeklyReports();
+});
 
 function canAccessReportMonitor() {
   var user = getCurrentAuthUser();
@@ -6173,11 +6671,37 @@ function getReportRowUnit(row) {
   return String(row['Unit Kerja'] || row['UNIT KERJA'] || row._cdk || getBinaanField(row, 'unit') || '').trim();
 }
 
+function getReportFilterUnitValue(row) {
+  var unit = getReportRowUnit(row);
+  return getCDKExtended(unit) || unit;
+}
+
 function getReportRowPerson(row) {
   if (!row) return '';
   if (row.pembina || row.pelaksana || row.namaPegawai) return String(row.pembina || row.pelaksana || row.namaPegawai).trim();
   if (row._sourceRow) return getReportRowPerson(row._sourceRow);
   return String(getBinaanField(row, 'pembina') || row['Nama Lengkap'] || row['Nama Petugas'] || row['Nama'] || row['NAMA'] || '').trim();
+}
+
+function getReportRowKabupaten(row) {
+  if (!row) return '';
+  if (row.kabupaten) return String(row.kabupaten).trim();
+  if (row._sourceRow) return getReportRowKabupaten(row._sourceRow);
+  return String(getBinaanKabupaten(row) || row['Kabupaten/Kota'] || row['Kabupaten'] || row._kab || '').trim();
+}
+
+function getReportRowKegiatan(row) {
+  if (!row) return '';
+  if (row.kegiatan) return String(row.kegiatan).trim();
+  if (row._sourceRow) return getReportRowKegiatan(row._sourceRow);
+  return String(getBinaanField(row, 'kegiatan') || row['Kegiatan'] || row['Tahapan Kegiatan'] || row['Kategori Lojuna'] || '').trim();
+}
+
+function getReportRowTahun(row) {
+  if (!row) return '';
+  if (row.tahun) return String(row.tahun).trim();
+  if (row._sourceRow) return getReportRowTahun(row._sourceRow);
+  return String(getBinaanField(row, 'tahun') || row['Tahun Kegiatan'] || row['Tahun'] || '').trim();
 }
 
 function getReportRowLuas(row) {
@@ -6192,16 +6716,41 @@ function getReportDateTs(row) {
   return parseExifDate((row && (row.waktu || row.fotoTanggal || row.updatedAt)) || '');
 }
 
+function parseReportWeekValue(value) {
+  var s = String(value || '').trim();
+  if (!s) return null;
+  var year = 0;
+  var week = 0;
+  var m = s.match(/^(\d{4})\s*[-\/]?\s*[WMm]?\s*(\d{1,2})$/);
+  if (!m) m = s.match(/^(\d{4}).*?(\d{1,2})$/);
+  if (m) {
+    year = parseInt(m[1], 10);
+    week = parseInt(m[2], 10);
+  } else {
+    m = s.match(/^(\d{1,2})$/);
+    if (m) {
+      year = new Date().getFullYear();
+      week = parseInt(m[1], 10);
+    }
+  }
+  if (!year || !week || week < 1 || week > 53) return null;
+  return { year: year, week: week, label: year + '-M' + String(week).padStart(2, '0') };
+}
+
+function normalizeReportWeekInput(el) {
+  if (!el) return;
+  var parsed = parseReportWeekValue(el.value);
+  el.value = parsed ? parsed.label : '';
+  onReportFilterChanged();
+}
+
 function getWeekInputRange(value, endOfWeek) {
-  var m = String(value || '').match(/^(\d{4})-W(\d{2})$/);
-  if (!m) return 0;
-  var year = parseInt(m[1], 10);
-  var week = parseInt(m[2], 10);
-  var simple = new Date(year, 0, 1 + (week - 1) * 7);
-  var dow = simple.getDay();
-  var monday = new Date(simple);
-  monday.setDate(simple.getDate() - ((dow + 6) % 7));
-  monday.setHours(endOfWeek ? 23 : 0, endOfWeek ? 59 : 0, endOfWeek ? 59 : 0, 0);
+  var parsed = parseReportWeekValue(value);
+  if (!parsed) return 0;
+  var jan4 = new Date(parsed.year, 0, 4);
+  var jan4Dow = (jan4.getDay() + 6) % 7;
+  var monday = new Date(parsed.year, 0, 4 - jan4Dow + ((parsed.week - 1) * 7));
+  monday.setHours(endOfWeek ? 23 : 0, endOfWeek ? 59 : 0, endOfWeek ? 59 : 0, endOfWeek ? 999 : 0);
   if (endOfWeek) monday.setDate(monday.getDate() + 6);
   return monday.getTime();
 }
@@ -6247,14 +6796,16 @@ function openReportMonitor(type) {
   if (title) title.textContent = type === 'monthly' ? 'Monitoring Laporan 3 Bulanan' : 'Monitoring Laporan Mingguan';
   var weekStart = document.getElementById('report-week-start-filter');
   var weekEnd = document.getElementById('report-week-end-filter');
+  var exportBtn = document.getElementById('report-weekly-export-btn');
   if (weekStart) weekStart.style.display = type === 'monthly' ? 'none' : '';
   if (weekEnd) weekEnd.style.display = type === 'monthly' ? 'none' : '';
+  if (exportBtn) exportBtn.style.display = type === 'monthly' ? 'none' : '';
   if (type === 'monthly') {
     if (weekStart) weekStart.value = '';
     if (weekEnd) weekEnd.value = '';
   }
   if (modal) modal.classList.add('open');
-  reloadReportMonitor();
+  reloadReportMonitor(false);
 }
 
 function closeReportMonitor() {
@@ -6262,7 +6813,7 @@ function closeReportMonitor() {
   if (modal) modal.classList.remove('open');
 }
 
-function reloadReportMonitor() {
+function reloadReportMonitor(force) {
   if (WEEKLY_REPORT_STATE.monitorType === 'monthly') {
     WEEKLY_REPORT_STATE.monitorRows = buildMonthlyReportRows();
     WEEKLY_REPORT_STATE.monitorPage = 1;
@@ -6271,15 +6822,28 @@ function reloadReportMonitor() {
     return;
   }
   var body = document.getElementById('report-monitor-body');
+  var now = Date.now();
+  var hasFreshCache = !force && (WEEKLY_REPORT_STATE.monitorRows || []).length && (now - (WEEKLY_REPORT_STATE.weeklyMonitorFetchedAt || 0) < (WEEKLY_REPORT_STATE.weeklyMonitorCacheMs || 0));
+  if (hasFreshCache) {
+    WEEKLY_REPORT_STATE.monitorPage = 1;
+    populateReportFilterOptions();
+    renderReportMonitorTable();
+    return;
+  }
+  if (WEEKLY_REPORT_STATE.weeklyMonitorLoading) return;
+  WEEKLY_REPORT_STATE.weeklyMonitorLoading = true;
   if (body) body.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:24px;">Memuat laporan mingguan...</td></tr>';
   fetch(appendAuthParam(GAS_WEB_APP_URL + '?action=getAllWeeklyReports')).then(function(res) { return res.json(); }).then(function(data) {
     if (!data.success) throw new Error(data.error || 'Gagal memuat laporan mingguan.');
     WEEKLY_REPORT_STATE.monitorRows = (data.reports || []).map(enrichWeeklyMonitorRow);
+    WEEKLY_REPORT_STATE.weeklyMonitorFetchedAt = Date.now();
     WEEKLY_REPORT_STATE.monitorPage = 1;
     populateReportFilterOptions();
     renderReportMonitorTable();
   }).catch(function(err) {
     if (body) body.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:24px;color:#c62828;">' + getFriendlyBackendErrorMessage(err) + '</td></tr>';
+  }).finally(function() {
+    WEEKLY_REPORT_STATE.weeklyMonitorLoading = false;
   });
 }
 
@@ -6297,6 +6861,12 @@ function enrichWeeklyMonitorRow(rep) {
     rep.pembina = rep.pembina || getReportRowPerson(match.row);
     rep.jabatan = rep.jabatan || getBinaanField(match.row, 'jabatan') || match.row['Nama Jabatan'] || match.row['Jabatan'] || '';
     rep.luas = rep.luas || (getReportRowLuas(match.row) ? formatLuasHa(getReportRowLuas(match.row)) + ' Ha' : '');
+    rep.kabupaten = rep.kabupaten || getReportRowKabupaten(match.row);
+    rep.kecamatan = rep.kecamatan || getBinaanField(match.row, 'kecamatan') || match.row['Kecamatan'] || '';
+    rep.desa = rep.desa || getBinaanField(match.row, 'desa') || match.row['Desa/Kelurahan'] || match.row['Desa/ Kelurahan'] || match.row['Desa'] || '';
+    rep.kegiatan = rep.kegiatan || getReportRowKegiatan(match.row);
+    rep.tahun = rep.tahun || getReportRowTahun(match.row);
+    rep.dpl = rep.dpl || match.row['DPL'] || match.row['MDPL'] || '';
     var c = getPhotoCoords(match.row);
     rep.lat = rep.lat || c.lat;
     rep.lng = rep.lng || c.lng;
@@ -6363,6 +6933,11 @@ function buildMonthlyReportRows() {
           unit: unit,
           pembina: person,
           kegiatan: getBinaanField(r, 'kegiatan') || r['Kegiatan'] || item.label,
+          tahun: getReportRowTahun(r) || year,
+          kabupaten: getReportRowKabupaten(r),
+          kecamatan: getBinaanField(r, 'kecamatan') || r['Kecamatan'] || '',
+          desa: getBinaanField(r, 'desa') || r['Desa/Kelurahan'] || r['Desa/ Kelurahan'] || r['Desa'] || '',
+          dpl: r['DPL'] || r['MDPL'] || '',
           administrasi: [
             getBinaanKabupaten(r) || r['Kabupaten/Kota'] || r['Kabupaten'] || r._kab || '',
             getBinaanField(r, 'kecamatan') || r['Kecamatan'] || '',
@@ -6397,15 +6972,21 @@ function passesReportFilters(row) {
   var cat = String((document.getElementById('report-category-filter') || {}).value || '');
   var unit = String((document.getElementById('report-unit-filter') || {}).value || '');
   var person = String((document.getElementById('report-person-filter') || {}).value || '');
+  var kab = String((document.getElementById('report-kab-filter') || {}).value || '');
+  var kegiatan = String((document.getElementById('report-kegiatan-filter') || {}).value || '');
+  var tahun = String((document.getElementById('report-year-filter') || {}).value || '');
   var start = parseDateInputToTs(String((document.getElementById('report-start-filter') || {}).value || ''), false);
   var end = parseDateInputToTs(String((document.getElementById('report-end-filter') || {}).value || ''), true);
   var weekStart = getWeekInputRange(String((document.getElementById('report-week-start-filter') || {}).value || ''), false);
   var weekEnd = getWeekInputRange(String((document.getElementById('report-week-end-filter') || {}).value || ''), true);
   if (!userCanSeeReportRow(row)) return false;
   if (cat && row.category !== cat) return false;
-  if (unit && getReportRowUnit(row) !== unit) return false;
+  if (unit && getReportFilterUnitValue(row) !== unit) return false;
   if (person && getReportRowPerson(row) !== person) return false;
-  var text = [row.kategoriLabel, row.nama, row.unit, row.pembina, row.pelaksana, row.lokasi, row.uraian, row.sudut, row.tahun, row.kegiatan, row.administrasi].join(' ').toLowerCase();
+  if (kab && getReportRowKabupaten(row) !== kab) return false;
+  if (kegiatan && getReportRowKegiatan(row) !== kegiatan) return false;
+  if (tahun && getReportRowTahun(row) !== tahun) return false;
+  var text = [row.kategoriLabel, row.nama, row.unit, row.pembina, row.pelaksana, row.lokasi, row.uraian, row.sudut, row.tahun, row.kegiatan, row.administrasi, row.kabupaten, row.kecamatan, row.desa].join(' ').toLowerCase();
   if (q && text.indexOf(q) === -1) return false;
   var ts = getReportDateTs(row);
   if ((start || end || weekStart || weekEnd) && !ts) return false;
@@ -6420,6 +7001,9 @@ function populateReportFilterOptions() {
   var rows = (WEEKLY_REPORT_STATE.monitorRows || []).filter(userCanSeeReportRow);
   var unitEl = document.getElementById('report-unit-filter');
   var personEl = document.getElementById('report-person-filter');
+  var kabEl = document.getElementById('report-kab-filter');
+  var kegiatanEl = document.getElementById('report-kegiatan-filter');
+  var yearEl = document.getElementById('report-year-filter');
   function fill(el, values, label) {
     if (!el) return;
     var current = el.value;
@@ -6432,14 +7016,26 @@ function populateReportFilterOptions() {
   }
   var units = {};
   var persons = {};
+  var kabs = {};
+  var kegiatans = {};
+  var years = {};
   rows.forEach(function(r) {
-    var u = getReportRowUnit(r);
+    var u = getReportFilterUnitValue(r);
     var p = getReportRowPerson(r);
+    var k = getReportRowKabupaten(r);
+    var kg = getReportRowKegiatan(r);
+    var y = getReportRowTahun(r);
     if (u) units[u] = true;
     if (p) persons[p] = true;
+    if (k) kabs[k] = true;
+    if (kg) kegiatans[kg] = true;
+    if (y) years[y] = true;
   });
   fill(unitEl, Object.keys(units), 'Semua Unit');
   fill(personEl, Object.keys(persons), 'Semua Pembina/Pegawai');
+  fill(kabEl, Object.keys(kabs), 'Semua Kabupaten');
+  fill(kegiatanEl, Object.keys(kegiatans), 'Semua Kegiatan');
+  fill(yearEl, Object.keys(years), 'Semua Tahun');
 }
 
 function changeReportMonitorPage(delta) {
@@ -6518,6 +7114,104 @@ function renderReportMonitorTable() {
   }
   WEEKLY_REPORT_STATE.detailRows = rows;
   renderReportPagination(rows.length, totalPages);
+}
+
+function getFilteredReportMonitorRows() {
+  return (WEEKLY_REPORT_STATE.monitorRows || []).filter(passesReportFilters);
+}
+
+function weeklyExportValue(row, key, fallback) {
+  if (!row) return fallback || '';
+  var value = row[key];
+  if ((value === null || value === undefined || value === '') && row._sourceRow) value = row._sourceRow[key];
+  return value === null || value === undefined ? (fallback || '') : value;
+}
+
+function exportWeeklyBinaanReports() {
+  if ((WEEKLY_REPORT_STATE.monitorType || 'weekly') !== 'weekly') {
+    showToast('Export ini khusus Laporan Mingguan.', 'error');
+    return;
+  }
+  var rows = getFilteredReportMonitorRows().filter(function(r) {
+    return String(r.category || '').toLowerCase() === 'pegawaibinaanformatsistem';
+  });
+  if (!rows.length) {
+    showToast('Tidak ada data hutan binaan pada filter laporan mingguan saat ini.', 'warning');
+    return;
+  }
+  var header = [
+    'No', 'Kabupaten', 'Kecamatan', 'Desa', 'Longitude', 'Latitude',
+    'Kegiatan', 'Tahun Kegiatan', 'Luas (Ha)', 'Pembina/Pengampu',
+    'Unit Kerja', 'Jabatan', 'DPL',
+    'LM_ID', 'LM_Kategori', 'LM_Pelaksana', 'LM_Lokasi', 'LM_Waktu',
+    'LM_Tutupan', 'LM_Kegiatan_Vegetatif', 'LM_Jenis_Jumlah_Bibit', 'LM_Total_Bibit',
+    'LM_Tinggi_Tanaman_CM', 'LM_Sumber_Bibit', 'LM_Kebutuhan_Bibit_Cukup',
+    'LM_Kekurangan_Jenis_Jumlah_Bibit', 'LM_Kekurangan_Total_Bibit',
+    'LM_Kekurangan_Tinggi_Tanaman_CM', 'LM_Kekurangan_Sumber_Bibit',
+    'LM_Kondisi_Tanaman', 'LM_Kegiatan_Monitoring', 'LM_Uraian',
+    'LM_Ada_Gangguan', 'LM_Jenis_Gangguan', 'LM_Tindak_Lanjut',
+    'LM_Foto_URL', 'LM_Foto_Tanggal', 'LM_Foto_Latitude', 'LM_Foto_Longitude',
+    'LM_Foto_FileID', 'LM_UpdatedAt', 'LM_UpdatedBy'
+  ];
+  var aoa = [header];
+  rows.forEach(function(r, idx) {
+    var lat = weeklyExportValue(r, 'lat') || weeklyExportValue(r, 'latitude');
+    var lng = weeklyExportValue(r, 'lng') || weeklyExportValue(r, 'longitude');
+    aoa.push([
+      idx + 1,
+      getReportRowKabupaten(r),
+      weeklyExportValue(r, 'kecamatan') || getBinaanField(r._sourceRow, 'kecamatan'),
+      weeklyExportValue(r, 'desa') || getBinaanField(r._sourceRow, 'desa'),
+      lng,
+      lat,
+      getReportRowKegiatan(r),
+      getReportRowTahun(r),
+      weeklyExportValue(r, 'luas') || (getReportRowLuas(r) ? formatLuasHa(getReportRowLuas(r)) : ''),
+      getReportRowPerson(r),
+      getReportRowUnit(r),
+      weeklyExportValue(r, 'jabatan') || getBinaanField(r._sourceRow, 'jabatan'),
+      weeklyExportValue(r, 'dpl') || weeklyExportValue(r, 'DPL'),
+      r.id || '',
+      r.kategoriLabel || r.category || '',
+      r.pelaksana || '',
+      r.lokasi || '',
+      r.waktu || '',
+      r.tutupan || '',
+      r.kegiatanVegetatif || '',
+      r.jenisJumlahBibit || '',
+      r.totalBibit || '',
+      r.tinggiTanaman || '',
+      r.sumberBibit || '',
+      r.kebutuhanBibitCukup || '',
+      r.kekuranganJenisJumlahBibit || '',
+      r.kekuranganTotalBibit || '',
+      r.kekuranganTinggiTanaman || '',
+      r.kekuranganSumberBibit || '',
+      r.kondisiTanaman || '',
+      r.kegiatanMonitoring || '',
+      r.uraian || '',
+      r.adaGangguan || '',
+      r.jenisGangguan || '',
+      r.tindakLanjut || '',
+      r.fotoUrl || '',
+      r.fotoTanggal || '',
+      r.fotoLat || '',
+      r.fotoLng || '',
+      r.fotoFileId || '',
+      r.updatedAt || '',
+      r.updatedBy || ''
+    ]);
+  });
+  var ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = header.map(function(h) {
+    var w = Math.max(10, Math.min(34, String(h).length + 4));
+    return { wch: w };
+  });
+  ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: aoa.length - 1, c: header.length - 1 } }) };
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Laporan Mingguan');
+  XLSX.writeFile(wb, 'Export_Laporan_Mingguan_Hutan_Binaan.xlsx');
+  showToast('Export laporan mingguan hutan binaan berhasil dibuat.', 'success');
 }
 
 function previewMonthlyMonitorPhoto(idx) {

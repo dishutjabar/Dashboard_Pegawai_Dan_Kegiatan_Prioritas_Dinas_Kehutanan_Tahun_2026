@@ -39,7 +39,7 @@
 <script src="https://unpkg.com/shpjs@4.0.4/dist/shp.js" defer></script>
 <script src="https://unpkg.com/@tmcw/togeojson@5.8.1/dist/togeojson.umd.js" defer></script>
 <script src="https://unpkg.com/leaflet.vectorgrid@latest/dist/Leaflet.VectorGrid.bundled.js" defer></script>
-<link rel="stylesheet" href="styles.css?v=20260814-dpl-marker-fix"/>
+<link rel="stylesheet" href="styles.css?v=20260820-weekly-report-v8"/>
 <link rel="stylesheet" href="css/ai.css"/>
 </head>
 <body>
@@ -503,15 +503,15 @@
           <label style="font-weight:600; color:#2e7d32;">CDK Wilayah</label>
           <select id="pg-cdk" style="width:100%; padding:8px; border-radius:6px; border:1px solid #ccc;">
             <option value="">-- Pilih CDK --</option>
-            <option>CDK WILAYAH I</option>
-            <option>CDK WILAYAH II</option>
-            <option>CDK WILAYAH III</option>
-            <option>CDK WILAYAH IV</option>
-            <option>CDK WILAYAH V</option>
-            <option>CDK WILAYAH VI</option>
-            <option>CDK WILAYAH VII</option>
-            <option>CDK WILAYAH VIII</option>
-            <option>CDK WILAYAH IX</option>
+            <option>CDK Wilayah 1</option>
+            <option>CDK Wilayah 2</option>
+            <option>CDK Wilayah 3</option>
+            <option>CDK Wilayah 4</option>
+            <option>CDK Wilayah 5</option>
+            <option>CDK Wilayah 6</option>
+            <option>CDK Wilayah 7</option>
+            <option>CDK Wilayah 8</option>
+            <option>CDK Wilayah 9</option>
             <option>PPPH</option>
             <option value="__custom__">Lainnya (Isi Manual)</option>
           </select>
@@ -730,10 +730,6 @@
           <label><input type="checkbox" name="wr-vegetatif" value="Pendataan"> Pendataan</label>
           <label><input type="checkbox" name="wr-vegetatif" value="Tidak ada kegiatan"> Tidak ada kegiatan</label>
         </div>
-        <div class="weekly-grid">
-          <label>Jenis dan Jumlah Bibit<textarea id="wr-bibit" rows="3" placeholder="Contoh: Mahoni (100), Alpukat 50"></textarea></label>
-          <label>Total Bibit<input type="number" id="wr-total-bibit" readonly></label>
-        </div>
         <div class="weekly-subtitle">Kondisi Tanaman</div>
         <div class="weekly-checks">
           <label><input type="checkbox" name="wr-kondisi-tanaman" value="Sehat"> Sehat</label>
@@ -747,11 +743,37 @@
           <label><input type="checkbox" name="wr-monitoring" value="Perlindungan"> Perlindungan</label>
           <label><input type="checkbox" name="wr-monitoring" value="Tidak ada kegiatan"> Tidak ada kegiatan</label>
         </div>
+      </div>
+
+      <div class="weekly-section">
+        <h3>C. Progress Kesiapan Bibit</h3>
+        <div class="weekly-grid">
+          <label>Ketersediaan Jenis dan Jumlah Bibit<textarea id="wr-bibit" rows="3" placeholder="Contoh: Mahoni (100), Alpukat 50"></textarea></label>
+          <label>Total Bibit Tersedia<input type="number" id="wr-total-bibit" readonly></label>
+          <label>Tinggi Tanaman Tersedia (cm)<input type="text" id="wr-tinggi-tanaman" placeholder="Contoh: 30-50 cm"></label>
+          <label>Sumber Bibit Tersedia<input type="text" id="wr-sumber-bibit" placeholder="Contoh: Persemaian CDK / swadaya"></label>
+          <label>Apakah Kebutuhan Bibit Sudah Mencukupi?
+            <select id="wr-kebutuhan-bibit" required>
+              <option value="">Pilih</option>
+              <option>Ya</option>
+              <option>Tidak</option>
+            </select>
+          </label>
+        </div>
+        <div id="wr-kebutuhan-kurang-fields" class="weekly-conditional">
+          <div class="weekly-subtitle">Rincian Tambahan Bibit yang Masih Dibutuhkan</div>
+          <div class="weekly-grid">
+            <label>Jenis dan Jumlah Bibit yang Dibutuhkan<textarea id="wr-bibit-kurang" rows="3" placeholder="Contoh: Durian (75), Kopi 120"></textarea></label>
+            <label>Total Kekurangan Bibit<input type="number" id="wr-total-bibit-kurang" readonly></label>
+            <label>Tinggi Tanaman yang Dibutuhkan (cm)<input type="text" id="wr-tinggi-tanaman-kurang" placeholder="Contoh: 25-40 cm"></label>
+            <label>Sumber Bibit yang Dibutuhkan<input type="text" id="wr-sumber-bibit-kurang" placeholder="Contoh: kebutuhan bantuan / calon sumber"></label>
+          </div>
+        </div>
         <label class="weekly-full">Uraian Hasil Kegiatan<textarea id="wr-uraian" rows="4" required></textarea></label>
       </div>
 
       <div class="weekly-section">
-        <h3>C. Gangguan Ekosistem</h3>
+        <h3>D. Gangguan Ekosistem</h3>
         <div class="weekly-grid">
           <label>Ada Gangguan
             <select id="wr-ada-gangguan" required>
@@ -773,13 +795,16 @@
       </div>
 
       <div class="weekly-section">
-        <h3>D. Lampiran Efiden Foto Kegiatan</h3>
+        <h3>E. Lampiran Efiden Foto Kegiatan</h3>
         <div id="wr-existing-photo" class="weekly-existing-photo"></div>
-        <input type="file" id="wr-foto" accept="image/*, .heic, .heif">
-        <div class="weekly-help">Maksimal 1 foto, ukuran file &le; 5 MB, semua format gambar termasuk HEIC/HEIF. Tanggal foto akan dipakai untuk Waktu Pelaksanaan bila metadata tersedia.</div>
+        <input type="file" id="wr-foto" accept="image/*" capture="environment">
+        <div id="wr-photo-meta-status" class="weekly-photo-meta-status"></div>
+        <div class="weekly-help">Wajib ambil foto langsung dari kamera HP. Sistem akan meminta izin lokasi dan memprioritaskan GPS perangkat untuk latitude, longitude, dan tanggal waktu foto; metadata kamera/EXIF tetap dibaca sebagai pembanding. Maksimal 1 foto, ukuran file &le; 5 MB.</div>
       </div>
 
       <div class="weekly-actions">
+        <span id="weekly-draft-status" class="weekly-draft-status"></span>
+        <button type="button" class="btn-reset" onclick="syncPendingWeeklyReports()">Kirim Draft Tersimpan</button>
         <button type="button" class="btn-reset" onclick="closeWeeklyReportModal()">Batal</button>
         <button id="weekly-report-submit" class="btn-apply" type="submit">Simpan Laporan</button>
       </div>
@@ -812,11 +837,21 @@
         <select id="report-person-filter" onchange="onReportFilterChanged()">
           <option value="">Semua Pembina/Pegawai</option>
         </select>
+        <select id="report-kab-filter" onchange="onReportFilterChanged()">
+          <option value="">Semua Kabupaten</option>
+        </select>
+        <select id="report-kegiatan-filter" onchange="onReportFilterChanged()">
+          <option value="">Semua Kegiatan</option>
+        </select>
+        <select id="report-year-filter" onchange="onReportFilterChanged()">
+          <option value="">Semua Tahun</option>
+        </select>
         <input type="date" id="report-start-filter" onchange="onReportFilterChanged()" title="Tanggal mulai">
         <input type="date" id="report-end-filter" onchange="onReportFilterChanged()" title="Tanggal sampai">
-        <input type="week" id="report-week-start-filter" onchange="onReportFilterChanged()" title="Minggu mulai">
-        <input type="week" id="report-week-end-filter" onchange="onReportFilterChanged()" title="Minggu sampai">
-        <button type="button" class="btn-apply" onclick="reloadReportMonitor()">Muat Ulang</button>
+        <input type="text" id="report-week-start-filter" class="report-week-input" placeholder="Minggu ke mulai" inputmode="numeric" onchange="normalizeReportWeekInput(this)" title="Minggu mulai, contoh: 2026-M34">
+        <input type="text" id="report-week-end-filter" class="report-week-input" placeholder="Minggu ke sampai" inputmode="numeric" onchange="normalizeReportWeekInput(this)" title="Minggu sampai, contoh: 2026-M34">
+        <button type="button" id="report-weekly-export-btn" class="btn-reset report-export-btn" onclick="exportWeeklyBinaanReports()">Export XLSX</button>
+        <button type="button" class="btn-apply report-reload-btn" onclick="reloadReportMonitor(true)">Muat Ulang</button>
       </div>
       <div class="report-kpi-row" id="report-kpi-row"></div>
       <div class="report-table-wrap">
@@ -938,7 +973,7 @@
 </div>
 
 <script src="app-core.js" defer></script>
-<script src="app-features.js?v=20260814-dpl-marker-fix" defer></script>
+<script src="app-features.js?v=20260820-weekly-report-v8" defer></script>
 <script src="js/ai.js" defer></script>
 
 <!-- ===== MODAL UPLOAD SPASIAL ===== -->

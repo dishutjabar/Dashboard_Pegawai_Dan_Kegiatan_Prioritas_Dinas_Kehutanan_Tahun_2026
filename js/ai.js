@@ -16,7 +16,7 @@ const GeoHutanAI = (() => {
   /* ────────────────────────────────────────────────────────────
      KONFIGURASI
   ──────────────────────────────────────────────────────────── */
-  const AI_ALLOWED_ROLES_L1 = ['admin', 'kadis', 'sekdis', 'kabid pdas'];
+  const AI_ALLOWED_ROLES_L1 = ['admin', 'superadmin', 'kadis', 'sekdis', 'kabid pdas'];
   const AI_ALLOWED_ROLES_L2 = ['kabid ppkh', 'kabid bupm', 'kabid pksdae'];
 
   const HINT_QUESTIONS = [
@@ -467,10 +467,8 @@ const GeoHutanAI = (() => {
     wrapper.innerHTML = _buildCardHTML(_currentMarker, _currentType);
     container.appendChild(wrapper.firstElementChild);
 
-    setTimeout(() => {
-      const ta = document.getElementById('ai-textarea');
-      if (ta) ta.focus();
-    }, 350);
+    const drawer = document.getElementById('drawer-content');
+    if (drawer) drawer.scrollTop = 0;
   }
 
   function send() {

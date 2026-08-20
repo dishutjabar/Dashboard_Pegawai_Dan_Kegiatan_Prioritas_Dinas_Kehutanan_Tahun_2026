@@ -2287,6 +2287,58 @@ html, body { height: 100%; font-family: 'Inter', 'Segoe UI', Arial, sans-serif; 
   color: #607d6a;
   font-size: 12px;
 }
+.weekly-conditional {
+  display: none;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px dashed #bdd6c2;
+  border-radius: 8px;
+  background: #fbfdfb;
+}
+.weekly-photo-meta-status {
+  margin-top: 10px;
+}
+.weekly-meta-card {
+  display: grid;
+  grid-template-columns: 104px 1fr;
+  gap: 12px;
+  align-items: center;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #d7e0da;
+  background: #f8fbf8;
+}
+.weekly-photo-meta-status.ok .weekly-meta-card {
+  border-color: #a5d6a7;
+  background: #effaf0;
+}
+.weekly-photo-meta-status.bad .weekly-meta-card {
+  border-color: #ffcdd2;
+  background: #fff4f4;
+}
+.weekly-meta-card img {
+  width: 104px;
+  height: 78px;
+  object-fit: cover;
+  border-radius: 7px;
+  background: #e5ece7;
+}
+.weekly-meta-card strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 12px;
+  color: #1b5e20;
+}
+.weekly-photo-meta-status.bad .weekly-meta-card strong { color: #c62828; }
+.weekly-meta-card span,
+.weekly-meta-card small {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  color: #52635a;
+  line-height: 1.35;
+}
+.weekly-meta-card small { color: #c62828; font-weight: 800; }
 .weekly-section {
   border: 1px solid rgba(46,125,50,0.14);
   border-radius: 8px;
@@ -2351,10 +2403,19 @@ html, body { height: 100%; font-family: 'Inter', 'Segoe UI', Arial, sans-serif; 
 }
 .weekly-actions {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 10px;
   padding-top: 4px;
 }
+.weekly-draft-status {
+  margin-right: auto;
+  color: #607d6a;
+  font-size: 11px;
+  font-weight: 800;
+}
+.weekly-draft-status.has-pending { color: #ef6c00; }
 .weekly-drawer-actions {
   display: flex;
   flex-wrap: wrap;
@@ -2426,23 +2487,45 @@ html, body { height: 100%; font-family: 'Inter', 'Segoe UI', Arial, sans-serif; 
   max-width: none !important;
   height: calc(100vh - 28px);
   border-radius: 8px;
+  overflow: hidden;
 }
 .report-monitor-modal .modal-body {
   height: calc(100% - 58px);
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 .report-monitor-toolbar {
   display: grid;
-  grid-template-columns: minmax(220px, 1.3fr) 180px 180px 190px 142px 142px 132px 132px auto;
+  grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
   gap: 10px;
   margin-bottom: 12px;
+  align-items: stretch;
 }
-.report-monitor-toolbar input, .report-monitor-toolbar select {
+.report-monitor-toolbar input, .report-monitor-toolbar select, .report-monitor-toolbar button {
+  width: 100%;
+  min-width: 0;
+  min-height: 38px;
+  box-sizing: border-box;
   border: 1px solid #d7e0da;
   border-radius: 8px;
   padding: 9px 10px;
   font-size: 12px;
+}
+.report-monitor-toolbar #report-search {
+  grid-column: span 2;
+}
+.report-monitor-toolbar button {
+  white-space: nowrap;
+  font-weight: 800;
+}
+.report-monitor-toolbar .report-export-btn {
+  background: #eaf6ec;
+  border-color: #bddfc4;
+  color: #1b5e20;
+}
+.report-monitor-toolbar .report-reload-btn {
+  min-width: 104px;
 }
 .report-kpi-row {
   display: grid;
@@ -2633,6 +2716,7 @@ html, body { height: 100%; font-family: 'Inter', 'Segoe UI', Arial, sans-serif; 
   }
   .report-monitor-modal { border-radius: 0; }
   .report-monitor-toolbar { max-height: 44vh; overflow-y: auto; }
+  .report-monitor-toolbar #report-search { grid-column: auto; }
   .weekly-detail-modal {
     width: 100% !important;
     max-width: 100% !important;
@@ -2640,8 +2724,8 @@ html, body { height: 100%; font-family: 'Inter', 'Segoe UI', Arial, sans-serif; 
   }
   .weekly-detail-hero { flex-direction: column; }
   .weekly-detail-date { white-space: normal; }
-  .upload-last-card, .weekly-existing-card { grid-template-columns: 80px 1fr; }
-  .upload-last-card img, .weekly-existing-card img { width: 80px; height: 64px; }
+  .upload-last-card, .weekly-existing-card, .weekly-meta-card { grid-template-columns: 80px 1fr; }
+  .upload-last-card img, .weekly-existing-card img, .weekly-meta-card img { width: 80px; height: 64px; }
   .lightbox-angle-filter {
     left: 8px;
     top: 58px;
