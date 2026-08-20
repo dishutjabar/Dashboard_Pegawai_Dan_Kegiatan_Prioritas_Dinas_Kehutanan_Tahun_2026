@@ -78,7 +78,7 @@ if (typeof L !== 'undefined' && L.Canvas) {
 /* ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â GeoHutan Jabar ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“ Features ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â */
 /** URL Web App Google Apps Script */
 var GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwCdFIZ3y9BbBiRHJItturR5cSt2RvoQKEbePXXhogpusq_8oID6v6pN654k85sI1kb/exec";
-var REQUIRED_BACKEND_VERSION = "2026-08-21-weekly-report-v7";
+var REQUIRED_BACKEND_VERSION = "2026-08-21-weekly-report-v8";
 var _backendVersionChecked = false;
 var _backendVersionOk = null;
 var AUTH_TOKEN_STORAGE_KEY = "geohutan_auth_token";
@@ -4346,6 +4346,10 @@ var BULAN_ID_LOOKUP = BULAN_ID.reduce(function(map, name, idx) {
   map[String(name).toLowerCase()] = idx;
   return map;
 }, {});
+var BULAN_EN_SHORT_LOOKUP = {
+  jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
+  jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11
+};
 
 var PHOTO_GALLERY = { context: 'juna', row: null, year: '2026', idx: 0, photos: [], dates: [], years: [], angles: [], sheetCount: 0, localCount: 0, angleFilter: 'all' };
 var JUM_GALLERY = PHOTO_GALLERY;
@@ -4417,6 +4421,36 @@ function formatWibTimestampIndo(ts, includeTime) {
   return out;
 }
 
+function parseIsoLiteralDateParts(value) {
+  var s = String(value || '').trim();
+  var m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{1,2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?$/);
+  if (!m) return null;
+  return {
+    day: parseInt(m[3], 10),
+    month: parseInt(m[2], 10) - 1,
+    year: parseInt(m[1], 10),
+    hour: m[4] ? parseInt(m[4], 10) : 0,
+    minute: m[5] ? parseInt(m[5], 10) : 0,
+    hasTime: !!m[4]
+  };
+}
+
+function parseEnglishDateLiteralParts(value) {
+  var s = String(value || '').trim();
+  var m = s.match(/^[A-Za-z]{3}\s+([A-Za-z]{3})\s+(\d{1,2})\s+(\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (!m) return null;
+  var month = BULAN_EN_SHORT_LOOKUP[String(m[1] || '').toLowerCase()];
+  if (month === undefined) return null;
+  return {
+    day: parseInt(m[2], 10),
+    month: month,
+    year: parseInt(m[3], 10),
+    hour: parseInt(m[4], 10) || 0,
+    minute: parseInt(m[5], 10) || 0,
+    hasTime: true
+  };
+}
+
 function parseIndoDateParts(value) {
   var s = String(value || '').trim();
   var m = s.match(/^(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})(?:\s+(?:pukul|jam)?\s*(\d{1,2})[:.](\d{2})(?::(\d{2}))?)?/i);
@@ -4459,19 +4493,13 @@ function formatDateIndo(dStr) {
       return out;
     }
   }
-  if (/^\d{4}-\d{2}-\d{2}T/.test(s) && /(Z|[+-]\d{2}:?\d{2})/.test(s)) {
-    var isoTs = Date.parse(s);
-    if (!isNaN(isoTs)) return formatWibTimestampIndo(isoTs, true);
+  var isoParts = parseIsoLiteralDateParts(s);
+  if (isoParts && isoParts.month >= 0 && isoParts.month < 12) {
+    return formatIndoDateParts(isoParts, isoParts.hasTime);
   }
-  m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}):(\d{2}))?/);
-  if (m) {
-    var day2 = parseInt(m[3], 10);
-    var monthIdx2 = parseInt(m[2], 10) - 1;
-    if (monthIdx2 >= 0 && monthIdx2 < 12) {
-      var out2 = day2 + ' ' + BULAN_ID[monthIdx2] + ' ' + m[1];
-      if (m[4]) out2 += ' pukul ' + m[4] + ':' + m[5];
-      return out2;
-    }
+  var englishParts = parseEnglishDateLiteralParts(s);
+  if (englishParts && englishParts.month >= 0 && englishParts.month < 12) {
+    return formatIndoDateParts(englishParts, englishParts.hasTime);
   }
   var ts = Date.parse(s);
   if (!isNaN(ts)) {
@@ -4488,9 +4516,13 @@ function parseExifDate(dStr) {
   if (indoParts) {
     return new Date(indoParts.year, indoParts.month, indoParts.day, indoParts.hour || 0, indoParts.minute || 0).getTime();
   }
-  if (/^\d{4}-\d{2}-\d{2}T/.test(s) && /(Z|[+-]\d{2}:?\d{2})/.test(s)) {
-    var isoTs = Date.parse(s);
-    return isNaN(isoTs) ? 0 : isoTs;
+  var isoParts = parseIsoLiteralDateParts(s);
+  if (isoParts) {
+    return new Date(isoParts.year, isoParts.month, isoParts.day, isoParts.hour || 0, isoParts.minute || 0).getTime();
+  }
+  var englishParts = parseEnglishDateLiteralParts(s);
+  if (englishParts) {
+    return new Date(englishParts.year, englishParts.month, englishParts.day, englishParts.hour || 0, englishParts.minute || 0).getTime();
   }
   var m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2}))?/);
   if (m) {
