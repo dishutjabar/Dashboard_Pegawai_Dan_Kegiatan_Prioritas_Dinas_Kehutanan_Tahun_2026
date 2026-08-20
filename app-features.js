@@ -78,7 +78,7 @@ if (typeof L !== 'undefined' && L.Canvas) {
 /* ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â GeoHutan Jabar ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“ Features ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â */
 /** URL Web App Google Apps Script */
 var GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwCdFIZ3y9BbBiRHJItturR5cSt2RvoQKEbePXXhogpusq_8oID6v6pN654k85sI1kb/exec";
-var REQUIRED_BACKEND_VERSION = "2026-08-21-weekly-report-v6";
+var REQUIRED_BACKEND_VERSION = "2026-08-21-weekly-report-v7";
 var _backendVersionChecked = false;
 var _backendVersionOk = null;
 var AUTH_TOKEN_STORAGE_KEY = "geohutan_auth_token";
@@ -4342,6 +4342,10 @@ function openTableModal() {
 
 var PHOTO_YEARS = ['2025','2026','2027','2028','2029','2030'];
 var BULAN_ID = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+var BULAN_ID_LOOKUP = BULAN_ID.reduce(function(map, name, idx) {
+  map[String(name).toLowerCase()] = idx;
+  return map;
+}, {});
 
 var PHOTO_GALLERY = { context: 'juna', row: null, year: '2026', idx: 0, photos: [], dates: [], years: [], angles: [], sheetCount: 0, localCount: 0, angleFilter: 'all' };
 var JUM_GALLERY = PHOTO_GALLERY;
@@ -4391,9 +4395,59 @@ function getPhotoCoords(r) {
 }
 
 /** Format tanggal ke Bahasa Indonesia, mis. 17/06/2026 ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ 17 Juni 2026 */
+function getWibDateParts(ts) {
+  var n = Number(ts);
+  if (!isFinite(n)) return null;
+  var d = new Date(n + (7 * 60 * 60 * 1000));
+  if (isNaN(d.getTime())) return null;
+  return {
+    day: d.getUTCDate(),
+    month: d.getUTCMonth(),
+    year: d.getUTCFullYear(),
+    hour: d.getUTCHours(),
+    minute: d.getUTCMinutes()
+  };
+}
+
+function formatWibTimestampIndo(ts, includeTime) {
+  var p = getWibDateParts(ts);
+  if (!p) return '';
+  var out = p.day + ' ' + BULAN_ID[p.month] + ' ' + p.year;
+  if (includeTime) out += ' pukul ' + String(p.hour).padStart(2, '0') + ':' + String(p.minute).padStart(2, '0');
+  return out;
+}
+
+function parseIndoDateParts(value) {
+  var s = String(value || '').trim();
+  var m = s.match(/^(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})(?:\s+(?:pukul|jam)?\s*(\d{1,2})[:.](\d{2})(?::(\d{2}))?)?/i);
+  if (!m) return null;
+  var month = BULAN_ID_LOOKUP[String(m[2] || '').toLowerCase()];
+  if (month === undefined) return null;
+  return {
+    day: parseInt(m[1], 10),
+    month: month,
+    year: parseInt(m[3], 10),
+    hour: m[4] ? parseInt(m[4], 10) : 0,
+    minute: m[5] ? parseInt(m[5], 10) : 0
+  };
+}
+
+function formatIndoDateParts(parts, includeTime) {
+  if (!parts || parts.month < 0 || parts.month >= BULAN_ID.length) return '';
+  var out = parts.day + ' ' + BULAN_ID[parts.month] + ' ' + parts.year;
+  if (includeTime) out += ' pukul ' + String(parts.hour || 0).padStart(2, '0') + ':' + String(parts.minute || 0).padStart(2, '0');
+  return out;
+}
+
+function normalizeExportDateIndo(value) {
+  return formatDateIndo(value || '');
+}
+
 function formatDateIndo(dStr) {
   if (!dStr) return '';
   var s = String(dStr).trim();
+  var indoParts = parseIndoDateParts(s);
+  if (indoParts) return formatIndoDateParts(indoParts, /\d{1,2}[:.]\d{2}/.test(s));
   var m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
   if (m) {
     var day = parseInt(m[1], 10);
@@ -4404,6 +4458,10 @@ function formatDateIndo(dStr) {
       if (m[4]) out += ' pukul ' + String(m[4]).padStart(2, '0') + ':' + m[5];
       return out;
     }
+  }
+  if (/^\d{4}-\d{2}-\d{2}T/.test(s) && /(Z|[+-]\d{2}:?\d{2})/.test(s)) {
+    var isoTs = Date.parse(s);
+    if (!isNaN(isoTs)) return formatWibTimestampIndo(isoTs, true);
   }
   m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}):(\d{2}))?/);
   if (m) {
@@ -4417,12 +4475,7 @@ function formatDateIndo(dStr) {
   }
   var ts = Date.parse(s);
   if (!isNaN(ts)) {
-    var d = new Date(ts);
-    var out3 = d.getDate() + ' ' + BULAN_ID[d.getMonth()] + ' ' + d.getFullYear();
-    if (s.match(/\d{1,2}:\d{2}/)) {
-      out3 += ' pukul ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
-    }
-    return out3;
+    return formatWibTimestampIndo(ts, /\d{1,2}:\d{2}/.test(s));
   }
   return s;
 }
@@ -4431,14 +4484,30 @@ function formatDateIndo(dStr) {
 function parseExifDate(dStr) {
   if (!dStr) return 0;
   var s = String(dStr).trim();
+  var indoParts = parseIndoDateParts(s);
+  if (indoParts) {
+    return new Date(indoParts.year, indoParts.month, indoParts.day, indoParts.hour || 0, indoParts.minute || 0).getTime();
+  }
+  if (/^\d{4}-\d{2}-\d{2}T/.test(s) && /(Z|[+-]\d{2}:?\d{2})/.test(s)) {
+    var isoTs = Date.parse(s);
+    return isNaN(isoTs) ? 0 : isoTs;
+  }
   var m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2}))?/);
   if (m) {
     var h = m[4] ? parseInt(m[4], 10) : 0;
     var min = m[5] ? parseInt(m[5], 10) : 0;
     return new Date(parseInt(m[3], 10), parseInt(m[2], 10) - 1, parseInt(m[1], 10), h, min).getTime();
   }
-  m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (m) return new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10)).getTime();
+  m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{1,2}):(\d{2}))?/);
+  if (m) {
+    return new Date(
+      parseInt(m[1], 10),
+      parseInt(m[2], 10) - 1,
+      parseInt(m[3], 10),
+      m[4] ? parseInt(m[4], 10) : 0,
+      m[5] ? parseInt(m[5], 10) : 0
+    ).getTime();
+  }
   var ts = Date.parse(s);
   return isNaN(ts) ? 0 : ts;
 }
@@ -5485,7 +5554,13 @@ function formatUploadDate(dateObj) {
 
 function parseExifDateString(raw) {
   if (!raw) return '';
-  if (raw instanceof Date && !isNaN(raw.getTime())) return formatUploadDate(raw);
+  if (raw instanceof Date && !isNaN(raw.getTime())) {
+    return ('0' + raw.getDate()).slice(-2) + '/' +
+      ('0' + (raw.getMonth() + 1)).slice(-2) + '/' +
+      raw.getFullYear() + ' ' +
+      ('0' + raw.getHours()).slice(-2) + ':' +
+      ('0' + raw.getMinutes()).slice(-2);
+  }
   var s = String(raw).trim();
   var m = s.match(/^(\d{4}):(\d{2}):(\d{2})(?:\s+(\d{1,2}):(\d{2}))?/);
   if (m) return m[3] + '/' + m[2] + '/' + m[1] + (m[4] ? ' ' + String(m[4]).padStart(2, '0') + ':' + m[5] : '');
@@ -5523,6 +5598,17 @@ function getFileExifDate(file) {
   });
 }
 
+function getFileLastModifiedDateString(file) {
+  if (!file || !file.lastModified) return '';
+  var d = new Date(file.lastModified);
+  if (isNaN(d.getTime())) return '';
+  return ('0' + d.getDate()).slice(-2) + '/' +
+    ('0' + (d.getMonth() + 1)).slice(-2) + '/' +
+    d.getFullYear() + ' ' +
+    ('0' + d.getHours()).slice(-2) + ':' +
+    ('0' + d.getMinutes()).slice(-2);
+}
+
 function exifRationalToNumber(value) {
   if (value == null) return null;
   if (typeof value === 'number') return value;
@@ -5546,7 +5632,7 @@ function exifDmsToDecimal(dms, ref) {
 
 function getFileExifMetadata(file) {
   return new Promise(function(resolve) {
-    var result = { date: '', lat: null, lng: null };
+    var result = { date: getFileLastModifiedDateString(file), lat: null, lng: null };
     var settled = false;
     function finish(value) {
       if (settled) return;
@@ -5565,7 +5651,7 @@ function getFileExifMetadata(file) {
         var lat = exifDmsToDecimal(EXIF.getTag(this, "GPSLatitude"), EXIF.getTag(this, "GPSLatitudeRef"));
         var lng = exifDmsToDecimal(EXIF.getTag(this, "GPSLongitude"), EXIF.getTag(this, "GPSLongitudeRef"));
         clearTimeout(fallbackTimer);
-        finish({ date: parseExifDateString(rawDate), lat: lat, lng: lng });
+        finish({ date: parseExifDateString(rawDate) || getFileLastModifiedDateString(file), lat: lat, lng: lng });
       });
     } catch (e) {
       clearTimeout(fallbackTimer);
@@ -6006,7 +6092,7 @@ function mergeWeeklyPhotoMetadata(exifMeta, gpsMeta) {
   exifMeta = exifMeta || {};
   var gpsOk = gpsMeta && gpsMeta.lat != null && gpsMeta.lng != null;
   return {
-    date: gpsOk && gpsMeta.date ? gpsMeta.date : (exifMeta.date || ''),
+    date: exifMeta.date || (gpsOk && gpsMeta.date ? gpsMeta.date : ''),
     lat: gpsOk ? gpsMeta.lat : exifMeta.lat,
     lng: gpsOk ? gpsMeta.lng : exifMeta.lng,
     source: gpsOk ? 'GPS lokasi perangkat' : 'Metadata kamera/EXIF',
@@ -6362,8 +6448,6 @@ function submitWeeklyReport(event) {
       }
       renderWeeklyPhotoMetaStatus(meta, file, metaError);
       if (missing.length) throw new Error('Foto Tidak memiliki metadata Koordinat Latitude Longitude atau Tanggal Waktu.');
-      var waktu = document.getElementById('wr-waktu');
-      if (meta.date && waktu && !waktu.dataset.userEdited) waktu.value = parsePhotoDateToInputValue(meta.date) || waktu.value;
       return readFileAsDataUrl(file).then(function(dataUrl) {
         return { base64: String(dataUrl).split(',')[1] || '', mimeType: file.type || 'image/jpeg', filename: file.name || '', date: meta.date, exifDate: meta.exifDate || meta.date, lat: meta.lat, lng: meta.lng, source: meta.source || '', accuracy: meta.accuracy || '' };
       });
@@ -6658,8 +6742,6 @@ if (wrFotoEl) {
         meta.note = 'GPS live belum tersedia, sistem memakai metadata kamera/EXIF yang lengkap.';
       }
       renderWeeklyPhotoMetaStatus(meta, f, metaError);
-      var waktu = document.getElementById('wr-waktu');
-      if (meta.date && waktu && !waktu.dataset.userEdited) waktu.value = parsePhotoDateToInputValue(meta.date) || waktu.value;
       saveWeeklyFormDraft();
     });
   });
@@ -6879,9 +6961,18 @@ function reloadReportMonitor(force) {
     renderReportMonitorTable();
     return;
   }
+  var renderedLocal = false;
+  var localRows = buildWeeklyReportRowsFromLocalData();
+  if (localRows.length) {
+    WEEKLY_REPORT_STATE.monitorRows = localRows;
+    WEEKLY_REPORT_STATE.monitorPage = 1;
+    populateReportFilterOptions();
+    renderReportMonitorTable();
+    renderedLocal = true;
+  }
   if (WEEKLY_REPORT_STATE.weeklyMonitorLoading) return;
   WEEKLY_REPORT_STATE.weeklyMonitorLoading = true;
-  if (body) body.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:24px;">Memuat laporan mingguan...</td></tr>';
+  if (body && !renderedLocal) body.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:24px;">Memuat laporan mingguan...</td></tr>';
   var weeklyUrl = GAS_WEB_APP_URL + '?action=getAllWeeklyReports' + (force ? '&refresh=1' : '');
   fetch(appendAuthParam(weeklyUrl)).then(function(res) { return res.json(); }).then(function(data) {
     if (!data.success) throw new Error(data.error || 'Gagal memuat laporan mingguan.');
@@ -6891,7 +6982,8 @@ function reloadReportMonitor(force) {
     populateReportFilterOptions();
     renderReportMonitorTable();
   }).catch(function(err) {
-    if (body) body.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:24px;color:#c62828;">' + getFriendlyBackendErrorMessage(err) + '</td></tr>';
+    if (body && !renderedLocal) body.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:24px;color:#c62828;">' + getFriendlyBackendErrorMessage(err) + '</td></tr>';
+    else if (renderedLocal && typeof showToast === 'function') showToast('Data lokal ditampilkan. Sinkronisasi laporan mingguan belum selesai.', 'warning');
   }).finally(function() {
     WEEKLY_REPORT_STATE.weeklyMonitorLoading = false;
   });
@@ -6956,6 +7048,87 @@ function getAllMarkerRowsForReports() {
     (DATA.jumat || []).map(function(r) { return { context: 'juna', category: 'juna', label: POP_LABEL.jum, row: r }; }),
     (POLYGON_FEATURES_CACHE || []).map(function(r) { return { context: 'polygon', category: 'polygon', label: 'Titik Kegiatan', row: r }; })
   );
+}
+
+function weeklyPipeAt(row, key, idx) {
+  if (!row || row[key] == null || row[key] === '') return '';
+  var parts = String(row[key]).split('|').map(function(s) { return String(s || '').trim(); });
+  return parts[idx] || '';
+}
+
+function buildWeeklyReportRowsFromLocalData() {
+  var rows = [];
+  getAllMarkerRowsForReports().forEach(function(item) {
+    var r = item.row;
+    if (!r) return;
+    var ids = String(r.LM_ID || r['LM_ID'] || '').split('|').map(function(s) { return String(s || '').trim(); });
+    if (!ids.length) return;
+    var coords = getPhotoCoords(r);
+    var luasHa = getReportRowLuas(r);
+    var administrasi = [
+      getReportRowKabupaten(r),
+      getBinaanField(r, 'kecamatan') || r['Kecamatan'] || '',
+      getBinaanField(r, 'desa') || r['Desa/Kelurahan'] || r['Desa/ Kelurahan'] || r['Desa'] || ''
+    ].filter(Boolean).join(', ');
+
+    ids.forEach(function(id, idx) {
+      if (!id) return;
+      var category = weeklyPipeAt(r, 'LM_Kategori', idx) || item.category;
+      rows.push({
+        id: id,
+        category: category,
+        kategoriLabel: item.label,
+        nama: getWeeklyLocationLabel(r, item.context),
+        pelaksana: weeklyPipeAt(r, 'LM_Pelaksana', idx),
+        lokasi: weeklyPipeAt(r, 'LM_Lokasi', idx) || getWeeklyLocationLabel(r, item.context),
+        waktu: weeklyPipeAt(r, 'LM_Waktu', idx),
+        tutupan: weeklyPipeAt(r, 'LM_Tutupan', idx),
+        kegiatanVegetatif: weeklyPipeAt(r, 'LM_Kegiatan_Vegetatif', idx),
+        jenisJumlahBibit: weeklyPipeAt(r, 'LM_Jenis_Jumlah_Bibit', idx),
+        totalBibit: weeklyPipeAt(r, 'LM_Total_Bibit', idx),
+        tinggiTanaman: weeklyPipeAt(r, 'LM_Tinggi_Tanaman_CM', idx),
+        sumberBibit: weeklyPipeAt(r, 'LM_Sumber_Bibit', idx),
+        kebutuhanBibitCukup: weeklyPipeAt(r, 'LM_Kebutuhan_Bibit_Cukup', idx),
+        kekuranganJenisJumlahBibit: weeklyPipeAt(r, 'LM_Kekurangan_Jenis_Jumlah_Bibit', idx),
+        kekuranganTotalBibit: weeklyPipeAt(r, 'LM_Kekurangan_Total_Bibit', idx),
+        kekuranganTinggiTanaman: weeklyPipeAt(r, 'LM_Kekurangan_Tinggi_Tanaman_CM', idx),
+        kekuranganSumberBibit: weeklyPipeAt(r, 'LM_Kekurangan_Sumber_Bibit', idx),
+        kondisiTanaman: weeklyPipeAt(r, 'LM_Kondisi_Tanaman', idx),
+        kegiatanMonitoring: weeklyPipeAt(r, 'LM_Kegiatan_Monitoring', idx),
+        uraian: weeklyPipeAt(r, 'LM_Uraian', idx),
+        adaGangguan: weeklyPipeAt(r, 'LM_Ada_Gangguan', idx),
+        jenisGangguan: weeklyPipeAt(r, 'LM_Jenis_Gangguan', idx),
+        tindakLanjut: weeklyPipeAt(r, 'LM_Tindak_Lanjut', idx),
+        fotoUrl: weeklyPipeAt(r, 'LM_Foto_URL', idx),
+        fotoTanggal: weeklyPipeAt(r, 'LM_Foto_Tanggal', idx),
+        fotoLat: weeklyPipeAt(r, 'LM_Foto_Latitude', idx),
+        fotoLng: weeklyPipeAt(r, 'LM_Foto_Longitude', idx),
+        fotoFileId: weeklyPipeAt(r, 'LM_Foto_FileID', idx),
+        updatedAt: weeklyPipeAt(r, 'LM_UpdatedAt', idx),
+        updatedBy: weeklyPipeAt(r, 'LM_UpdatedBy', idx),
+        rowIndex: r._row_idx || '',
+        sheetGid: r._source_gid || '',
+        lat: coords.lat,
+        lng: coords.lng,
+        unit: getReportRowUnit(r),
+        pembina: getReportRowPerson(r) || weeklyPipeAt(r, 'LM_Pelaksana', idx),
+        jabatan: getBinaanField(r, 'jabatan') || r['Nama Jabatan'] || r['Jabatan'] || '',
+        kegiatan: getReportRowKegiatan(r),
+        tahun: getReportRowTahun(r),
+        kabupaten: getReportRowKabupaten(r),
+        kecamatan: getBinaanField(r, 'kecamatan') || r['Kecamatan'] || '',
+        desa: getBinaanField(r, 'desa') || r['Desa/Kelurahan'] || r['Desa/ Kelurahan'] || r['Desa'] || '',
+        dpl: r.DPL || r.MDPL || '',
+        administrasi: administrasi,
+        luasHa: luasHa,
+        luas: luasHa ? formatLuasHa(luasHa) + ' Ha' : (getBinaanLuasRaw(r) || ''),
+        _sourceContext: item.context,
+        _sourceRow: r
+      });
+    });
+  });
+  rows.sort(function(a, b) { return (parseExifDate(b.waktu) || parseExifDate(b.updatedAt) || 0) - (parseExifDate(a.waktu) || parseExifDate(a.updatedAt) || 0); });
+  return rows;
 }
 
 function buildMonthlyReportRows() {
@@ -7225,7 +7398,7 @@ function exportWeeklyBinaanReports() {
       r.kategoriLabel || r.category || '',
       r.pelaksana || '',
       r.lokasi || '',
-      r.waktu || '',
+      normalizeExportDateIndo(r.waktu),
       r.tutupan || '',
       r.kegiatanVegetatif || '',
       r.jenisJumlahBibit || '',
@@ -7244,11 +7417,11 @@ function exportWeeklyBinaanReports() {
       r.jenisGangguan || '',
       r.tindakLanjut || '',
       r.fotoUrl || '',
-      r.fotoTanggal || '',
+      normalizeExportDateIndo(r.fotoTanggal),
       r.fotoLat || '',
       r.fotoLng || '',
       r.fotoFileId || '',
-      r.updatedAt || '',
+      normalizeExportDateIndo(r.updatedAt),
       r.updatedBy || ''
     ]);
   });
