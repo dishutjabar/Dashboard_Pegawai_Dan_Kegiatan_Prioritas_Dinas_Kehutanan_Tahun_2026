@@ -848,8 +848,8 @@
         </select>
         <input type="date" id="report-start-filter" onchange="onReportFilterChanged()" title="Tanggal mulai">
         <input type="date" id="report-end-filter" onchange="onReportFilterChanged()" title="Tanggal sampai">
-        <input type="text" id="report-week-start-filter" class="report-week-input" placeholder="Minggu ke mulai" inputmode="numeric" onchange="normalizeReportWeekInput(this)" title="Minggu mulai, contoh: 2026-M34">
-        <input type="text" id="report-week-end-filter" class="report-week-input" placeholder="Minggu ke sampai" inputmode="numeric" onchange="normalizeReportWeekInput(this)" title="Minggu sampai, contoh: 2026-M34">
+        <input type="week" id="report-week-start-filter" class="report-week-input" onchange="normalizeReportWeekInput(this)" title="Minggu mulai">
+        <input type="week" id="report-week-end-filter" class="report-week-input" onchange="normalizeReportWeekInput(this)" title="Minggu sampai">
         <button type="button" id="report-weekly-export-btn" class="btn-reset report-export-btn" onclick="exportWeeklyBinaanReports()">Export XLSX</button>
         <button type="button" class="btn-apply report-reload-btn" onclick="reloadReportMonitor(true)">Muat Ulang</button>
       </div>
@@ -973,7 +973,7 @@
 </div>
 
 <script src="app-core.js" defer></script>
-<script src="app-features.js?v=20260820-weekly-report-v8" defer></script>
+<script src="app-features.js?v=20260821-weekly-report-v9" defer></script>
 <script src="js/ai.js" defer></script>
 
 <!-- ===== MODAL UPLOAD SPASIAL ===== -->

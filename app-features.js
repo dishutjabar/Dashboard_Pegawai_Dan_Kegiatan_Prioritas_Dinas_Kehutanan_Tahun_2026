@@ -78,7 +78,7 @@ if (typeof L !== 'undefined' && L.Canvas) {
 /* ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â GeoHutan Jabar ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“ Features ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â */
 /** URL Web App Google Apps Script */
 var GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwCdFIZ3y9BbBiRHJItturR5cSt2RvoQKEbePXXhogpusq_8oID6v6pN654k85sI1kb/exec";
-var REQUIRED_BACKEND_VERSION = "2026-08-20-weekly-report-v5";
+var REQUIRED_BACKEND_VERSION = "2026-08-21-weekly-report-v6";
 var _backendVersionChecked = false;
 var _backendVersionOk = null;
 var AUTH_TOKEN_STORAGE_KEY = "geohutan_auth_token";
@@ -2934,7 +2934,17 @@ function openDrawer(type, r) {
 }
 function closeDrawer() { 
   var dr = document.getElementById('detail-drawer');
-  if (dr) dr.classList.remove('open'); 
+  if (dr) {
+    dr.classList.remove('open', 'minimized');
+    var minBtn = document.getElementById('drawer-min-btn');
+    if (minBtn) minBtn.innerHTML = '&minus;';
+    setTimeout(function() {
+      if (!dr.classList.contains('open')) {
+        dr.style.display = 'none';
+        dr.style.visibility = '';
+      }
+    }, 320);
+  }
   CURRENT_DRAWER_TYPE = null;
   CURRENT_DRAWER_ROW = null;
   if (HIGHLIGHT_LAYER && typeof mapObj !== 'undefined') mapObj.removeLayer(HIGHLIGHT_LAYER); 
@@ -3112,6 +3122,19 @@ function flyToLocalItem(t, idx) {
   }
 }
 
+function normalizeLocalSearchText(value) {
+  var s = String(value == null ? '' : value).toLowerCase();
+  try { s = s.normalize('NFD').replace(/[\u0300-\u036f]/g, ''); } catch(e) {}
+  return s.replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function rowSearchDump(row) {
+  if (!row || typeof row !== 'object') return '';
+  return Object.keys(row).filter(function(k) { return k.charAt(0) !== '_'; }).map(function(k) {
+    return row[k];
+  }).join(' ');
+}
+
 function getSearchTextParts(item) {
   var r = item && item.r ? item.r : {};
   var t = item ? item.t : '';
@@ -3175,7 +3198,8 @@ function performGlobalSearch(q, resultsContainer) {
             '<div class="search-res-source" style="background:#546e7a">Koordinat</div></div>';
   }
   
-  var qLower = q.toLowerCase();
+  var qNormalized = normalizeLocalSearchText(q);
+  var qTokens = qNormalized.split(' ').filter(Boolean);
   var allData = [].concat(
     DATA.pjl.map(r=>({t:'pjl',r:r})), DATA.persemaian.map(r=>({t:'per',r:r})),
     DATA.pegawai.map(r=>({t:'peg',r:r})), DATA.jumat.map(r=>({t:'jum',r:r})),
@@ -3190,15 +3214,15 @@ function performGlobalSearch(q, resultsContainer) {
     var meta = getSearchTextParts(item);
     var name = safe(meta.title);
     var unit = safe(meta.sub || r['Unit Kerja'] || r['UNIT KERJA']);
-    var textSearch = String(meta.text || '').toLowerCase();
+    var textSearch = normalizeLocalSearchText([meta.title, meta.sub, meta.text, rowSearchDump(r)].join(' '));
     
-    if (textSearch.indexOf(qLower) > -1) {
+    if (qTokens.every(function(token) { return textSearch.indexOf(token) > -1; })) {
       count++;
       html += '<div class="search-res-item" onclick="flyToLocalItem(\''+item.t+'\', '+i+')">' +
               '<div class="search-res-title">'+name+'</div>' +
               '<div class="search-res-sub">'+unit+'</div>' +
               '<div class="search-res-source" style="background:'+POP_COLOR[item.t]+'">'+POP_LABEL[item.t]+'</div></div>';
-      if (count >= 5) break; 
+      if (count >= 20) break; 
     }
   }
   
@@ -3617,7 +3641,7 @@ function doRender() {
   if (PJL_POLYGON_LAYER) { mapObj.removeLayer(PJL_POLYGON_LAYER); PJL_POLYGON_LAYER = null; }
   PJL_POLYGON_LAYER = L.layerGroup();
 
-  function getShapeSvg(shape, fillCol) {
+  function getShapeSvg(shape, fillCol, touchSized) {
     var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 10 10" style="overflow:visible;">';
     var stroke = 'stroke="transparent" stroke-width="15"'; // to increase click area in DOM? No, for DOM we can just use CSS padding.
     // For SVG, we just draw the shape.
@@ -3635,6 +3659,10 @@ function doRender() {
         svg += '<circle cx="5" cy="5" r="4" fill="' + fillCol + '" />';
     }
     svg += '</svg>';
+    if (touchSized) {
+      svg = '<div style="width:34px;height:34px;display:flex;align-items:center;justify-content:center;touch-action:manipulation;">' + svg + '</div>';
+      return L.divIcon({ html: svg, className: 'leaflet-marker-lightweight marker-touch-hitbox', iconSize: [34, 34], iconAnchor: [17, 17] });
+    }
     return L.divIcon({ html: svg, className: 'leaflet-marker-lightweight', iconSize: [10, 10], iconAnchor: [5, 5] });
 }
   function addMarkers(arr, type, defaultIcon) {
@@ -3657,7 +3685,15 @@ function doRender() {
             else { fillCol = '#d500f9'; shapeType = 'star'; }
           }
           var mk;
-          if (!CLUSTER_ENABLED) {
+          var markerUser = (typeof getCurrentAuthUser === 'function') ? getCurrentAuthUser() : null;
+          var useStaffTouchMarker = !CLUSTER_ENABLED && markerUser && getRoleGroup(markerUser.role) >= 4 && (type === 'peg' || type === 'pegb');
+          if (useStaffTouchMarker) {
+            mk = L.marker([r._lat, r._lng], {
+              icon: getShapeSvg(shapeType, fillCol, true),
+              bubblingMouseEvents: false,
+              keyboard: false
+            });
+          } else if (!CLUSTER_ENABLED) {
             mk = L.shapeMarker([r._lat, r._lng], {
               shape: shapeType,
               radius: 4.0,
@@ -3673,11 +3709,20 @@ function doRender() {
             mk = L.marker([r._lat, r._lng], { icon: icon });
           }
           
-          mk.on('click', (function(capturedR, capturedType) { return function() {
+          var markerOpenHandler = (function(capturedR, capturedType) {
+            var lastOpenAt = 0;
+            return function(evt) {
+              var now = Date.now();
+              if (now - lastOpenAt < 250) return;
+              lastOpenAt = now;
+              if (evt && evt.originalEvent) L.DomEvent.stopPropagation(evt.originalEvent);
             mapObj.setView([capturedR._lat, capturedR._lng], 16);
             highlightMarker(capturedR._lat, capturedR._lng, capturedType);
             openDrawer(capturedType, capturedR);
-          }; })(r, type));
+            };
+          })(r, type);
+          mk.on('click', markerOpenHandler);
+          mk.on('tap', markerOpenHandler);
         if (name && name !== 'Data tidak tersedia') {
           var hoverHTML = name;
           if (type === 'jum') {
@@ -6740,7 +6785,11 @@ function parseReportWeekValue(value) {
 function normalizeReportWeekInput(el) {
   if (!el) return;
   var parsed = parseReportWeekValue(el.value);
-  el.value = parsed ? parsed.label : '';
+  if (parsed && el.type === 'week') {
+    el.value = parsed.year + '-W' + String(parsed.week).padStart(2, '0');
+  } else {
+    el.value = parsed ? parsed.label : '';
+  }
   onReportFilterChanged();
 }
 
@@ -6833,7 +6882,8 @@ function reloadReportMonitor(force) {
   if (WEEKLY_REPORT_STATE.weeklyMonitorLoading) return;
   WEEKLY_REPORT_STATE.weeklyMonitorLoading = true;
   if (body) body.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:24px;">Memuat laporan mingguan...</td></tr>';
-  fetch(appendAuthParam(GAS_WEB_APP_URL + '?action=getAllWeeklyReports')).then(function(res) { return res.json(); }).then(function(data) {
+  var weeklyUrl = GAS_WEB_APP_URL + '?action=getAllWeeklyReports' + (force ? '&refresh=1' : '');
+  fetch(appendAuthParam(weeklyUrl)).then(function(res) { return res.json(); }).then(function(data) {
     if (!data.success) throw new Error(data.error || 'Gagal memuat laporan mingguan.');
     WEEKLY_REPORT_STATE.monitorRows = (data.reports || []).map(enrichWeeklyMonitorRow);
     WEEKLY_REPORT_STATE.weeklyMonitorFetchedAt = Date.now();
