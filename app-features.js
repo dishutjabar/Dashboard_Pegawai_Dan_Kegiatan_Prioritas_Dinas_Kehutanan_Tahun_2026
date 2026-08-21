@@ -78,7 +78,7 @@ if (typeof L !== 'undefined' && L.Canvas) {
 /* ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â GeoHutan Jabar ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“ Features ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â */
 /** URL Web App Google Apps Script */
 var GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwCdFIZ3y9BbBiRHJItturR5cSt2RvoQKEbePXXhogpusq_8oID6v6pN654k85sI1kb/exec";
-var REQUIRED_BACKEND_VERSION = "2026-08-21-weekly-report-v8";
+var REQUIRED_BACKEND_VERSION = "2026-08-21-weekly-report-v9";
 var _backendVersionChecked = false;
 var _backendVersionOk = null;
 var AUTH_TOKEN_STORAGE_KEY = "geohutan_auth_token";
@@ -4354,7 +4354,7 @@ var BULAN_EN_SHORT_LOOKUP = {
 var PHOTO_GALLERY = { context: 'juna', row: null, year: '2026', idx: 0, photos: [], dates: [], years: [], angles: [], sheetCount: 0, localCount: 0, angleFilter: 'all' };
 var JUM_GALLERY = PHOTO_GALLERY;
 var LB_STATE = { photos: [], dates: [], years: [], angles: [], idx: 0, year: '2026', locName: '', context: 'juna' };
-var WEEKLY_REPORT_STATE = { row: null, context: 'juna', reports: [], listPage: 1, listPageSize: 5, monitorType: 'weekly', monitorRows: [], monitorPage: 1, monitorPageSize: 10, detailRows: [], currentDetailReport: null, currentPhotoMeta: null, currentGpsMeta: null, weeklyGpsPromise: null, allowCameraOpen: false, weeklyMonitorFetchedAt: 0, weeklyMonitorCacheMs: 180000, weeklyMonitorLoading: false };
+var WEEKLY_REPORT_STATE = { row: null, context: 'juna', reports: [], listPage: 1, listPageSize: 5, monitorType: 'weekly', monitorRows: [], monitorPage: 1, monitorPageSize: 10, detailRows: [], currentDetailReport: null, currentPhotoMeta: null, currentGpsMeta: null, weeklyGpsPromise: null, allowCameraOpen: false, weeklyMonitorFetchedAt: 0, weeklyMonitorCacheMs: 0, weeklyMonitorLoading: false };
 
 function invalidateWeeklyMonitorCache() {
   WEEKLY_REPORT_STATE.weeklyMonitorFetchedAt = 0;
@@ -6528,7 +6528,8 @@ function loadWeeklyReportsForMarker(showLoading) {
   var url = GAS_WEB_APP_URL + '?action=getWeeklyReports&category=' + encodeURIComponent(getBackendCategoryForContext(context)) +
     '&lat=' + encodeURIComponent(coords.lat) + '&lng=' + encodeURIComponent(coords.lng) +
     '&rowIndex=' + encodeURIComponent(r._row_idx || '') + '&sheetGid=' + encodeURIComponent(r._source_gid || '') +
-    '&featureId=' + encodeURIComponent(r['ID'] || r.featureId || '');
+    '&featureId=' + encodeURIComponent(r['ID'] || r.featureId || '') +
+    '&_ts=' + Date.now();
   fetch(appendAuthParam(url)).then(function(res) { return res.json(); }).then(function(data) {
     if (!data.success) throw new Error(data.error || 'Gagal memuat laporan.');
     WEEKLY_REPORT_STATE.reports = data.reports || [];
@@ -7005,7 +7006,7 @@ function reloadReportMonitor(force) {
   if (WEEKLY_REPORT_STATE.weeklyMonitorLoading) return;
   WEEKLY_REPORT_STATE.weeklyMonitorLoading = true;
   if (body && !renderedLocal) body.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:24px;">Memuat laporan mingguan...</td></tr>';
-  var weeklyUrl = GAS_WEB_APP_URL + '?action=getAllWeeklyReports' + (force ? '&refresh=1' : '');
+  var weeklyUrl = GAS_WEB_APP_URL + '?action=getAllWeeklyReports&refresh=1';
   fetch(appendAuthParam(weeklyUrl)).then(function(res) { return res.json(); }).then(function(data) {
     if (!data.success) throw new Error(data.error || 'Gagal memuat laporan mingguan.');
     WEEKLY_REPORT_STATE.monitorRows = (data.reports || []).map(enrichWeeklyMonitorRow);
