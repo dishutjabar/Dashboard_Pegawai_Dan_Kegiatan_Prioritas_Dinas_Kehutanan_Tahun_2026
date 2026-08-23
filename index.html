@@ -39,7 +39,7 @@
 <script src="https://unpkg.com/shpjs@4.0.4/dist/shp.js" defer></script>
 <script src="https://unpkg.com/@tmcw/togeojson@5.8.1/dist/togeojson.umd.js" defer></script>
 <script src="https://unpkg.com/leaflet.vectorgrid@latest/dist/Leaflet.VectorGrid.bundled.js" defer></script>
-<link rel="stylesheet" href="styles.css?v=20260820-weekly-report-v8"/>
+<link rel="stylesheet" href="styles.css?v=20260824-report-monitor-v8"/>
 <link rel="stylesheet" href="css/ai.css"/>
 </head>
 <body>
@@ -90,10 +90,25 @@
 </div>
 
 <div id="map"></div>
-<div id="map-dpl-readout" aria-live="polite"></div>
+<div id="map-dpl-readout" aria-live="polite">Memuat DPL...</div>
 
 <!-- Topbar -->
 <header id="topbar" class="glass-panel">
+  <!-- Mobile Sidebar Filter Button -->
+  <button class="mobile-sidebar-toggle" id="mobile-sidebar-toggle" type="button" onclick="openSidebarPanel(event)" aria-label="Buka panel filter, statistik, dan legenda" title="Filter, statistik, legenda">
+    <svg class="sidebar-filter-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M4 7h10"></path><path d="M18 7h2"></path><circle cx="16" cy="7" r="2"></circle>
+      <path d="M4 12h3"></path><path d="M11 12h9"></path><circle cx="9" cy="12" r="2"></circle>
+      <path d="M4 17h12"></path><path d="M20 17h0"></path><circle cx="18" cy="17" r="2"></circle>
+    </svg>
+  </button>
+
+  <!-- Mobile Hamburger Menu Button -->
+  <button class="mobile-menu-toggle" id="mobile-menu-toggle" type="button" onclick="toggleMobileMenu(event)" aria-label="Buka menu utama" aria-expanded="false" title="Menu utama">
+    <span></span>
+    <span></span>
+    <span></span>
+  </button>
   <div class="topbar-left">
     <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
       <circle cx="16" cy="16" r="15" fill="rgba(46,125,50,0.1)" stroke="var(--primary)" stroke-width="1.5"/>
@@ -147,6 +162,14 @@
 
 <!-- Sidebar Kiri -->
 <aside id="sidebar" class="glass-panel">
+  <!-- Sidebar Header for Mobile -->
+  <div class="sidebar-mobile-header" style="display:none; justify-content:space-between; align-items:center; padding:10px 15px; border-bottom:1px solid rgba(0,0,0,0.1);">
+    <h3 style="margin:0; font-size:16px;">Panel Peta</h3>
+    <div>
+      <button class="sidebar-min-btn" onclick="toggleSidebarCollapse()" style="background:transparent; border:none; font-size:18px; font-weight:bold; cursor:pointer; margin-right:10px;" title="Minimize">&minus;</button>
+      <button class="sidebar-close-btn" onclick="closeSidebarPanel()" style="background:transparent; border:none; font-size:20px; font-weight:bold; cursor:pointer;" title="Close">&times;</button>
+    </div>
+  </div>
   <button id="sidebar-collapse-btn" class="sidebar-collapse-btn" type="button" onclick="toggleSidebarCollapse()" title="Sembunyikan/Tampilkan Sidebar">&lsaquo;</button>
   <div class="sidebar-tabs">
     <button class="tab-btn active" onclick="switchTab('tab-filter')">&#9881; Filter</button>
@@ -197,14 +220,14 @@
           <option value="topo">OpenTopoMap</option>
         </select>
       </label>
-      <label><input type="checkbox" id="toggle-cluster" checked onchange="toggleClustering()"> Aktifkan Clustering</label>
+      <label><input type="checkbox" id="toggle-cluster" onchange="toggleClustering()"> Aktifkan Clustering</label>
       <label><input type="checkbox" id="toggle-heatmap" onchange="toggleHeatmap()"> Tampilkan Heatmap</label>
       <label><input type="checkbox" id="toggle-pjl-polygon" onchange="togglePjlPolygons()"> Tampilkan Area Tanam 2 Ha (Petugas Jaga Leuweung)</label>
       <label><input type="checkbox" id="toggle-spatial" onchange="toggleSpatialPolygons()"> Tampilkan Polygon Spasial (Upload)</label>
-      <label><input type="checkbox" id="toggle-polygon-kegiatan" checked onchange="togglePolygonKegiatanLayer()"> Tampilkan Area Polygon Kegiatan</label>
-      <label><input type="checkbox" id="toggle-pohon-marker" checked onchange="togglePohonMarkerLayer()"> Tampilkan Marker Titik Kegiatan (Pohon)</label>
-      <label><input type="checkbox" id="toggle-buffer" onchange="toggleBuffer()"> Buffer Zone Saat Diklik (10/20/30km)</label>
-      <button class="btn-icon" style="margin-top:10px; width:100%; justify-content:center; background:var(--secondary); color:white;" onclick="downloadMap()">&#128247; Unduh Tampilan Peta (.png)</button>
+      <label class="staff-hidden-map-control"><input type="checkbox" id="toggle-polygon-kegiatan" checked onchange="togglePolygonKegiatanLayer()"> Tampilkan Area Polygon Kegiatan</label>
+      <label class="staff-hidden-map-control"><input type="checkbox" id="toggle-pohon-marker" checked onchange="togglePohonMarkerLayer()"> Tampilkan Marker Titik Kegiatan (Pohon)</label>
+      <label class="staff-hidden-map-control"><input type="checkbox" id="toggle-buffer" onchange="toggleBuffer()"> Buffer Zone Saat Diklik (10/20/30km)</label>
+      <button class="btn-icon map-download-btn" style="margin-top:10px; width:100%; justify-content:center; background:var(--secondary); color:white;" onclick="downloadMap()">&#128247; Unduh Tampilan Peta (.png)</button>
     </div>
   </div>
 
@@ -218,7 +241,7 @@
       <div class="stat-icon">&#127807;</div>
     </div>
     <div class="stat-card">
-      <div class="stat-info"><div class="stat-lbl" style="font-size:10px;">Pegawai Dinas Kehutanan</div><div class="stat-val co" id="cnt-peg">0</div></div>
+      <div class="stat-info"><div class="stat-lbl" style="font-size:10px;">Pegawai Dinas Kehutanan</div><div class="stat-val co" id="cnt-peg" style="color:#7cb342;">0</div></div>
       <div class="stat-icon">&#128100;</div>
     </div>
     <div class="stat-card">
@@ -227,7 +250,7 @@
     </div>
     
     <div class="stat-card">
-      <div class="stat-info"><div class="stat-lbl" style="font-size:10px;">Data hutan binaan</div><div class="stat-val" style="color:#00897b;" id="cnt-pegb">0</div></div>
+      <div class="stat-info"><div class="stat-lbl" style="font-size:10px;">Data hutan binaan</div><div class="stat-val" style="color:#fb8c00;" id="cnt-pegb">0</div></div>
       <div class="stat-icon">&#127966;</div>
     </div>
     <div class="stat-card">
@@ -253,7 +276,7 @@
 
   <div id="tab-legend" class="tab-content fade-in">
     <div class="leg-item" id="leg-pjl" onclick="toggleLayer('pjl')">
-      <svg class="leg-icon-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 24"><path d="M10,0 L20,4 L20,12 C20,18 10,24 10,24 C10,24 0,18 0,12 L0,4 Z" fill="#43a047" stroke="#fff" stroke-width="1.2"/><polygon points="10,6 15,14 11,14 11,18 9,18 9,14 5,14" fill="#fff"/></svg>
+      <svg class="leg-icon-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7" fill="#43a047" stroke="#fff" stroke-width="1.5"/></svg>
       <span class="leg-text">Petugas Jaga Leuweung</span>
     </div>
     <div class="leg-item" id="leg-jum" onclick="toggleLayer('jum')" style="flex-direction:column; align-items:flex-start;">
@@ -262,43 +285,29 @@
       </div>
       <div style="display:flex; flex-direction:column; gap:8px; margin-top: 8px; margin-left: 6px;">
         <div style="display:flex; align-items:center; gap:10px;">
-          <svg width="16" height="20" viewBox="0 0 20 24"><polygon points="10,2 18,14 14,14 16,20 4,20 6,14 2,14" fill="#8e24aa" stroke="#fff" stroke-width="1.2" stroke-linejoin="round"/><rect x="8" y="20" width="4" height="4" rx="1" fill="#5d4037"/></svg>
+          <svg width="24" height="24" viewBox="0 0 24 24"><polygon points="12,2 15,9 22,9 16,14 18,21 12,17 6,21 8,14 2,9 9,9" fill="#8e24aa" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/></svg>
           <span style="font-size:11px;">Lokasi Juna Permanen</span>
         </div>
       </div>
     </div>
     <div class="leg-item" id="leg-peg" onclick="toggleLayer('peg')">
-  <svg class="leg-icon-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 28" width="24" height="28">
-    <circle cx="12" cy="8" r="5" fill="#fb8c00" stroke="#fff" stroke-width="1.5"/>
-    <path d="M7 13 
-             Q7 18 5 23 
-             L19 23 
-             Q18 18 17 13 
-             Q17 11 12 10 
-             Q8 11 7 13 Z" 
-          fill="#fb8c00" 
-          stroke="#fff" 
-          stroke-width="1.5" 
-          stroke-linejoin="round"/>
-    <path d="M9 13 L12 15 L15 13" fill="none" stroke="#fff" stroke-width="1" stroke-linejoin="round"/>
+  <svg class="leg-icon-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+    <circle cx="12" cy="12" r="6.5" fill="#8bc34a"/>
   </svg>
   <span class="leg-text">Pegawai Dinas Kehutanan</span>
 </div>
     <div class="leg-item" id="leg-pegb" onclick="toggleLayer('pegb')">
-      <svg class="leg-icon-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 28" width="24" height="28">
-        <circle cx="12" cy="8.5" r="4.8" fill="#00897b" stroke="#fff" stroke-width="1.4"/>
-        <path d="M6.5 14.5 C6.5 19 4.8 23.5 4.8 24.5 L19.2 24.5 C19.2 23.5 17.5 19 17.5 14.5 C17.5 12 15.2 10.5 12 10.5 C8.8 10.5 6.5 12 6.5 14.5 Z" fill="#00897b" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/>
-        <path d="M9 14 L12 17 L15 14" fill="none" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/>
-        <path d="M10 11 L12 9 L14 11" fill="none" stroke="#fff" stroke-width="1" stroke-linejoin="round"/>
+      <svg class="leg-icon-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+        <polygon points="12,4 20,12 12,20 4,12" fill="#fb8c00"/>
       </svg>
       <span class="leg-text">Data hutan binaan</span>
     </div>
-    <div class="leg-item" id="leg-autopoly" onclick="toggleAutoPoly()">
+    <div class="leg-item leg-hidden" id="leg-autopoly" onclick="toggleAutoPoly()">
       <svg class="leg-icon-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><polygon points="12,2 22,12 12,22 2,12" fill="rgba(0,172,193,0.2)" stroke="#00acc1" stroke-width="2" stroke-dasharray="4,4"/></svg>
       <span class="leg-text">Poligon Auto (Area Filter)</span>
     </div>
     <div class="leg-item" id="leg-per" onclick="toggleLayer('per')">
-      <svg class="leg-icon-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 24"><path d="M10,24 L10,12 M10,16 C10,16 6,10 2,12 C4,16 8,16 10,16 M10,14 C10,14 15,8 18,10 C16,14 12,14 10,14" fill="#1e88e5" stroke="#fff" stroke-width="1"/><path d="M10,24 L10,12 M10,16 C10,16 6,10 2,12 C4,16 8,16 10,16 M10,14 C10,14 15,8 18,10 C16,14 12,14 10,14" fill="#1e88e5" stroke="#1565c0" stroke-width="1.5" stroke-linejoin="round"/></svg>
+      <svg class="leg-icon-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><polygon points="12,2 22,10 18,22 6,22 2,10" fill="#03a9f4" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/></svg>
       <span class="leg-text">Lokasi Persemaian Jaga Leuweung</span>
     </div>
     <div style="margin-top:10px; padding-top:10px; border-top:1px solid rgba(255,255,255,0.08);">
@@ -617,9 +626,9 @@
       </div>
 
       <div class="filter-group">
-        <label>Pilih File Foto (Bisa lebih dari 1 & bisa dari Kamera HP):</label>
-        <input type="file" id="upload-files" accept="image/*, .heic, .heif" multiple style="font-size:12px; flex:1; width: 100%; border: 1px solid #ddd; padding: 10px; border-radius: 6px; background: #fafafa;">
-        <div style="font-size:10px; color:#666; margin-top:4px; line-height:1.45;">Minimal upload: 1 foto. Maksimal upload: 2 foto tiap 1 sesi upload. Ukuran tiap file: &le; 5 MB. Hanya menerima seluruh format gambar termasuk HEIC/HEIF dari Apple. File rusak atau tidak dapat dibaca akan ditolak.</div>
+        <label>Pilih File Foto (Bisa dari Kamera HP):</label>
+        <input type="file" id="upload-files" accept="image/*, .heic, .heif" style="font-size:12px; flex:1; width: 100%; border: 1px solid #ddd; padding: 10px; border-radius: 6px; background: #fafafa;">
+        <div style="font-size:10px; color:#666; margin-top:4px; line-height:1.45;">Minimal upload: 1 foto. Maksimal upload: 1 foto tiap 1 sesi upload. Ukuran tiap file: &le; 5 MB. Hanya menerima seluruh format gambar termasuk HEIC/HEIF dari Apple. File rusak atau tidak dapat dibaca akan ditolak.</div>
       </div>
 
       <div id="upload-monitoring-fields" class="monitoring-form" style="display:none;">
@@ -799,7 +808,7 @@
         <div id="wr-existing-photo" class="weekly-existing-photo"></div>
         <input type="file" id="wr-foto" accept="image/*" capture="environment">
         <div id="wr-photo-meta-status" class="weekly-photo-meta-status"></div>
-        <div class="weekly-help">Wajib ambil foto langsung dari kamera HP. Sistem akan meminta izin lokasi dan memprioritaskan GPS perangkat untuk latitude, longitude, dan tanggal waktu foto; metadata kamera/EXIF tetap dibaca sebagai pembanding. Maksimal 1 foto, ukuran file &le; 5 MB.</div>
+        <div class="weekly-help">Wajib ambil foto langsung dari kamera HP. Sistem akan meminta izin lokasi dan memprioritaskan GPS perangkat untuk latitude, longitude, dan tanggal waktu foto; metadata kamera/EXIF tetap dibaca sebagai pembanding. Maksimal 1 foto, ukuran file &le; 10 MB.</div>
       </div>
 
       <div class="weekly-actions">
@@ -822,8 +831,7 @@
     <div class="modal-body">
       <div class="report-monitor-toolbar">
         <input type="search" id="report-search" placeholder="Cari kegiatan, pelaksana, pembina, lokasi, unit..." oninput="onReportFilterChanged()">
-        <select id="report-category-filter" onchange="onReportFilterChanged()">
-          <option value="">Semua Kegiatan</option>
+        <select id="report-category-filter" multiple data-placeholder="Semua Kegiatan" onchange="onReportFilterChanged()">
           <option value="pjl">Petugas Jaga Leuweung</option>
           <option value="persemaian">Lokasi Persemaian</option>
           <option value="pegawai">Pegawai Dinas Kehutanan</option>
@@ -831,26 +839,21 @@
           <option value="juna">Lokasi Juna Permanen</option>
           <option value="polygon">Titik Kegiatan</option>
         </select>
-        <select id="report-unit-filter" onchange="onReportFilterChanged()">
-          <option value="">Semua Unit</option>
+        <select id="report-status-filter" multiple data-placeholder="Semua Status Input" onchange="onReportFilterChanged()">
+          <option value="reported">Sudah Input</option>
+          <option value="missing">Belum Input</option>
         </select>
-        <select id="report-person-filter" onchange="onReportFilterChanged()">
-          <option value="">Semua Pembina/Pegawai</option>
-        </select>
-        <select id="report-kab-filter" onchange="onReportFilterChanged()">
-          <option value="">Semua Kabupaten</option>
-        </select>
-        <select id="report-kegiatan-filter" onchange="onReportFilterChanged()">
-          <option value="">Semua Kegiatan</option>
-        </select>
-        <select id="report-year-filter" onchange="onReportFilterChanged()">
-          <option value="">Semua Tahun</option>
-        </select>
+        <select id="report-unit-filter" multiple data-placeholder="Semua Unit" onchange="onReportFilterChanged()"></select>
+        <select id="report-person-filter" multiple data-placeholder="Semua Pembina/Pegawai" onchange="onReportFilterChanged()"></select>
+        <select id="report-kab-filter" multiple data-placeholder="Semua Kabupaten" onchange="onReportFilterChanged()"></select>
+        <select id="report-kegiatan-filter" multiple data-placeholder="Semua Kegiatan" onchange="onReportFilterChanged()"></select>
+        <select id="report-year-filter" multiple data-placeholder="Semua Tahun" onchange="onReportFilterChanged()"></select>
         <input type="date" id="report-start-filter" onchange="onReportFilterChanged()" title="Tanggal mulai">
         <input type="date" id="report-end-filter" onchange="onReportFilterChanged()" title="Tanggal sampai">
         <input type="week" id="report-week-start-filter" class="report-week-input" onchange="normalizeReportWeekInput(this)" title="Minggu mulai">
         <input type="week" id="report-week-end-filter" class="report-week-input" onchange="normalizeReportWeekInput(this)" title="Minggu sampai">
-        <button type="button" id="report-weekly-export-btn" class="btn-reset report-export-btn" onclick="exportWeeklyBinaanReports()">Export XLSX</button>
+        <button type="button" id="report-weekly-export-btn" class="btn-reset report-export-btn" onclick="exportWeeklyBinaanReports()">Export Mingguan XLSX</button>
+        <button type="button" id="report-monthly-export-btn" class="btn-reset report-export-btn" onclick="exportMonthlyBinaanReports()">Export 3 Bulanan XLSX</button>
         <button type="button" class="btn-apply report-reload-btn" onclick="reloadReportMonitor(true)">Muat Ulang</button>
       </div>
       <div class="report-kpi-row" id="report-kpi-row"></div>
@@ -910,7 +913,7 @@
     </div>
     <div class="lightbox-dots" id="lightbox-dots"></div>
     <div class="lightbox-loc-info" id="lightbox-loc-info"></div>
-    <div id="lightbox-monitoring" style="display:none; color:white; padding: 10px 15px; background: rgba(0,0,0,0.7); margin-top:10px; border-radius:8px; font-size:12px; width: 100%; max-width: 800px;">
+    <div id="lightbox-monitoring" style="display:none; color:white; padding: 10px 15px; background: rgba(0,0,0,0.7); margin-top:10px; border-radius:8px; font-size:12px; width: 100%; max-width: 800px; overflow-y: auto; max-height: 25vh;">
       <h4 style="margin:0 0 5px 0; color:#43a047;">Hasil Monitoring Lapangan</h4>
       <div id="lightbox-monitoring-content" style="display:grid; grid-template-columns: repeat(4, 1fr); gap: 8px;"></div>
     </div>
@@ -972,8 +975,8 @@
   </div>
 </div>
 
-<script src="app-core.js" defer></script>
-<script src="app-features.js?v=20260821-weekly-report-v14" defer></script>
+<script src="app-core.js?v=20260824-report-monitor-v8" defer></script>
+<script src="app-features.js?v=20260824-report-monitor-v8" defer></script>
 <script src="js/ai.js" defer></script>
 
 <!-- ===== MODAL UPLOAD SPASIAL ===== -->
@@ -1046,4 +1049,10 @@
 </div>
 </body>
 </html>
+
+
+
+
+
+
 

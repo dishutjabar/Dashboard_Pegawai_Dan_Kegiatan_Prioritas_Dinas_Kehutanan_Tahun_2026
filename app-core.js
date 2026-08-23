@@ -5,11 +5,11 @@ var mapObj, GEO = null, GEO_LAYER = null, GEO_LOAD_PROMISE = null, GEO_FEATURE_B
 var DATA = { pjl: [], persemaian: [], pegawai: [], jumat: [], pegawaiBinaan: [] };
 var FILTER = { cdk: [], pegawaiUnit: [], kab: [], status: [], kawasan: [], jabatan: [], nama_pegawai: [], penyuluh: [], kategori_lojuna: [], binaan_unit: [], binaan_kab: [], binaan_kegiatan: [], binaan_jabatan: [], binaan_pembina: [] };
 var LAYER_VISIBLE = { pjl: true, per: true, peg: true, jum: true, pegb: true };
-var AUTOPOLY_ENABLED = true;
+var AUTOPOLY_ENABLED = false;
 var LAYERS = {}; // Will hold either LayerGroup or MarkerClusterGroup
 var BASEMAPS = {};
 var CURRENT_BASEMAP = 'satellite';
-var CLUSTER_ENABLED = true;
+var CLUSTER_ENABLED = false;
 var HEATMAP_ENABLED = false;
 var BUFFER_ENABLED = false;
 var PJL_POLYGON_ENABLED = false;
@@ -18,13 +18,13 @@ var HEATMAP_LAYER = null;
 var BUFFER_LAYERS = null;
 var DYNAMIC_SOURCES = [];
 
-var POP_COLOR = { pjl: '#43a047', per: '#1e88e5', peg: '#fb8c00', jum: '#ff80ff', pegb: '#00897b' };
+var POP_COLOR = { pjl: '#43a047', per: '#1e88e5', peg: '#8bc34a', jum: '#ff80ff', pegb: '#fb8c00' };
 var POP_LABEL = {
   pjl: 'Petugas Jaga Leuweung',
   per: 'Lokasi Persemaian Jaga Leuweung',
   peg: 'Pegawai Dinas Kehutanan',
   jum: 'Lokasi Permanen Jum\'at Menanam',
-  pegb: 'Pegawai Wilayah Hutan Binaan'
+  pegb: 'Data hutan binaan'
 };
 
 /* 1. Map Init */
@@ -44,8 +44,8 @@ try {
 /* 2. Icons */
 var SVG_PJL = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><rect x="5.5" y="5.5" width="5" height="5" fill="#00e676"/></svg>';
 var SVG_PER = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><polygon points="8,5.5 10.5,10.5 5.5,10.5" fill="#2979ff"/></svg>';
-var SVG_PEG = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.5" fill="#ffc400"/></svg>';
-var SVG_PEGB = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><polygon points="8,5.5 10.5,8 8,10.5 5.5,8" fill="#1de9b6"/></svg>';
+var SVG_PEG = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.5" fill="#8bc34a"/></svg>';
+var SVG_PEGB = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><polygon points="8,5.5 10.5,8 8,10.5 5.5,8" fill="#fb8c00"/></svg>';
 var SVG_JUM_TEMPLATE = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><polygon points="8,4.5 8.7,6.5 10.8,6.5 9,7.8 9.7,9.8 8,8.5 6.3,9.8 7,7.8 5.2,6.5 7.3,6.5" fill="{COLOR}"/></svg>';
 
 function makeIcon(svg, isStar) {

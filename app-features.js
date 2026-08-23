@@ -83,6 +83,123 @@ var _backendVersionChecked = false;
 var _backendVersionOk = null;
 var AUTH_TOKEN_STORAGE_KEY = "geohutan_auth_token";
 var AUTH_USER_STORAGE_KEY = "geohutan_auth_user";
+var AUTH_FLOW_ID = 0;
+
+function nextAuthFlow_() {
+  AUTH_FLOW_ID += 1;
+  return AUTH_FLOW_ID;
+}
+
+function isAuthFlowCurrent_(flowId, token) {
+  if (flowId !== AUTH_FLOW_ID) return false;
+  if (typeof token === 'string' && token && getAuthToken() !== token) return false;
+  return true;
+}
+
+function clearAccountTransientState_() {
+  try { POLYGON_FEATURE_RENDER_TOKEN = Date.now(); } catch (e) {}
+  try { resetFilterStateForAccountSwitch_(); } catch (e) {}
+  try { invalidateWeeklyMonitorCache(); } catch (e) {}
+  try { invalidateReportSourceIndexCache(); } catch (e) {}
+  document.body.classList.remove('rbac-group-1', 'rbac-group-2', 'rbac-group-3', 'rbac-group-4', 'rbac-group-5', 'rbac-no-spatial-upload', 'rbac-staff-profile');
+  try { closeProfileMenu(); } catch (e) {}
+  try { closeReportMenu(); } catch (e) {}
+  try { closeMobileMenu(); } catch (e) {}
+  try { closeMobileDrawerForAuth_(); } catch (e) {}
+  try { if (HIGHLIGHT_LAYER && typeof mapObj !== 'undefined') mapObj.removeLayer(HIGHLIGHT_LAYER); } catch (e) {}
+  try { if (BUFFER_LAYERS) BUFFER_LAYERS.clearLayers(); } catch (e) {}
+  var searchInput = document.getElementById('global-search-input');
+  var searchResults = document.getElementById('global-search-results');
+  if (searchInput) searchInput.value = '';
+  if (searchResults) {
+    searchResults.innerHTML = '';
+    searchResults.classList.remove('open');
+  }
+}
+
+function resetFilterStateForAccountSwitch_() {
+  FILTER = {
+    cdk: [],
+    pegawaiUnit: [],
+    kab: [],
+    status: [],
+    kawasan: [],
+    jabatan: [],
+    nama_pegawai: [],
+    penyuluh: [],
+    kategori_lojuna: [],
+    binaan_kegiatan: [],
+    binaan_jabatan: [],
+    binaan_pembina: [],
+    luas_op: '>=',
+    luas_val: null
+  };
+  [
+    'f_cdk', 'f_pegawai', 'f_kab', 'f_status', 'f_kawasan', 'f_jabatan',
+    'f_nama_pegawai', 'f_penyuluh', 'f_kategori_lojuna', 'f_binaan_kegiatan',
+    'f_binaan_jabatan', 'f_binaan_pembina'
+  ].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    try {
+      if (window.jQuery && window.$ && $(el).hasClass('select2-hidden-accessible')) $(el).val(null).trigger('change');
+      else el.value = '';
+    } catch (e) {}
+  });
+  var luasVal = document.getElementById('f_luas_val');
+  var luasOp = document.getElementById('f_luas_op');
+  if (luasVal) luasVal.value = '';
+  if (luasOp) luasOp.value = '>=';
+}
+
+function resetMapStateForRoleSwitch_(group) {
+  setLayerVisibleState(['pjl', 'per', 'jum', 'peg', 'pegb'], true, false);
+
+  var clusterToggle = document.getElementById('toggle-cluster');
+  var heatToggle = document.getElementById('toggle-heatmap');
+  var pjlPolyToggle = document.getElementById('toggle-pjl-polygon');
+  var spatialToggle = document.getElementById('toggle-spatial');
+  var polygonKegiatanToggle = document.getElementById('toggle-polygon-kegiatan');
+  var pohonToggle = document.getElementById('toggle-pohon-marker');
+  var bufferToggle = document.getElementById('toggle-buffer');
+
+  if (clusterToggle) clusterToggle.checked = false;
+  CLUSTER_ENABLED = false;
+
+  if (heatToggle) heatToggle.checked = false;
+  HEATMAP_ENABLED = false;
+  try { if (HEATMAP_LAYER && mapObj) mapObj.removeLayer(HEATMAP_LAYER); } catch (e) {}
+
+  if (pjlPolyToggle) pjlPolyToggle.checked = false;
+  PJL_POLYGON_ENABLED = false;
+  try { if (PJL_POLYGON_LAYER && mapObj) mapObj.removeLayer(PJL_POLYGON_LAYER); } catch (e) {}
+
+  if (spatialToggle) spatialToggle.checked = true;
+  SPATIAL_ENABLED = true;
+
+  if (polygonKegiatanToggle) polygonKegiatanToggle.checked = true;
+  try {
+    var polygonLeg = document.getElementById('leg-polygon-kegiatan');
+    if (polygonLeg) polygonLeg.classList.remove('leg-hidden');
+    if (mapObj && POLYGON_AREA_LAYER && !mapObj.hasLayer(POLYGON_AREA_LAYER)) mapObj.addLayer(POLYGON_AREA_LAYER);
+  } catch (e) {}
+
+  if (pohonToggle) pohonToggle.checked = true;
+  try {
+    var pohonLeg = document.getElementById('leg-pohon-marker');
+    if (pohonLeg) pohonLeg.classList.remove('leg-hidden');
+    if (mapObj && POHON_MARKER_LAYER && !mapObj.hasLayer(POHON_MARKER_LAYER)) mapObj.addLayer(POHON_MARKER_LAYER);
+  } catch (e) {}
+
+  if (bufferToggle) bufferToggle.checked = false;
+  try { if (BUFFER_LAYERS) BUFFER_LAYERS.clearLayers(); } catch (e) {}
+
+  AUTOPOLY_ENABLED = false;
+  try {
+    var autoLeg = document.getElementById('leg-autopoly');
+    if (autoLeg) autoLeg.classList.add('leg-hidden');
+  } catch (e) {}
+}
 
 function getAuthToken() {
   try { return localStorage.getItem(AUTH_TOKEN_STORAGE_KEY) || ""; }
@@ -217,6 +334,7 @@ function setLayerVisibleState(types, visible, hideLegend) {
 }
 
 function resetRbacUiVisibility_() {
+  setStaffProfileMode_(false);
   [
     'f_cdk', 'f_status', 'f_kawasan', 'f_penyuluh', 'f_kategori_lojuna',
     'f_binaan_kegiatan', 'f_binaan_jabatan', 'f_binaan_pembina'
@@ -246,15 +364,36 @@ function setStaffSimpleFilterMode_(enabled) {
   if (mapControls) mapControls.style.display = '';
 }
 
+function setStaffProfileMode_(enabled) {
+  document.body.classList.toggle('rbac-staff-profile', !!enabled);
+}
+
+function setSidebarButtonIcon() {
+  var btn = document.getElementById('sidebar-collapse-btn');
+  var sidebar = document.getElementById('sidebar');
+  if (!btn || !sidebar) return;
+  if (window.innerWidth <= 950) {
+    btn.innerHTML = '<svg class="sidebar-filter-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 7h10"></path><path d="M18 7h2"></path><circle cx="16" cy="7" r="2"></circle><path d="M4 12h3"></path><path d="M11 12h9"></path><circle cx="9" cy="12" r="2"></circle><path d="M4 17h12"></path><path d="M20 17h0"></path><circle cx="18" cy="17" r="2"></circle></svg>';
+    btn.setAttribute('aria-label', 'Buka panel filter, statistik, dan legenda');
+    btn.setAttribute('title', 'Panel filter, statistik, dan legenda');
+    return;
+  }
+  btn.innerHTML = sidebar.classList.contains('sidebar-collapsed') ? '&rsaquo;' : '&lsaquo;';
+  btn.setAttribute('aria-label', sidebar.classList.contains('sidebar-collapsed') ? 'Tampilkan sidebar' : 'Sembunyikan sidebar');
+  btn.setAttribute('title', sidebar.classList.contains('sidebar-collapsed') ? 'Tampilkan sidebar' : 'Sembunyikan sidebar');
+}
+
 function applyCurrentUserRoleDefaults(user) {
   user = user || getCurrentAuthUser();
   if (!user || !user.username) return;
   var group = getRoleGroup(user.role);
   resetRbacUiVisibility_();
 
-  document.body.classList.remove('rbac-group-1', 'rbac-group-2', 'rbac-group-3', 'rbac-group-4', 'rbac-no-spatial-upload');
+  document.body.classList.remove('rbac-group-1', 'rbac-group-2', 'rbac-group-3', 'rbac-group-4', 'rbac-group-5', 'rbac-no-spatial-upload');
   document.body.classList.add('rbac-group-' + group);
+  setStaffProfileMode_(group > 3);
   if (group > 1) document.body.classList.add('rbac-no-spatial-upload');
+  resetMapStateForRoleSwitch_(group);
   var reportMenu = document.getElementById('report-menu');
   if (reportMenu) reportMenu.style.display = group <= 3 ? 'block' : 'none';
 
@@ -268,13 +407,12 @@ function applyCurrentUserRoleDefaults(user) {
     else SPATIAL_ENABLED = true;
   }
 
-  if (!isAdminRole(user.role)) applyNonAdminMapDefaults_();
+  if (group > 1) applyNonAdminMapDefaults_();
 
   if (group === 1) {
-    if (!isAdminRole(user.role)) {
-      schedRender();
-      setTimeout(zoomToCurrentUserLocation, 450);
-    }
+    schedRender();
+    rerenderPolygonFeaturesFromCache();
+    setTimeout(function() { try { if (mapObj) mapObj.invalidateSize(); } catch (e) {} }, 220);
     return;
   }
 
@@ -401,6 +539,7 @@ function updateAuthUserUI(user) {
     
     // UI Logic based on Group
     var group = getRoleGroup(user.role);
+    setStaffProfileMode_(group > 3);
     if (reportMenu) reportMenu.style.display = group <= 3 ? 'block' : 'none';
     if (group === 1) {
       if (btnSpatial) { btnSpatial.style.display = ''; btnSpatial.innerHTML = '&#128205; <span class="d-none-mobile">Upload Spasial</span>'; }
@@ -408,8 +547,14 @@ function updateAuthUserUI(user) {
       if (btnSource) btnSource.style.display = '';
       if (btnExport) btnExport.style.display = '';
       if (drawControl) drawControl.style.display = '';
-    } else {
+    } else if (group <= 3) {
       if (btnSpatial) { btnSpatial.style.display = ''; btnSpatial.innerHTML = '&#128506; <span class="d-none-mobile">Atur Polygon</span>'; }
+      if (btnTable) btnTable.style.display = 'none';
+      if (btnSource) btnSource.style.display = 'none';
+      if (btnExport) btnExport.style.display = 'none';
+      if (drawControl) drawControl.style.display = 'none';
+    } else {
+      if (btnSpatial) btnSpatial.style.display = 'none';
       if (btnTable) btnTable.style.display = 'none';
       if (btnSource) btnSource.style.display = 'none';
       if (btnExport) btnExport.style.display = 'none';
@@ -467,7 +612,7 @@ function updateAuthUserUI(user) {
        // f_cdk_grp, f_status_grp, f_kawasan_grp, f_penyuluh_grp remain visible
     }
   } else {
-    document.body.classList.remove('rbac-group-1', 'rbac-group-2', 'rbac-group-3', 'rbac-group-4', 'rbac-no-spatial-upload');
+    document.body.classList.remove('rbac-group-1', 'rbac-group-2', 'rbac-group-3', 'rbac-group-4', 'rbac-group-5', 'rbac-no-spatial-upload', 'rbac-staff-profile', 'mobile-menu-open');
     if (pill) pill.textContent = "";
     if (profileName) profileName.textContent = "GeoHutan";
     if (profileRole) profileRole.textContent = "Pengguna Dashboard";
@@ -486,17 +631,23 @@ function updateAuthUserUI(user) {
 }
 
 function unlockDashboard(user) {
+  clearAccountTransientState_();
   var portal = document.getElementById("auth-portal");
   if (portal) portal.classList.add("hidden");
   document.body.classList.add("auth-unlocked");
   updateAuthUserUI(user);
+  ensureMobileCleanLayout_(true);
+  setTimeout(function() { ensureMobileCleanLayout_(true); }, 120);
   if (typeof fetchSpatialFileList === "function") fetchSpatialFileList();
   ensureBackendDplColumns();
 }
 
 function lockDashboard(message) {
+  nextAuthFlow_();
+  clearAccountTransientState_();
   clearStoredAuth();
   document.body.classList.remove("auth-unlocked");
+  ensureMobileCleanLayout_(true);
   updateAuthUserUI(null);
   var portal = document.getElementById("auth-portal");
   if (portal) portal.classList.remove("hidden");
@@ -533,8 +684,10 @@ function initAuthPortal() {
     document.body.classList.add("auth-unlocked");
     updateAuthUserUI(cachedUser);
   }
+  var verifyFlow = nextAuthFlow_();
   postAuthAction({ action: "verifySession", authToken: token })
     .then(function(res) {
+      if (!isAuthFlowCurrent_(verifyFlow, token)) return;
       if (res.success) {
         setStoredAuth(token, res.user);
         unlockDashboard(res.user);
@@ -542,7 +695,7 @@ function initAuthPortal() {
         lockDashboard("");
       }
     })
-    .catch(function() { lockDashboard(""); });
+    .catch(function() { if (isAuthFlowCurrent_(verifyFlow, token)) lockDashboard(""); });
 }
 
 function toggleProfileMenu(event) {
@@ -575,6 +728,9 @@ function closeReportMenu() {
 
 function submitLogin(event) {
   if (event) event.preventDefault();
+  var loginFlow = nextAuthFlow_();
+  clearAccountTransientState_();
+  clearStoredAuth();
   var username = (document.getElementById("login-username") || {}).value || "";
   var password = (document.getElementById("login-password") || {}).value || "";
   var captcha = document.getElementById("login-captcha");
@@ -586,6 +742,7 @@ function submitLogin(event) {
   setAuthStatus("Memverifikasi akun...", false);
   postAuthAction({ action: "login", username: username, password: password })
     .then(function(res) {
+      if (!isAuthFlowCurrent_(loginFlow)) return;
       if (!res.success) throw new Error(res.error || "Login gagal.");
       setStoredAuth(res.token, res.user);
       setAuthStatus("", false);
@@ -593,14 +750,17 @@ function submitLogin(event) {
       if (typeof showToast === "function") showToast("Login berhasil. Selamat datang, " + (res.user.nama || res.user.username) + ".", "success");
     })
     .catch(function(err) {
+      if (!isAuthFlowCurrent_(loginFlow)) return;
       setAuthStatus(err.message || "Login gagal.", true);
     })
     .finally(function() {
+      if (!isAuthFlowCurrent_(loginFlow)) return;
       if (btn) { btn.disabled = false; btn.textContent = "Masuk Dashboard"; }
     });
 }
 
 function logoutGeoHutan() {
+  nextAuthFlow_();
   var token = getAuthToken();
   if (token && GAS_WEB_APP_URL.indexOf("script.google.com") !== -1) {
     postAuthAction({ action: "logout", authToken: token }).catch(function() {});
@@ -717,13 +877,7 @@ function submitCredentialChange(event) {
 document.addEventListener("DOMContentLoaded", function() {
   initAuthPortal();
   
-  // Auto-collapse sidebar on mobile load
-  if (window.innerWidth <= 950) {
-    var sb = document.getElementById('sidebar');
-    if (sb) sb.classList.add('sidebar-collapsed');
-    var sbBtn = document.getElementById('sidebar-collapse-btn');
-    if (sbBtn) sbBtn.innerHTML = '&rsaquo;';
-  }
+  ensureMobileCleanLayout_();
   
   // PWA: Cek apakah sudah bisa di-install (standalone mode = sudah diinstall)
   if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true) {
@@ -745,14 +899,30 @@ document.addEventListener("DOMContentLoaded", function() {
     });
   }
   
-  document.addEventListener("click", closeProfileMenu);
+  document.addEventListener("click", function(event) {
+    closeProfileMenu(event);
+    closeReportMenu();
+    closeMobileMenu(event);
+  });
   document.addEventListener("keydown", function(event) {
-    if (event.key === "Escape") { closeProfileMenu(); closeCredentialModal(); closeForgotPasswordModal(); }
+    if (event.key === "Escape") { closeProfileMenu(); closeReportMenu(); closeMobileMenu(); closeCredentialModal(); closeForgotPasswordModal(); }
   });
   var profileMenu = document.getElementById("profile-menu");
   if (profileMenu) {
     profileMenu.addEventListener("click", function(event) { event.stopPropagation(); });
   }
+  var mobileMenu = document.querySelector(".topbar-right");
+  if (mobileMenu) {
+    mobileMenu.addEventListener("click", function(event) { event.stopPropagation(); });
+  }
+  window.addEventListener('resize', function() {
+    setSidebarButtonIcon();
+    if (window.innerWidth <= 950) {
+      ensureMobileCleanLayout_();
+    } else {
+      document.body.classList.remove('mobile-menu-open', 'sidebar-panel-open');
+    }
+  });
 });
 
 /* UI INTERACTIONS */
@@ -788,12 +958,101 @@ function switchTab(tabId) {
   document.getElementById(tabId).classList.add('active');
 }
 
+function closeEmptyMobileDrawer_() {
+  var dr = document.getElementById('detail-drawer');
+  var body = document.getElementById('drawer-content');
+  if (!dr || window.innerWidth > 950) return;
+  var hasUsefulContent = body && String(body.innerHTML || '').replace(/\s+/g, '').length > 0;
+  if (!CURRENT_DRAWER_ROW && !hasUsefulContent) {
+    dr.classList.remove('open', 'minimized');
+    dr.style.display = 'none';
+    dr.style.visibility = '';
+  }
+}
+
+function closeMobileDrawerForAuth_() {
+  if (window.innerWidth > 950) return;
+  var dr = document.getElementById('detail-drawer');
+  if (dr) {
+    dr.classList.remove('open', 'minimized');
+    dr.style.display = 'none';
+    dr.style.visibility = '';
+  }
+  var minBtn = document.getElementById('drawer-min-btn');
+  if (minBtn) minBtn.innerHTML = '&minus;';
+  CURRENT_DRAWER_TYPE = null;
+  CURRENT_DRAWER_ROW = null;
+  try { if (HIGHLIGHT_LAYER && typeof mapObj !== 'undefined') mapObj.removeLayer(HIGHLIGHT_LAYER); } catch(e) {}
+  try { if (BUFFER_LAYERS) BUFFER_LAYERS.clearLayers(); } catch(e) {}
+}
+
+function closeSidebarPanel() {
+  var sidebar = document.getElementById('sidebar');
+  if (sidebar) sidebar.classList.add('sidebar-collapsed');
+  document.body.classList.remove('sidebar-panel-open');
+  setSidebarButtonIcon();
+  setTimeout(function() {
+    try { if (mapObj) mapObj.invalidateSize(); } catch(e) {}
+  }, 220);
+}
+
+function openSidebarPanel(event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+  var sidebar = document.getElementById('sidebar');
+  if (sidebar) sidebar.classList.remove('sidebar-collapsed');
+  document.body.classList.add('sidebar-panel-open');
+  closeMobileMenu();
+  setSidebarButtonIcon();
+  setTimeout(function() {
+    try { if (mapObj) mapObj.invalidateSize(); } catch(e) {}
+  }, 220);
+}
+
+function ensureMobileCleanLayout_(forceDrawerClose) {
+  if (window.innerWidth > 950) {
+    document.body.classList.remove('sidebar-panel-open');
+    setSidebarButtonIcon();
+    return;
+  }
+  closeSidebarPanel();
+  closeMobileMenu();
+  if (forceDrawerClose) closeMobileDrawerForAuth_();
+  else closeEmptyMobileDrawer_();
+}
+
+function toggleMobileMenu(event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+  var open = !document.body.classList.contains('mobile-menu-open');
+  document.body.classList.toggle('mobile-menu-open', open);
+  var btn = document.getElementById('mobile-menu-toggle');
+  if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+
+function closeMobileMenu(event) {
+  if (!document.body.classList.contains('mobile-menu-open')) return;
+  if (event) {
+    var menu = document.querySelector('.topbar-right');
+    var btn = document.getElementById('mobile-menu-toggle');
+    if ((menu && menu.contains(event.target)) || (btn && btn.contains(event.target))) return;
+  }
+  document.body.classList.remove('mobile-menu-open');
+  var toggle = document.getElementById('mobile-menu-toggle');
+  if (toggle) toggle.setAttribute('aria-expanded', 'false');
+}
+
 function toggleSidebarCollapse() {
   var sidebar = document.getElementById('sidebar');
-  var btn = document.getElementById('sidebar-collapse-btn');
   if (!sidebar) return;
   sidebar.classList.toggle('sidebar-collapsed');
-  if (btn) btn.innerHTML = sidebar.classList.contains('sidebar-collapsed') ? '&rsaquo;' : '&lsaquo;';
+  document.body.classList.toggle('sidebar-panel-open', !sidebar.classList.contains('sidebar-collapsed'));
+  setSidebarButtonIcon();
+  if (!sidebar.classList.contains('sidebar-collapsed')) closeMobileMenu();
   setTimeout(function() {
     try { if (mapObj) mapObj.invalidateSize(); } catch(e) {}
   }, 260);
@@ -2539,7 +2798,15 @@ if (typeof mapObj !== 'undefined' && mapObj) {
     clearTimeout(window.__dplReadoutTimer);
     window.__dplReadoutTimer = setTimeout(updateMapDplReadout, 250);
   });
+  setTimeout(updateMapDplReadout, 450);
 }
+
+document.addEventListener('DOMContentLoaded', function() {
+  try {
+    initDplReadoutControl();
+    updateMapDplReadout();
+  } catch (e) {}
+});
 
 function buildFeatureHoverTooltip(feat, mode) {
   if (!feat) return null;
@@ -2692,9 +2959,9 @@ function openDrawer(type, r) {
     var sb = document.getElementById('sidebar');
     if (sb && !sb.classList.contains('sidebar-collapsed')) {
       sb.classList.add('sidebar-collapsed');
-      var sbBtn = document.getElementById('sidebar-collapse-btn');
-      if (sbBtn) sbBtn.innerHTML = '&rsaquo;';
+      setSidebarButtonIcon();
     }
+    closeMobileMenu();
   }
 
   var t = document.getElementById('drawer-title');
@@ -3677,8 +3944,8 @@ function doRender() {
           var fillCol = '#ffffff', shapeType = 'circle';
           if (type === 'pjl') { fillCol = '#43a047'; shapeType = 'circle'; } // Match legend PJL
           else if (type === 'per') { fillCol = '#82b1ff'; shapeType = 'pentagon'; }
-          else if (type === 'peg') { fillCol = '#ff9800'; shapeType = 'square'; }
-          else if (type === 'pegb') { fillCol = '#00bfa5'; shapeType = 'diamond'; } // Match legend PEGB
+          else if (type === 'peg') { fillCol = '#8bc34a'; shapeType = 'square'; }
+          else if (type === 'pegb') { fillCol = '#fb8c00'; shapeType = 'diamond'; } // Match legend PEGB
           else if (type === 'jum') {
             var kat = String(r['Kategori Lojuna'] || '').trim();
             if (kat === 'Lokasi Juna Biasa') { fillCol = '#82b1ff'; shapeType = 'triangle'; }
@@ -3826,16 +4093,16 @@ function doRender() {
               buildDplTooltipRowsHtml(r, r._lat, r._lng) +
               '</div>';
             if (pegThumb) {
-              hoverHTML = '<div class="jum-tooltip-thumb pjl-tooltip-thumb" style="border-top:2px solid #fb8c00;">' +
+              hoverHTML = '<div class="jum-tooltip-thumb pjl-tooltip-thumb" style="border-top:2px solid #8bc34a;">' +
                 '<img src="' + pegThumb + '" alt="foto pegawai" onerror="handleDriveImageError(this);" />' +
                 '<div class="jum-tooltip-thumb-name">' + name + '</div>' +
-                '<div class="jum-tooltip-thumb-year" style="color:#fb8c00;">&#128247; ' + (pegMerged.dates[0] ? formatDateIndo(pegMerged.dates[0]) : 'Foto ' + pegYear) + '</div>' +
+                '<div class="jum-tooltip-thumb-year" style="color:#689f38;">&#128247; ' + (pegMerged.dates[0] ? formatDateIndo(pegMerged.dates[0]) : 'Foto ' + pegYear) + '</div>' +
                 pegInfo +
                 '</div>';
             } else {
               hoverHTML = '<div class="jum-tooltip-no-img">' +
                 '<div style="font-weight:700;font-size:11px;margin-bottom:3px;">' + name + '</div>' +
-                '<div style="font-size:10px;color:#fb8c00;font-weight:600;">Pegawai Dinas Kehutanan</div>' +
+                '<div style="font-size:10px;color:#689f38;font-weight:600;">Pegawai Dinas Kehutanan</div>' +
                 pegInfo +
                 '</div>';
             }
@@ -3864,16 +4131,16 @@ function doRender() {
               buildDplTooltipRowsHtml(r, r._lat, r._lng) +
               '</div>';
             if (pegbThumb) {
-              hoverHTML = '<div class="jum-tooltip-thumb pjl-tooltip-thumb" style="border-top:2px solid #00897b;">' +
+              hoverHTML = '<div class="jum-tooltip-thumb pjl-tooltip-thumb" style="border-top:2px solid #fb8c00;">' +
                 '<img src="' + pegbThumb + '" alt="foto pegawai binaan" onerror="handleDriveImageError(this);" />' +
                 '<div class="jum-tooltip-thumb-name">' + name + '</div>' +
-                '<div class="jum-tooltip-thumb-year" style="color:#00897b;">&#128247; ' + (pegbMerged.dates[0] ? formatDateIndo(pegbMerged.dates[0]) : 'Foto ' + pegbYear) + '</div>' +
+                '<div class="jum-tooltip-thumb-year" style="color:#fb8c00;">&#128247; ' + (pegbMerged.dates[0] ? formatDateIndo(pegbMerged.dates[0]) : 'Foto ' + pegbYear) + '</div>' +
                 pegbInfo +
                 '</div>';
             } else {
               hoverHTML = '<div class="jum-tooltip-no-img">' +
                 '<div style="font-weight:700;font-size:11px;margin-bottom:3px;">' + name + '</div>' +
-                '<div style="font-size:10px;color:#00897b;font-weight:600;">Data hutan binaan</div>' +
+                '<div style="font-size:10px;color:#fb8c00;font-weight:600;">Data hutan binaan</div>' +
                 pegbInfo +
                 '</div>';
             }
@@ -3955,7 +4222,7 @@ function doRender() {
     var popupHTML = '<div style="font-family:Inter; font-size:12px;"><b>Area Filter Aktif</b><br>';
     popupHTML += '<div style="max-height:150px; overflow-y:auto; margin-top:5px; border-top:1px solid #ddd; padding-top:5px;">';
     if (jumNames.length > 0) popupHTML += '<b style="color:#8e24aa;">Lokasi Jum\'at Menanam:</b><br>' + [...new Set(jumNames)].join('<br>') + '<br><br>';
-    if (pegNames.length > 0) popupHTML += '<b style="color:#fb8c00;">Pegawai:</b><br>' + [...new Set(pegNames)].join('<br>') + '</div></div>';
+    if (pegNames.length > 0) popupHTML += '<b style="color:#689f38;">Pegawai:</b><br>' + [...new Set(pegNames)].join('<br>') + '</div></div>';
     
     var pts = turf.featureCollection(pegJumPoints);
     if (pegJumPoints.length >= 3) {
@@ -4002,7 +4269,7 @@ function updateCharts(cnt) {
   var cntPegb = document.getElementById('cnt-pegb') ? parseInt(document.getElementById('cnt-pegb').textContent) || 0 : 0;
   Chart.defaults.color = '#7f8c8d'; Chart.defaults.font.family = 'Inter';
   
-  mkChart('c-layer', { type: 'bar', data: { labels: ['Petugas Jaga Leuweung','Lokasi Persemaian','Pegawai Dinas Kehutanan','Jum\'at Menanam','Pegawai Wilayah Binaan'], datasets: [{ data: [cnt.pjl, cnt.per, cnt.peg, cnt.jum, cntPegb], backgroundColor: ['#43a047','#1e88e5','#fb8c00','#8e24aa','#00897b'], borderRadius: 4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: {display:false}, ticks: { font: { size: 9 }, maxRotation: 45, minRotation: 45 } }, y: { beginAtZero: true, grid: {color:'rgba(0,0,0,0.05)'}, ticks: { font: { size: 10 } } } } } });
+  mkChart('c-layer', { type: 'bar', data: { labels: ['Petugas Jaga Leuweung','Lokasi Persemaian','Pegawai Dinas Kehutanan','Jum\'at Menanam','Pegawai Wilayah Binaan'], datasets: [{ data: [cnt.pjl, cnt.per, cnt.peg, cnt.jum, cntPegb], backgroundColor: ['#43a047','#1e88e5','#8bc34a','#8e24aa','#fb8c00'], borderRadius: 4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: {display:false}, ticks: { font: { size: 9 }, maxRotation: 45, minRotation: 45 } }, y: { beginAtZero: true, grid: {color:'rgba(0,0,0,0.05)'}, ticks: { font: { size: 10 } } } } } });
 
   var sc = {};
   DATA.persemaian.forEach(function(r) { if (!r || !passFilter(r, 'persemaian')) return; var s = String(r['Status Persemaian'] || 'Tidak Diketahui').trim() || 'Tidak Diketahui'; sc[s] = (sc[s] || 0) + 1; });
@@ -4032,16 +4299,16 @@ function updateCharts(cnt) {
   });
   
   var lUk = Object.keys(luUnit); if (!lUk.length) { lUk = ['(kosong)']; luUnit['(kosong)'] = 0; }
-  mkChart('c-binaan-unit', { type: 'bar', data: { labels: lUk.map(formatCDKChartLabel), datasets: [{ data: lUk.map(k=>luUnit[k]), backgroundColor: '#00897b', borderRadius: 4 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(c) { return c.raw.toLocaleString('id-ID', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' Ha'; } } } }, scales: { x: { beginAtZero: true, grid: {color:'rgba(0,0,0,0.05)'}, ticks: { font: { size: 10 } } }, y: { grid: {display:false}, ticks: { font: { size: 9 } } } } } });
+  mkChart('c-binaan-unit', { type: 'bar', data: { labels: lUk.map(formatCDKChartLabel), datasets: [{ data: lUk.map(k=>luUnit[k]), backgroundColor: '#fb8c00', borderRadius: 4 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(c) { return c.raw.toLocaleString('id-ID', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' Ha'; } } } }, scales: { x: { beginAtZero: true, grid: {color:'rgba(0,0,0,0.05)'}, ticks: { font: { size: 10 } } }, y: { grid: {display:false}, ticks: { font: { size: 9 } } } } } });
   
   var lKk = Object.keys(luKab); if (!lKk.length) { lKk = ['(kosong)']; luKab['(kosong)'] = 0; }
-  mkChart('c-binaan-kab', { type: 'bar', data: { labels: lKk.map(formatCDKChartLabel), datasets: [{ data: lKk.map(k=>luKab[k]), backgroundColor: '#26a69a', borderRadius: 4 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(c) { return c.raw.toLocaleString('id-ID', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' Ha'; } } } }, scales: { x: { beginAtZero: true, grid: {color:'rgba(0,0,0,0.05)'}, ticks: { font: { size: 10 } } }, y: { grid: {display:false}, ticks: { font: { size: 9 } } } } } });
+  mkChart('c-binaan-kab', { type: 'bar', data: { labels: lKk.map(formatCDKChartLabel), datasets: [{ data: lKk.map(k=>luKab[k]), backgroundColor: '#ffa726', borderRadius: 4 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(c) { return c.raw.toLocaleString('id-ID', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' Ha'; } } } }, scales: { x: { beginAtZero: true, grid: {color:'rgba(0,0,0,0.05)'}, ticks: { font: { size: 10 } } }, y: { grid: {display:false}, ticks: { font: { size: 9 } } } } } });
 
   var cKk = Object.keys(cntKeg); if (!cKk.length) { cKk = ['(kosong)']; cntKeg['(kosong)'] = 0; }
-  mkChart('c-binaan-kegiatan', { type: 'doughnut', data: { labels: cKk, datasets: [{ data: cKk.map(k=>cntKeg[k]), backgroundColor: ['#00897b','#4db6ac','#80cbc4','#b2dfdb','#00695c'], borderWidth:2 }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '65%', plugins: { legend: { position: 'right', labels: { font: { size: 10 }, boxWidth: 10, padding: 8 } } } } });
+  mkChart('c-binaan-kegiatan', { type: 'doughnut', data: { labels: cKk, datasets: [{ data: cKk.map(k=>cntKeg[k]), backgroundColor: ['#fb8c00','#ffa726','#ffb74d','#ffcc80','#ef6c00'], borderWidth:2 }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '65%', plugins: { legend: { position: 'right', labels: { font: { size: 10 }, boxWidth: 10, padding: 8 } } } } });
 
   var lKek = Object.keys(luKeg); if (!lKek.length) { lKek = ['(kosong)']; luKeg['(kosong)'] = 0; }
-  mkChart('c-binaan-luas-kegiatan', { type: 'pie', data: { labels: lKek, datasets: [{ data: lKek.map(k=>luKeg[k]), backgroundColor: ['#1b5e20','#388e3c','#4caf50','#81c784','#c8e6c9'], borderWidth:2 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { font: { size: 10 }, boxWidth: 10, padding: 8 } }, tooltip: { callbacks: { label: function(c) { return c.label + ': ' + c.raw.toLocaleString('id-ID', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' Ha'; } } } } } });
+  mkChart('c-binaan-luas-kegiatan', { type: 'pie', data: { labels: lKek, datasets: [{ data: lKek.map(k=>luKeg[k]), backgroundColor: ['#e65100','#fb8c00','#ffa726','#ffb74d','#ffe0b2'], borderWidth:2 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { font: { size: 10 }, boxWidth: 10, padding: 8 } }, tooltip: { callbacks: { label: function(c) { return c.label + ': ' + c.raw.toLocaleString('id-ID', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' Ha'; } } } } } });
 }
 
 /* Data Table Modal rendering */
@@ -4283,7 +4550,7 @@ function showAnalysisModal(inPoly) {
   summary.innerHTML = 
     '<div style="background:#e8f5e9; padding:8px 12px; border-radius:6px; font-weight:bold; color:#2e7d32; font-size:12px;">Petugas Jaga Leuweung: '+cPjl+'</div>' +
     '<div style="background:#e3f2fd; padding:8px 12px; border-radius:6px; font-weight:bold; color:#1565c0; font-size:12px;">Persemaian Jaga Leuweung: '+cPer+'</div>' +
-    '<div style="background:#fff3e0; padding:8px 12px; border-radius:6px; font-weight:bold; color:#e65100; font-size:12px;">Pegawai Kehutanan: '+cPeg+'</div>' +
+    '<div style="background:#f1f8e9; padding:8px 12px; border-radius:6px; font-weight:bold; color:#33691e; font-size:12px;">Pegawai Kehutanan: '+cPeg+'</div>' +
     '<div style="background:#e0f7fa; padding:8px 12px; border-radius:6px; font-weight:bold; color:#006064; font-size:12px;">Pegawai Binaan: '+cPegb+'</div>' +
     '<div style="background:#f3e5f5; padding:8px 12px; border-radius:6px; font-weight:bold; color:#6a1b9a; font-size:12px;">Jum\'at Menanam: '+cJum+'</div>';
   
@@ -4354,11 +4621,25 @@ var BULAN_EN_SHORT_LOOKUP = {
 var PHOTO_GALLERY = { context: 'juna', row: null, year: '2026', idx: 0, photos: [], dates: [], years: [], angles: [], sheetCount: 0, localCount: 0, angleFilter: 'all' };
 var JUM_GALLERY = PHOTO_GALLERY;
 var LB_STATE = { photos: [], dates: [], years: [], angles: [], idx: 0, year: '2026', locName: '', context: 'juna' };
-var WEEKLY_REPORT_STATE = { row: null, context: 'juna', reports: [], listPage: 1, listPageSize: 5, monitorType: 'weekly', monitorRows: [], monitorPage: 1, monitorPageSize: 10, detailRows: [], currentDetailReport: null, currentPhotoMeta: null, currentGpsMeta: null, weeklyGpsPromise: null, allowCameraOpen: false, weeklyMonitorFetchedAt: 0, weeklyMonitorCacheMs: 0, weeklyMonitorLoading: false };
+var WEEKLY_REPORT_STATE = { row: null, context: 'juna', reports: [], listPage: 1, listPageSize: 5, monitorType: 'weekly', monitorRowsType: '', monitorRows: [], monitorPage: 1, monitorPageSize: 10, detailRows: [], currentDetailReport: null, currentPhotoMeta: null, currentGpsMeta: null, weeklyGpsPromise: null, allowCameraOpen: false, weeklyMonitorFetchedAt: 0, weeklyMonitorCacheMs: 300000, weeklyMonitorLoading: false };
+var REPORT_SOURCE_INDEX_CACHE = { signature: '', rows: [], byCatRow: {}, byCatFeature: {}, byCatCoord: {}, locEntries: [] };
+var REPORT_COMPLIANCE_CACHE = { weeklySignature: '', weeklyKeys: null };
 
 function invalidateWeeklyMonitorCache() {
   WEEKLY_REPORT_STATE.weeklyMonitorFetchedAt = 0;
+  WEEKLY_REPORT_STATE.monitorRowsType = '';
   WEEKLY_REPORT_STATE.monitorRows = [];
+  invalidateReportComplianceCache();
+}
+
+function invalidateReportComplianceCache() {
+  REPORT_COMPLIANCE_CACHE.weeklySignature = '';
+  REPORT_COMPLIANCE_CACHE.weeklyKeys = null;
+}
+
+function invalidateReportSourceIndexCache() {
+  REPORT_SOURCE_INDEX_CACHE = { signature: '', rows: [], byCatRow: {}, byCatFeature: {}, byCatCoord: {}, locEntries: [] };
+  invalidateReportComplianceCache();
 }
 
 function escapeHtml(value) {
@@ -4368,6 +4649,24 @@ function escapeHtml(value) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+function normalizeLabelPart(value) {
+  return String(value == null ? '' : value).replace(/\s+/g, ' ').trim();
+}
+
+function joinUniqueLabelParts(parts, separator) {
+  var seen = [];
+  return (parts || []).map(normalizeLabelPart).filter(function(part) {
+    if (!part) return false;
+    var key = part.toLowerCase();
+    var duplicated = seen.some(function(existing) {
+      return existing === key || (key.length >= 4 && existing.indexOf(key) !== -1) || (existing.length >= 4 && key.indexOf(existing) !== -1);
+    });
+    if (duplicated) return false;
+    seen.push(key);
+    return true;
+  }).join(separator || ' - ');
 }
 
 function displayPhotoAngle(angle) {
@@ -4617,8 +4916,8 @@ function buildPhotoSection(r, context) {
   var title = 'Dokumentasi Foto Lokasi';
   var accent = '#8e24aa';
   if (context === 'pjl') { title = 'Dokumentasi Tanam & Pelihara Pohon '; accent = '#2e7d32'; }
-  else if (context === 'pegawai') { title = 'Dokumentasi Foto Pegawai'; accent = '#fb8c00'; }
-  else if (context === 'pegawaiBinaan') { title = 'Foto Hutan Binaan'; accent = '#00897b'; }
+  else if (context === 'pegawai') { title = 'Dokumentasi Foto Pegawai'; accent = '#8bc34a'; }
+  else if (context === 'pegawaiBinaan') { title = 'Foto Hutan Binaan'; accent = '#fb8c00'; }
   else if (context === 'polygon') { title = 'Dokumentasi Kegiatan (Tanam & Pelihara)'; accent = '#388e3c'; }
   else if (context === 'per') { title = 'Dokumentasi Lokasi Persemaian'; accent = '#1e88e5'; }
 
@@ -5081,6 +5380,8 @@ function refreshLightbox() {
   var currentYear = (LB_STATE.years || [])[idx] || LB_STATE.year;
   var rawAngle = (LB_STATE.angles || [])[idx] || '';
   var currentAngle = rawAngle === 'Laporan Mingguan' ? rawAngle : normalizePhotoAngle(rawAngle);
+  var lightboxEl = document.getElementById('photo-lightbox');
+  if (lightboxEl) lightboxEl.classList.remove('has-monitoring');
 
   // Header
   var yBadge = document.getElementById('lightbox-year-badge');
@@ -5149,6 +5450,7 @@ function refreshLightbox() {
   if (monWrap && monCont) {
     if (LB_STATE.context === 'weekly' || LB_STATE.context === 'single') {
       monWrap.style.display = 'none';
+      if (lightboxEl) lightboxEl.classList.remove('has-monitoring');
       return;
     }
     var r = PHOTO_GALLERY.row;
@@ -5187,8 +5489,10 @@ function refreshLightbox() {
       }
       monCont.innerHTML = mHtml;
       monWrap.style.display = 'block';
+      if (lightboxEl) lightboxEl.classList.add('has-monitoring');
     } else {
       monWrap.style.display = 'none';
+      if (lightboxEl) lightboxEl.classList.remove('has-monitoring');
     }
   }
 }
@@ -5474,19 +5778,21 @@ function openUploadModal(r) {
     return;
   }
   if (locInfo) {
+    var locLabel = '';
     if (context === 'pjl') {
-      locInfo.innerHTML = '&#128205; ' + getName(r) + ' &bull; ' + (r['Unit Kerja'] || '');
+      locLabel = joinUniqueLabelParts([getName(r), r['Unit Kerja']], ' - ');
     } else if (context === 'pegawai') {
-      locInfo.innerHTML = '&#128205; ' + getName(r) + ' &bull; ' + (r['Unit Kerja'] || r['UNIT KERJA'] || '');
+      locLabel = joinUniqueLabelParts([getName(r), r['Unit Kerja'] || r['UNIT KERJA']], ' - ');
     } else if (context === 'pegawaiBinaan') {
-      locInfo.innerHTML = '&#128205; ' + getName(r) + ' &bull; ' + (r['Unit Kerja'] || r['UNIT KERJA'] || '') + ' - ' + (r['Kegiatan'] || '');
+      locLabel = joinUniqueLabelParts([getName(r), r['Unit Kerja'] || r['UNIT KERJA'], r['Kegiatan']], ' - ');
     } else if (context === 'polygon') {
-      locInfo.innerHTML = '&#128205; ' + (r['Nama'] || 'Area Kegiatan') + ' &bull; ' + (r['Kegiatan'] || '');
+      locLabel = joinUniqueLabelParts([r['Nama'] || 'Area Kegiatan', r['Kegiatan']], ' - ');
     } else if (context === 'per') {
-      locInfo.innerHTML = '&#128205; ' + (r['Nama Persemaian'] || r['Nama'] || 'Persemaian') + ' &bull; ' + (r['Unit Kerja'] || r._cdk || '');
+      locLabel = joinUniqueLabelParts([r['Nama Persemaian'] || r['Nama'] || 'Persemaian', r['Unit Kerja'] || r._cdk], ' - ');
     } else {
-      locInfo.innerHTML = '&#128205; ' + getName(r) + ' &bull; ' + (r['Kabupaten/Kota'] || '');
+      locLabel = joinUniqueLabelParts([getName(r), r['Kabupaten/Kota']], ' - ');
     }
+    locInfo.innerHTML = '&#128205; ' + escapeHtml(locLabel);
   }
   
   var modalTitle = document.querySelector('#upload-modal .modal-head h2');
@@ -5703,7 +6009,7 @@ function readFileAsDataUrl(file) {
 
 function validateUploadFiles(files) {
   if (!files || files.length === 0) return "Pilih minimal satu file foto.";
-  if (files.length > 2) return "Maksimal 2 foto per sesi upload.";
+  if (files.length > 1) return "Maksimal 1 foto per sesi upload.";
   var totalSize = 0;
   for (var i = 0; i < files.length; i++) {
     var f = files[i];
@@ -6213,10 +6519,10 @@ function resetWeeklyReportForm() {
 
 function getWeeklyLocationLabel(r, context) {
   if (!r) return '';
-  if (context === 'per') return (r['Nama Persemaian'] || r['Nama'] || 'Lokasi Persemaian') + ' - ' + (r['Unit Kerja'] || r._cdk || '');
-  if (context === 'polygon') return (r['Nama'] || 'Titik Kegiatan') + ' - ' + (r['Kegiatan'] || '');
-  if (context === 'pegawaiBinaan') return (getBinaanKabupaten(r) || r._kab || '') + ' - ' + (getBinaanField(r, 'kegiatan') || '');
-  return getName(r) + ' - ' + (r['Unit Kerja'] || r['UNIT KERJA'] || r['Kabupaten/Kota'] || r._kab || '');
+  if (context === 'per') return joinUniqueLabelParts([r['Nama Persemaian'] || r['Nama'] || 'Lokasi Persemaian', r['Unit Kerja'] || r._cdk], ' - ');
+  if (context === 'polygon') return joinUniqueLabelParts([r['Nama'] || 'Titik Kegiatan', r['Kegiatan']], ' - ');
+  if (context === 'pegawaiBinaan') return joinUniqueLabelParts([r['Unit Kerja'] || r['UNIT KERJA'] || r._cdk || getBinaanKabupaten(r) || r._kab, getBinaanField(r, 'kegiatan') || r['Kegiatan']], ' - ');
+  return joinUniqueLabelParts([getName(r), r['Unit Kerja'] || r['UNIT KERJA'] || r['Kabupaten/Kota'] || r._kab], ' - ');
 }
 
 function openWeeklyReportModal(report) {
@@ -6318,7 +6624,7 @@ function closeWeeklyReportModal() {
 
 function validateSingleImageFile(file) {
   if (!file) return Promise.resolve(null);
-  if (file.size > 5 * 1024 * 1024) return Promise.resolve('Ukuran foto melebihi 5 MB.');
+  if (file.size > 10 * 1024 * 1024) return Promise.resolve('Ukuran foto melebihi 10 MB.');
   if (!file.type.match(/^image\//) && !file.name.toLowerCase().match(/\.(heic|heif)$/)) return Promise.resolve('File lampiran bukan format gambar.');
   if (file.name.toLowerCase().match(/\.(heic|heif)$/)) return Promise.resolve(null);
   return new Promise(function(resolve) {
@@ -6942,9 +7248,107 @@ function applyNonAdminMapDefaults_() {
   if (autoLeg) autoLeg.classList.add('leg-hidden');
 }
 
+function getCurrentIsoWeekInputValue() {
+  var d = new Date();
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7));
+  var week1 = new Date(d.getFullYear(), 0, 4);
+  var week = 1 + Math.round(((d.getTime() - week1.getTime()) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7);
+  return d.getFullYear() + '-W' + String(week).padStart(2, '0');
+}
+
+var REPORT_MULTI_FILTER_IDS = [
+  'report-category-filter',
+  'report-status-filter',
+  'report-unit-filter',
+  'report-person-filter',
+  'report-kab-filter',
+  'report-kegiatan-filter',
+  'report-year-filter'
+];
+
+function getReportFilterValues(idOrEl) {
+  var el = typeof idOrEl === 'string' ? document.getElementById(idOrEl) : idOrEl;
+  if (!el) return [];
+  var raw = [];
+  if (window.jQuery && window.$ && $(el).hasClass('select2-hidden-accessible')) {
+    raw = $(el).val() || [];
+  } else if (el.multiple) {
+    raw = Array.prototype.slice.call(el.selectedOptions || []).map(function(opt) { return opt.value; });
+  } else if (el.value) {
+    raw = [el.value];
+  }
+  if (!Array.isArray(raw)) raw = [raw];
+  return raw.map(function(v) { return String(v || '').trim(); }).filter(Boolean);
+}
+
+function setReportFilterValues(idOrEl, values, silent) {
+  var el = typeof idOrEl === 'string' ? document.getElementById(idOrEl) : idOrEl;
+  if (!el) return;
+  var next = Array.isArray(values) ? values.map(String) : (values ? [String(values)] : []);
+  if (el.multiple) {
+    Array.prototype.slice.call(el.options || []).forEach(function(opt) {
+      opt.selected = next.indexOf(String(opt.value)) !== -1;
+    });
+  } else {
+    el.value = next[0] || '';
+  }
+  if (window.jQuery && window.$ && $(el).hasClass('select2-hidden-accessible')) {
+    $(el).val(next).trigger(silent ? 'change.select2' : 'change');
+  }
+}
+
+function reportFilterMatches(values, value) {
+  return !values.length || values.indexOf(String(value || '')) !== -1;
+}
+
+function initReportMonitorSelect2() {
+  if (!window.jQuery || !window.$ || !$.fn.select2) return;
+  var parent = $('#report-monitor-modal');
+  REPORT_MULTI_FILTER_IDS.forEach(function(id) {
+    var el = document.getElementById(id);
+    if (!el || $(el).hasClass('select2-hidden-accessible')) return;
+    $(el).select2({
+      width: '100%',
+      placeholder: el.getAttribute('data-placeholder') || 'Pilih filter',
+      allowClear: true,
+      closeOnSelect: false,
+      dropdownParent: parent.length ? parent : $(document.body)
+    });
+  });
+}
+
+function ensureDefaultReportWeekRange() {
+  var weekStart = document.getElementById('report-week-start-filter');
+  var weekEnd = document.getElementById('report-week-end-filter');
+  var currentWeek = getCurrentIsoWeekInputValue();
+  if (weekStart && !weekStart.value) weekStart.value = currentWeek;
+  if (weekEnd && !weekEnd.value) weekEnd.value = weekStart && weekStart.value ? weekStart.value : currentWeek;
+}
+
 function onReportFilterChanged() {
   WEEKLY_REPORT_STATE.monitorPage = 1;
+  invalidateReportComplianceCache();
   renderReportMonitorTable();
+}
+
+function showReportMonitorPreparing(type) {
+  var head = document.getElementById('report-monitor-head');
+  var body = document.getElementById('report-monitor-body');
+  var kpi = document.getElementById('report-kpi-row');
+  var pager = document.getElementById('report-pagination');
+  if (kpi) kpi.innerHTML = '';
+  if (pager) pager.innerHTML = '';
+  if (head) {
+    head.innerHTML = type === 'monthly'
+      ? '<tr><th>Status</th><th>Kegiatan</th><th>Lokasi & Administratif</th><th>Unit</th><th>Pembina/Pegawai</th><th>Luas</th><th>Foto</th><th>Tanggal</th><th>Aksi</th></tr>'
+      : '<tr><th>Status</th><th>Kegiatan</th><th>Pelaksana</th><th>Unit</th><th>Lokasi</th><th>Waktu</th><th>Tutupan</th><th>Gangguan</th><th>Ringkasan</th><th>Aksi</th></tr>';
+  }
+  if (body) {
+    var colspan = type === 'monthly' ? 9 : 10;
+    var label = type === 'monthly' ? 'Menyiapkan laporan 3 bulanan...' : 'Menyiapkan laporan mingguan...';
+    body.innerHTML = '<tr><td colspan="' + colspan + '" style="text-align:center;padding:24px;">' + label + '</td></tr>';
+  }
 }
 
 function openReportMonitor(type) {
@@ -6960,34 +7364,56 @@ function openReportMonitor(type) {
   if (title) title.textContent = type === 'monthly' ? 'Monitoring Laporan 3 Bulanan' : 'Monitoring Laporan Mingguan';
   var weekStart = document.getElementById('report-week-start-filter');
   var weekEnd = document.getElementById('report-week-end-filter');
+  var categoryFilter = document.getElementById('report-category-filter');
+  var statusFilter = document.getElementById('report-status-filter');
   var exportBtn = document.getElementById('report-weekly-export-btn');
+  var monthlyExportBtn = document.getElementById('report-monthly-export-btn');
   if (weekStart) weekStart.style.display = type === 'monthly' ? 'none' : '';
   if (weekEnd) weekEnd.style.display = type === 'monthly' ? 'none' : '';
   if (exportBtn) exportBtn.style.display = type === 'monthly' ? 'none' : '';
+  if (monthlyExportBtn) monthlyExportBtn.style.display = type === 'monthly' ? 'inline-flex' : 'none';
+  if (modal) modal.classList.add('open');
+  initReportMonitorSelect2();
+  if (categoryFilter) setReportFilterValues(categoryFilter, ['pegawaibinaanformatsistem'], true);
+  if (statusFilter) setReportFilterValues(statusFilter, [], true);
   if (type === 'monthly') {
     if (weekStart) weekStart.value = '';
     if (weekEnd) weekEnd.value = '';
+  } else {
+    ensureDefaultReportWeekRange();
   }
-  if (modal) modal.classList.add('open');
-  reloadReportMonitor(false);
+  invalidateReportComplianceCache();
+  showReportMonitorPreparing(WEEKLY_REPORT_STATE.monitorType);
+  var openToken = Date.now() + Math.random();
+  WEEKLY_REPORT_STATE.monitorOpenToken = openToken;
+  var schedule = window.requestAnimationFrame || function(cb) { return setTimeout(cb, 16); };
+  schedule(function() {
+    setTimeout(function() {
+      if (WEEKLY_REPORT_STATE.monitorOpenToken !== openToken) return;
+      reloadReportMonitor(false);
+    }, 20);
+  });
 }
 
 function closeReportMonitor() {
   var modal = document.getElementById('report-monitor-modal');
   if (modal) modal.classList.remove('open');
+  WEEKLY_REPORT_STATE.monitorOpenToken = 0;
 }
 
 function reloadReportMonitor(force) {
   if (WEEKLY_REPORT_STATE.monitorType === 'monthly') {
     WEEKLY_REPORT_STATE.monitorRows = buildMonthlyReportRows();
+    WEEKLY_REPORT_STATE.monitorRowsType = 'monthly';
     WEEKLY_REPORT_STATE.monitorPage = 1;
+    invalidateReportComplianceCache();
     populateReportFilterOptions();
     renderReportMonitorTable();
     return;
   }
   var body = document.getElementById('report-monitor-body');
   var now = Date.now();
-  var hasFreshCache = !force && (WEEKLY_REPORT_STATE.monitorRows || []).length && (now - (WEEKLY_REPORT_STATE.weeklyMonitorFetchedAt || 0) < (WEEKLY_REPORT_STATE.weeklyMonitorCacheMs || 0));
+  var hasFreshCache = !force && WEEKLY_REPORT_STATE.monitorRowsType === 'weekly' && (WEEKLY_REPORT_STATE.monitorRows || []).length && (now - (WEEKLY_REPORT_STATE.weeklyMonitorFetchedAt || 0) < (WEEKLY_REPORT_STATE.weeklyMonitorCacheMs || 0));
   if (hasFreshCache) {
     WEEKLY_REPORT_STATE.monitorPage = 1;
     populateReportFilterOptions();
@@ -6998,7 +7424,9 @@ function reloadReportMonitor(force) {
   var localRows = buildWeeklyReportRowsFromLocalData();
   if (localRows.length) {
     WEEKLY_REPORT_STATE.monitorRows = localRows;
+    WEEKLY_REPORT_STATE.monitorRowsType = 'weekly';
     WEEKLY_REPORT_STATE.monitorPage = 1;
+    invalidateReportComplianceCache();
     populateReportFilterOptions();
     renderReportMonitorTable();
     renderedLocal = true;
@@ -7009,9 +7437,13 @@ function reloadReportMonitor(force) {
   var weeklyUrl = GAS_WEB_APP_URL + '?action=getAllWeeklyReports&refresh=1';
   fetch(appendAuthParam(weeklyUrl)).then(function(res) { return res.json(); }).then(function(data) {
     if (!data.success) throw new Error(data.error || 'Gagal memuat laporan mingguan.');
-    WEEKLY_REPORT_STATE.monitorRows = (data.reports || []).map(enrichWeeklyMonitorRow);
+    return enrichWeeklyMonitorRowsAsync(data.reports || []);
+  }).then(function(rows) {
+    WEEKLY_REPORT_STATE.monitorRows = rows;
+    WEEKLY_REPORT_STATE.monitorRowsType = 'weekly';
     WEEKLY_REPORT_STATE.weeklyMonitorFetchedAt = Date.now();
     WEEKLY_REPORT_STATE.monitorPage = 1;
+    invalidateReportComplianceCache();
     populateReportFilterOptions();
     renderReportMonitorTable();
   }).catch(function(err) {
@@ -7019,6 +7451,24 @@ function reloadReportMonitor(force) {
     else if (renderedLocal && typeof showToast === 'function') showToast('Data lokal ditampilkan. Sinkronisasi laporan mingguan belum selesai.', 'warning');
   }).finally(function() {
     WEEKLY_REPORT_STATE.weeklyMonitorLoading = false;
+  });
+}
+
+function enrichWeeklyMonitorRowsAsync(reports) {
+  return new Promise(function(resolve) {
+    var source = reports || [];
+    var rows = [];
+    var idx = 0;
+    function step() {
+      var end = Math.min(idx + 150, source.length);
+      for (; idx < end; idx++) rows.push(enrichWeeklyMonitorRow(source[idx]));
+      if (idx < source.length) {
+        setTimeout(step, 0);
+      } else {
+        resolve(rows);
+      }
+    }
+    step();
   });
 }
 
@@ -7051,16 +7501,83 @@ function enrichWeeklyMonitorRow(rep) {
   return rep;
 }
 
-function findReportSourceRow(rep) {
+function getReportSourceSignature() {
+  return [
+    (DATA.pjl || []).length,
+    (DATA.persemaian || []).length,
+    (DATA.pegawai || []).length,
+    (DATA.pegawaiBinaan || []).length,
+    (DATA.jumat || []).length,
+    (POLYGON_FEATURES_CACHE || []).length
+  ].join('|');
+}
+
+function getReportSourceIndexKey(category, value) {
+  return String(category || '') + '|' + String(value || '').toLowerCase();
+}
+
+function getReportCoordKey(category, lat, lng) {
+  if (!lat || !lng) return '';
+  return getReportSourceIndexKey(category, Number(lat).toFixed(5) + ',' + Number(lng).toFixed(5));
+}
+
+function getReportSourceIndexes() {
+  var signature = getReportSourceSignature();
+  if (REPORT_SOURCE_INDEX_CACHE.signature === signature && REPORT_SOURCE_INDEX_CACHE.rows.length) {
+    return REPORT_SOURCE_INDEX_CACHE;
+  }
   var rows = getAllMarkerRowsForReports();
+  var byCatRow = {};
+  var byCatFeature = {};
+  var byCatCoord = {};
+  var locEntries = [];
+  rows.forEach(function(item) {
+    var r = item.row || {};
+    var category = item.category || '';
+    var rowIndex = r._row_idx || r.rowIndex || '';
+    var featureId = r.ID || r.featureId || '';
+    var coords = getPhotoCoords(r);
+    if (rowIndex) byCatRow[getReportSourceIndexKey(category, rowIndex)] = item;
+    if (featureId) byCatFeature[getReportSourceIndexKey(category, featureId)] = item;
+    var coordKey = getReportCoordKey(category, coords.lat, coords.lng);
+    if (coordKey) byCatCoord[coordKey] = item;
+    locEntries.push({
+      category: category,
+      loc: normalizeReportText(getWeeklyLocationLabel(r, item.context)),
+      item: item
+    });
+  });
+  REPORT_SOURCE_INDEX_CACHE = {
+    signature: signature,
+    rows: rows,
+    byCatRow: byCatRow,
+    byCatFeature: byCatFeature,
+    byCatCoord: byCatCoord,
+    locEntries: locEntries
+  };
+  return REPORT_SOURCE_INDEX_CACHE;
+}
+
+function findReportSourceRow(rep) {
+  var index = getReportSourceIndexes();
   var targetCat = String(rep.category || '');
   var targetRowIndex = String(rep.rowIndex || '');
   var targetFeature = String(rep.featureId || '');
   var loc = normalizeReportText(rep.lokasi || rep.nama || '');
   var lat = toFloat(rep.lat || rep.latitude);
   var lng = toFloat(rep.lng || rep.longitude);
-  for (var i = 0; i < rows.length; i++) {
-    var item = rows[i];
+  var match = null;
+  if (targetCat && targetRowIndex) match = index.byCatRow[getReportSourceIndexKey(targetCat, targetRowIndex)];
+  if (!match && targetCat && targetFeature) match = index.byCatFeature[getReportSourceIndexKey(targetCat, targetFeature)];
+  if (!match && targetCat && lat && lng) match = index.byCatCoord[getReportCoordKey(targetCat, lat, lng)];
+  if (match) return match;
+  for (var i = 0; i < index.locEntries.length; i++) {
+    var entry = index.locEntries[i];
+    if (targetCat && entry.category !== targetCat) continue;
+    if (loc && entry.loc.indexOf(loc.substring(0, 24)) !== -1) return entry.item;
+  }
+  for (var j = 0; j < index.rows.length; j++) {
+    var item = index.rows[j];
     var r = item.row;
     if (targetCat && item.category !== targetCat) continue;
     if (targetRowIndex && String(r._row_idx || '') === targetRowIndex) return item;
@@ -7204,7 +7721,7 @@ function buildMonthlyReportRows() {
           lat: coords.lat,
           lng: coords.lng,
           waktu: dates[idx] || '',
-          tahun: year,
+          fotoTahun: year,
           sudut: normalizePhotoAngle(angles[idx]),
           fotoUrl: url,
           tutupan: monAt('Tutupan'),
@@ -7223,27 +7740,32 @@ function buildMonthlyReportRows() {
   return rows;
 }
 
-function passesReportFilters(row) {
+function passesReportFilters(row, options) {
+  options = options && typeof options === 'object' ? options : {};
   var q = String((document.getElementById('report-search') || {}).value || '').toLowerCase();
-  var cat = String((document.getElementById('report-category-filter') || {}).value || '');
-  var unit = String((document.getElementById('report-unit-filter') || {}).value || '');
-  var person = String((document.getElementById('report-person-filter') || {}).value || '');
-  var kab = String((document.getElementById('report-kab-filter') || {}).value || '');
-  var kegiatan = String((document.getElementById('report-kegiatan-filter') || {}).value || '');
-  var tahun = String((document.getElementById('report-year-filter') || {}).value || '');
+  var cats = getReportFilterValues('report-category-filter');
+  var statuses = getReportFilterValues('report-status-filter');
+  var units = getReportFilterValues('report-unit-filter');
+  var persons = getReportFilterValues('report-person-filter');
+  var kabs = getReportFilterValues('report-kab-filter');
+  var kegiatans = getReportFilterValues('report-kegiatan-filter');
+  var years = getReportFilterValues('report-year-filter');
   var start = parseDateInputToTs(String((document.getElementById('report-start-filter') || {}).value || ''), false);
   var end = parseDateInputToTs(String((document.getElementById('report-end-filter') || {}).value || ''), true);
   var weekStart = getWeekInputRange(String((document.getElementById('report-week-start-filter') || {}).value || ''), false);
   var weekEnd = getWeekInputRange(String((document.getElementById('report-week-end-filter') || {}).value || ''), true);
+  var rowStatus = row && row._reportStatus ? row._reportStatus : 'reported';
   if (!userCanSeeReportRow(row)) return false;
-  if (cat && row.category !== cat) return false;
-  if (unit && getReportFilterUnitValue(row) !== unit) return false;
-  if (person && getReportRowPerson(row) !== person) return false;
-  if (kab && getReportRowKabupaten(row) !== kab) return false;
-  if (kegiatan && getReportRowKegiatan(row) !== kegiatan) return false;
-  if (tahun && getReportRowTahun(row) !== tahun) return false;
+  if (!reportFilterMatches(cats, row.category)) return false;
+  if (!options.ignoreStatus && !reportFilterMatches(statuses, rowStatus)) return false;
+  if (!reportFilterMatches(units, getReportFilterUnitValue(row))) return false;
+  if (!reportFilterMatches(persons, getReportRowPerson(row))) return false;
+  if (!reportFilterMatches(kabs, getReportRowKabupaten(row))) return false;
+  if (!reportFilterMatches(kegiatans, getReportRowKegiatan(row))) return false;
+  if (!reportFilterMatches(years, getReportRowTahun(row))) return false;
   var text = [row.kategoriLabel, row.nama, row.unit, row.pembina, row.pelaksana, row.lokasi, row.uraian, row.sudut, row.tahun, row.kegiatan, row.administrasi, row.kabupaten, row.kecamatan, row.desa].join(' ').toLowerCase();
   if (q && text.indexOf(q) === -1) return false;
+  if (rowStatus === 'missing') return true;
   var ts = getReportDateTs(row);
   if ((start || end || weekStart || weekEnd) && !ts) return false;
   if (start && ts < start) return false;
@@ -7253,8 +7775,250 @@ function passesReportFilters(row) {
   return true;
 }
 
+function getReportActiveDateRange(type) {
+  var dateStart = parseDateInputToTs(String((document.getElementById('report-start-filter') || {}).value || ''), false);
+  var dateEnd = parseDateInputToTs(String((document.getElementById('report-end-filter') || {}).value || ''), true);
+  var weekStart = type === 'weekly' ? getWeekInputRange(String((document.getElementById('report-week-start-filter') || {}).value || ''), false) : 0;
+  var weekEnd = type === 'weekly' ? getWeekInputRange(String((document.getElementById('report-week-end-filter') || {}).value || ''), true) : 0;
+  var starts = [dateStart, weekStart].filter(Boolean);
+  var ends = [dateEnd, weekEnd].filter(Boolean);
+  return {
+    start: starts.length ? Math.max.apply(Math, starts) : 0,
+    end: ends.length ? Math.min.apply(Math, ends) : 0,
+    years: getReportFilterValues('report-year-filter')
+  };
+}
+
+function reportDateMatchesActiveRange(row, type) {
+  var range = getReportActiveDateRange(type || WEEKLY_REPORT_STATE.monitorType || 'weekly');
+  var ts = getReportDateTs(row);
+  if ((range.start || range.end) && !ts) return false;
+  if (range.start && ts < range.start) return false;
+  if (range.end && ts > range.end) return false;
+  if (range.years && range.years.length) {
+    var rowYear = getReportRowTahun(row);
+    var dateYear = ts ? String(new Date(ts).getFullYear()) : '';
+    if (range.years.indexOf(rowYear) === -1 && range.years.indexOf(dateYear) === -1) return false;
+  }
+  return true;
+}
+
+function getWeeklyReportedBinaanKeySet() {
+  var range = getReportActiveDateRange('weekly');
+  var rows = WEEKLY_REPORT_STATE.monitorRows || [];
+  var first = rows[0] ? (rows[0].id || rows[0].rowIndex || rows[0].nama || '') : '';
+  var last = rows.length ? (rows[rows.length - 1].id || rows[rows.length - 1].rowIndex || rows[rows.length - 1].nama || '') : '';
+  var signature = [
+    rows.length,
+    WEEKLY_REPORT_STATE.weeklyMonitorFetchedAt || 0,
+    range.start || 0,
+    range.end || 0,
+    (range.years || []).join(','),
+    first,
+    last
+  ].join('|');
+  if (REPORT_COMPLIANCE_CACHE.weeklySignature === signature && REPORT_COMPLIANCE_CACHE.weeklyKeys) {
+    return REPORT_COMPLIANCE_CACHE.weeklyKeys;
+  }
+  var keys = new Set();
+  rows.forEach(function(rep) {
+    if (String((rep || {}).category || '').toLowerCase() !== 'pegawaibinaanformatsistem') return;
+    if (!reportDateMatchesActiveRange(rep, 'weekly')) return;
+    var key = getReportBinaanSourceKey(rep);
+    if (key) keys.add(key);
+  });
+  REPORT_COMPLIANCE_CACHE.weeklySignature = signature;
+  REPORT_COMPLIANCE_CACHE.weeklyKeys = keys;
+  return keys;
+}
+
+function getBinaanSourceKey(row) {
+  if (!row) return '';
+  if (row._sourceRow) return getBinaanSourceKey(row._sourceRow);
+  var coords = getPhotoCoords(row);
+  return [
+    row._source_gid || '',
+    row._row_idx || row.rowIndex || row['ID'] || row.featureId || '',
+    getReportRowUnit(row),
+    getReportRowPerson(row),
+    getReportRowKegiatan(row),
+    getReportRowTahun(row),
+    coords.lat || '',
+    coords.lng || ''
+  ].join('|').toLowerCase();
+}
+
+function getReportBinaanSourceKey(row) {
+  if (!row) return '';
+  if (row._sourceRow) return getBinaanSourceKey(row._sourceRow);
+  var match = findReportSourceRow(row);
+  if (match && match.context === 'pegawaiBinaan') return getBinaanSourceKey(match.row);
+  return getBinaanSourceKey(row);
+}
+
+function sourcePassesReportDimensionFilters(row, options) {
+  options = options || {};
+  var cats = getReportFilterValues('report-category-filter');
+  var units = getReportFilterValues('report-unit-filter');
+  var persons = getReportFilterValues('report-person-filter');
+  var kabs = getReportFilterValues('report-kab-filter');
+  var kegiatans = getReportFilterValues('report-kegiatan-filter');
+  var years = getReportFilterValues('report-year-filter');
+  var q = options.ignoreSearch ? '' : String((document.getElementById('report-search') || {}).value || '').toLowerCase();
+  if (!options.ignoreCategory && cats.length && cats.indexOf('pegawaibinaanformatsistem') === -1) return false;
+  if (!userCanSeeReportRow(row)) return false;
+  if (!reportFilterMatches(units, getReportFilterUnitValue(row))) return false;
+  if (!reportFilterMatches(persons, getReportRowPerson(row))) return false;
+  if (!reportFilterMatches(kabs, getReportRowKabupaten(row))) return false;
+  if (!reportFilterMatches(kegiatans, getReportRowKegiatan(row))) return false;
+  if (!reportFilterMatches(years, getReportRowTahun(row))) return false;
+  var text = [
+    'Data Hutan Binaan',
+    getWeeklyLocationLabel(row, 'pegawaiBinaan'),
+    getReportRowUnit(row),
+    getReportRowPerson(row),
+    getReportRowKegiatan(row),
+    getReportRowTahun(row),
+    getReportRowKabupaten(row),
+    getBinaanField(row, 'kecamatan'),
+    getBinaanField(row, 'desa')
+  ].join(' ').toLowerCase();
+  return !q || text.indexOf(q) !== -1;
+}
+
+function buildMissingBinaanReportRow(row, type) {
+  var coords = getPhotoCoords(row);
+  var luasHa = getReportRowLuas(row);
+  return {
+    category: 'pegawaibinaanformatsistem',
+    kategoriLabel: 'Data Hutan Binaan',
+    _reportStatus: 'missing',
+    statusLabel: 'Belum Input',
+    nama: getWeeklyLocationLabel(row, 'pegawaiBinaan'),
+    lokasi: getWeeklyLocationLabel(row, 'pegawaiBinaan'),
+    unit: getReportRowUnit(row),
+    pembina: getReportRowPerson(row),
+    pelaksana: getReportRowPerson(row),
+    kegiatan: getReportRowKegiatan(row),
+    tahun: getReportRowTahun(row),
+    kabupaten: getReportRowKabupaten(row),
+    kecamatan: getBinaanField(row, 'kecamatan') || row['Kecamatan'] || '',
+    desa: getBinaanField(row, 'desa') || row['Desa/Kelurahan'] || row['Desa/ Kelurahan'] || row['Desa'] || '',
+    administrasi: [getReportRowKabupaten(row), getBinaanField(row, 'kecamatan'), getBinaanField(row, 'desa')].filter(Boolean).join(', '),
+    dpl: row.DPL || row.MDPL || '',
+    lat: coords.lat,
+    lng: coords.lng,
+    luasHa: luasHa,
+    luas: luasHa ? formatLuasHa(luasHa) + ' Ha' : (getBinaanLuasRaw(row) || ''),
+    waktu: '',
+    tutupan: '-',
+    adaGangguan: '-',
+    uraian: type === 'monthly' ? 'Belum upload foto linimasa pada filter aktif.' : 'Belum input laporan mingguan pada filter aktif.',
+    sudut: '-',
+    fotoUrl: '',
+    _sourceContext: 'pegawaiBinaan',
+    _sourceRow: row
+  };
+}
+
+function sourceHasWeeklyReport(row) {
+  var sourceKey = getBinaanSourceKey(row);
+  return !!sourceKey && getWeeklyReportedBinaanKeySet().has(sourceKey);
+}
+
+function sourceHasMonthlyPhoto(row) {
+  var range = getReportActiveDateRange('monthly');
+  return PHOTO_YEARS.some(function(year) {
+    var photos = getRowPhotos(row, year);
+    if (!photos.length) return false;
+    if (!range.start && !range.end) return true;
+    var dates = getRowDates(row, year);
+    return photos.some(function(_, idx) {
+      var ts = parseExifDate(dates[idx] || '');
+      if (!ts) return false;
+      if (range.start && ts < range.start) return false;
+      if (range.end && ts > range.end) return false;
+      return true;
+    });
+  });
+}
+
+function getBinaanComplianceSources(type) {
+  var statuses = getReportFilterValues('report-status-filter');
+  return (DATA.pegawaiBinaan || []).filter(sourcePassesReportDimensionFilters).map(function(row) {
+    var reported = type === 'monthly' ? sourceHasMonthlyPhoto(row) : sourceHasWeeklyReport(row);
+    return { row: row, reported: reported, status: reported ? 'reported' : 'missing' };
+  }).filter(function(item) {
+    return reportFilterMatches(statuses, item.status);
+  });
+}
+
+function getReportMonitorRowsForRender(type) {
+  var statuses = getReportFilterValues('report-status-filter');
+  var rows = (WEEKLY_REPORT_STATE.monitorRows || []).map(function(r) {
+    if (r && !r._reportStatus) r._reportStatus = 'reported';
+    if (r && !r.statusLabel) r.statusLabel = 'Sudah Input';
+    return r;
+  }).filter(passesReportFilters);
+  var onlyReported = statuses.length === 1 && statuses[0] === 'reported';
+  if (!onlyReported) {
+    getBinaanComplianceSources(type).forEach(function(item) {
+      if (!item.reported) rows.push(buildMissingBinaanReportRow(item.row, type));
+    });
+  }
+  return rows;
+}
+
+function getBinaanComplianceKpi(type) {
+  var all = (DATA.pegawaiBinaan || []).filter(sourcePassesReportDimensionFilters);
+  var reported = 0;
+  all.forEach(function(row) {
+    if (type === 'monthly' ? sourceHasMonthlyPhoto(row) : sourceHasWeeklyReport(row)) reported++;
+  });
+  return { total: all.length, reported: reported, missing: Math.max(0, all.length - reported) };
+}
+
+function getReportPembinaStats(rows) {
+  var counts = {};
+  (rows || []).forEach(function(r) {
+    if (!r || r._reportStatus === 'missing') return;
+    var name = String(r.pembina || r.pelaksana || getReportRowPerson(r) || '').trim();
+    if (!name) return;
+    counts[name] = (counts[name] || 0) + 1;
+  });
+  var list = Object.keys(counts).map(function(name) {
+    return { name: name, count: counts[name] };
+  }).sort(function(a, b) {
+    return b.count - a.count || a.name.localeCompare(b.name);
+  });
+  if (!list.length) {
+    return { topName: '-', topCount: 0, lowName: '-', lowCount: 0 };
+  }
+  var low = list[list.length - 1];
+  return {
+    topName: list[0].name,
+    topCount: list[0].count,
+    lowName: low.name,
+    lowCount: low.count
+  };
+}
+
+function getReportPembinaStatsRows() {
+  return (WEEKLY_REPORT_STATE.monitorRows || []).map(function(r) {
+    if (r && !r._reportStatus) r._reportStatus = 'reported';
+    if (r && !r.statusLabel) r.statusLabel = 'Sudah Input';
+    return r;
+  }).filter(function(r) {
+    return passesReportFilters(r, { ignoreStatus: true });
+  });
+}
+
+function reportCell(label, value, muted) {
+  return '<td data-label="' + escapeHtml(label) + '"' + (muted ? ' class="report-muted-cell"' : '') + '>' + value + '</td>';
+}
+
 function populateReportFilterOptions() {
-  var rows = (WEEKLY_REPORT_STATE.monitorRows || []).filter(userCanSeeReportRow);
+  var rows = (WEEKLY_REPORT_STATE.monitorRows || []).filter(userCanSeeReportRow).concat((DATA.pegawaiBinaan || []).filter(userCanSeeReportRow));
   var unitEl = document.getElementById('report-unit-filter');
   var personEl = document.getElementById('report-person-filter');
   var kabEl = document.getElementById('report-kab-filter');
@@ -7262,13 +8026,16 @@ function populateReportFilterOptions() {
   var yearEl = document.getElementById('report-year-filter');
   function fill(el, values, label) {
     if (!el) return;
-    var current = el.value;
-    var html = '<option value="">' + label + '</option>';
+    var current = getReportFilterValues(el);
+    var html = '';
     values.sort(function(a, b) { return a.localeCompare(b); }).forEach(function(v) {
       html += '<option value="' + escapeHtml(v) + '">' + escapeHtml(v) + '</option>';
     });
     el.innerHTML = html;
-    if (values.indexOf(current) !== -1) el.value = current;
+    setReportFilterValues(el, current.filter(function(v) { return values.indexOf(v) !== -1; }), true);
+    if (window.jQuery && window.$ && $(el).hasClass('select2-hidden-accessible')) {
+      $(el).trigger('change.select2');
+    }
   }
   var units = {};
   var persons = {};
@@ -7292,6 +8059,7 @@ function populateReportFilterOptions() {
   fill(kabEl, Object.keys(kabs), 'Semua Kabupaten');
   fill(kegiatanEl, Object.keys(kegiatans), 'Semua Kegiatan');
   fill(yearEl, Object.keys(years), 'Semua Tahun');
+  initReportMonitorSelect2();
 }
 
 function changeReportMonitorPage(delta) {
@@ -7336,7 +8104,7 @@ function focusReportOnMapFromObject(row) {
 
 function renderReportMonitorTable() {
   var type = WEEKLY_REPORT_STATE.monitorType || 'weekly';
-  var rows = (WEEKLY_REPORT_STATE.monitorRows || []).filter(passesReportFilters);
+  var rows = getReportMonitorRowsForRender(type);
   var head = document.getElementById('report-monitor-head');
   var body = document.getElementById('report-monitor-body');
   var kpi = document.getElementById('report-kpi-row');
@@ -7350,30 +8118,61 @@ function renderReportMonitorTable() {
     var cats = {};
     rows.forEach(function(r) { cats[r.category || r.kategoriLabel || '-'] = true; });
     var totalLuas = rows.reduce(function(sum, r) { return sum + (getReportRowLuas(r) || 0); }, 0);
+    var compliance = getBinaanComplianceKpi(type);
+    var pembinaStats = getReportPembinaStats(getReportPembinaStatsRows());
     kpi.innerHTML = '<div><strong>' + rows.length + '</strong><span>Total Laporan</span></div>' +
       '<div><strong>' + Object.keys(cats).length + '</strong><span>Kategori Aktif</span></div>' +
       '<div><strong>' + (totalLuas ? formatLuasHa(totalLuas) + ' Ha' : '-') + '</strong><span>Akumulasi Luasan</span></div>' +
-      '<div><strong>' + (type === 'monthly' ? 'Bulanan' : 'Mingguan') + '</strong><span>Mode</span></div>';
+      '<div><strong>' + (type === 'monthly' ? 'Bulanan' : 'Mingguan') + '</strong><span>Mode</span></div>' +
+      '<div><strong>' + compliance.reported + '</strong><span>Hutan Binaan Sudah Input</span></div>' +
+      '<div><strong>' + compliance.missing + '</strong><span>Hutan Binaan Belum Input</span></div>' +
+      '<div><strong>' + escapeHtml(pembinaStats.topName) + '</strong><span>Pembina Terbanyak (' + pembinaStats.topCount + ')</span></div>' +
+      '<div><strong>' + escapeHtml(pembinaStats.lowName) + '</strong><span>Pembina Terendah (' + pembinaStats.lowCount + ')</span></div>';
   }
   if (type === 'monthly') {
-    head.innerHTML = '<tr><th>Kegiatan</th><th>Lokasi & Administratif</th><th>Unit</th><th>Pembina/Pegawai</th><th>Luas</th><th>Foto</th><th>Tanggal</th><th>Aksi</th></tr>';
+    head.innerHTML = '<tr><th>Status</th><th>Kegiatan</th><th>Lokasi & Administratif</th><th>Unit</th><th>Pembina/Pegawai</th><th>Luas</th><th>Foto</th><th>Tanggal</th><th>Aksi</th></tr>';
     body.innerHTML = pageRows.length ? pageRows.map(function(r, localIdx) {
       var idx = start + localIdx;
-      return '<tr><td>' + escapeHtml(r.kategoriLabel || '-') + '<br><span class="report-muted">' + escapeHtml(r.kegiatan || '') + '</span></td><td>' + escapeHtml(r.nama || '-') + '<br><span class="report-muted">' + escapeHtml(r.administrasi || coordText(r.lat, r.lng) || '-') + '</span></td><td>' + escapeHtml(r.unit || '-') + '</td><td>' + escapeHtml(r.pembina || '-') + '</td><td>' + escapeHtml(r.luas || '-') + '</td><td>' + escapeHtml(displayPhotoAngle(r.sudut)) + '</td><td>' + escapeHtml(formatDateIndo(r.waktu) || '-') + '</td><td class="report-actions"><button type="button" onclick="previewMonthlyMonitorPhoto(' + idx + ')">Foto</button><button type="button" onclick="focusReportOnMapFromObject(WEEKLY_REPORT_STATE.detailRows[' + idx + '])">Peta</button></td></tr>';
-    }).join('') : '<tr><td colspan="8" style="text-align:center;padding:24px;">Tidak ada data laporan 3 bulanan.</td></tr>';
+      var statusBadge = '<span class="report-status-badge ' + (r._reportStatus === 'missing' ? 'missing' : 'reported') + '">' + escapeHtml(r.statusLabel || (r._reportStatus === 'missing' ? 'Belum Input' : 'Sudah Input')) + '</span>';
+      var photoAction = r._reportStatus === 'missing' ? '' : '<button type="button" onclick="previewMonthlyMonitorPhoto(' + idx + ')">Foto</button>';
+      return '<tr>' +
+        reportCell('Status', statusBadge) +
+        reportCell('Kegiatan', escapeHtml(r.kategoriLabel || '-') + '<br><span class="report-muted">' + escapeHtml(r.kegiatan || '') + '</span>') +
+        reportCell('Lokasi', escapeHtml(r.nama || '-') + '<br><span class="report-muted">' + escapeHtml(r.administrasi || coordText(r.lat, r.lng) || '-') + '</span>') +
+        reportCell('Unit', escapeHtml(r.unit || '-')) +
+        reportCell('Pembina/Pegawai', escapeHtml(r.pembina || '-')) +
+        reportCell('Luas', escapeHtml(r.luas || '-')) +
+        reportCell('Foto', escapeHtml(r._reportStatus === 'missing' ? '-' : displayPhotoAngle(r.sudut))) +
+        reportCell('Tanggal', escapeHtml(formatDateIndo(r.waktu) || '-')) +
+        '<td data-label="Aksi" class="report-actions">' + photoAction + '<button type="button" onclick="focusReportOnMapFromObject(WEEKLY_REPORT_STATE.detailRows[' + idx + '])">Peta</button></td>' +
+      '</tr>';
+    }).join('') : '<tr><td colspan="9" style="text-align:center;padding:24px;">Tidak ada data laporan 3 bulanan.</td></tr>';
   } else {
-    head.innerHTML = '<tr><th>Kegiatan</th><th>Pelaksana</th><th>Unit</th><th>Lokasi</th><th>Waktu</th><th>Tutupan</th><th>Gangguan</th><th>Ringkasan</th><th>Aksi</th></tr>';
+    head.innerHTML = '<tr><th>Status</th><th>Kegiatan</th><th>Pelaksana</th><th>Unit</th><th>Lokasi</th><th>Waktu</th><th>Tutupan</th><th>Gangguan</th><th>Ringkasan</th><th>Aksi</th></tr>';
     body.innerHTML = pageRows.length ? pageRows.map(function(r, localIdx) {
       var idx = start + localIdx;
-      return '<tr><td>' + escapeHtml(r.kategoriLabel || r.category || '-') + '</td><td>' + escapeHtml(r.pelaksana || '-') + '</td><td>' + escapeHtml(r.unit || '-') + '</td><td>' + escapeHtml(r.lokasi || r.nama || '-') + '<br><span class="report-muted">' + escapeHtml(r.luas || '') + '</span></td><td>' + escapeHtml(formatDateIndo(r.waktu) || '-') + '</td><td>' + escapeHtml(r.tutupan || '-') + '</td><td>' + escapeHtml(r.adaGangguan || '-') + '</td><td>' + escapeHtml((r.uraian || '-').substring(0, 95)) + '</td><td class="report-actions"><button type="button" onclick="openWeeklyDetailModal(WEEKLY_REPORT_STATE.detailRows[' + idx + '])">Detail</button><button type="button" onclick="focusReportOnMapFromObject(WEEKLY_REPORT_STATE.detailRows[' + idx + '])">Peta</button></td></tr>';
-    }).join('') : '<tr><td colspan="9" style="text-align:center;padding:24px;">Tidak ada data laporan mingguan.</td></tr>';
+      var weeklyStatus = '<span class="report-status-badge ' + (r._reportStatus === 'missing' ? 'missing' : 'reported') + '">' + escapeHtml(r.statusLabel || (r._reportStatus === 'missing' ? 'Belum Input' : 'Sudah Input')) + '</span>';
+      var detailAction = r._reportStatus === 'missing' ? '' : '<button type="button" onclick="openWeeklyDetailModal(WEEKLY_REPORT_STATE.detailRows[' + idx + '])">Detail</button>';
+      return '<tr>' +
+        reportCell('Status', weeklyStatus) +
+        reportCell('Kegiatan', escapeHtml(r.kategoriLabel || r.category || '-')) +
+        reportCell('Pelaksana', escapeHtml(r.pelaksana || r.pembina || '-')) +
+        reportCell('Unit', escapeHtml(r.unit || '-')) +
+        reportCell('Lokasi', escapeHtml(r.lokasi || r.nama || '-') + '<br><span class="report-muted">' + escapeHtml(r.luas || '') + '</span>') +
+        reportCell('Waktu', escapeHtml(formatDateIndo(r.waktu) || '-')) +
+        reportCell('Tutupan', escapeHtml(r.tutupan || '-')) +
+        reportCell('Gangguan', escapeHtml(r.adaGangguan || '-')) +
+        reportCell('Ringkasan', escapeHtml((r.uraian || '-').substring(0, 95))) +
+        '<td data-label="Aksi" class="report-actions">' + detailAction + '<button type="button" onclick="focusReportOnMapFromObject(WEEKLY_REPORT_STATE.detailRows[' + idx + '])">Peta</button></td>' +
+      '</tr>';
+    }).join('') : '<tr><td colspan="10" style="text-align:center;padding:24px;">Tidak ada data laporan mingguan.</td></tr>';
   }
   WEEKLY_REPORT_STATE.detailRows = rows;
   renderReportPagination(rows.length, totalPages);
 }
 
 function getFilteredReportMonitorRows() {
-  return (WEEKLY_REPORT_STATE.monitorRows || []).filter(passesReportFilters);
+  return getReportMonitorRowsForRender(WEEKLY_REPORT_STATE.monitorType || 'weekly');
 }
 
 function weeklyExportValue(row, key, fallback) {
@@ -7381,6 +8180,64 @@ function weeklyExportValue(row, key, fallback) {
   var value = row[key];
   if ((value === null || value === undefined || value === '') && row._sourceRow) value = row._sourceRow[key];
   return value === null || value === undefined ? (fallback || '') : value;
+}
+
+function getReportFilterLabel(id, fallback) {
+  var el = document.getElementById(id);
+  if (!el) return fallback || '';
+  if (el.tagName === 'SELECT') {
+    var selected = Array.prototype.slice.call(el.selectedOptions || [])
+      .map(function(opt) { return opt.text || opt.value; })
+      .filter(Boolean);
+    return selected.length ? selected.join(', ') : (fallback || '');
+  }
+  return el.value || fallback || '';
+}
+
+function appendReportKpiSheet(wb, type, exportItems) {
+  var items = exportItems || [];
+  var rows = items.map(function(item) { return item && item.row ? item.row : item; }).filter(Boolean);
+  var cats = {};
+  rows.forEach(function(r, idx) {
+    var item = items[idx] || {};
+    cats[r.category || item.category || 'pegawaibinaanformatsistem'] = true;
+  });
+  var totalLuas = rows.reduce(function(sum, r) { return sum + (getReportRowLuas(r) || 0); }, 0);
+  var compliance = getBinaanComplianceKpi(type);
+  var pembinaStats = getReportPembinaStats(getReportPembinaStatsRows());
+  var aoa = [
+    ['Ringkasan KPI', type === 'monthly' ? 'Laporan 3 Bulanan' : 'Laporan Mingguan'],
+    ['Filter Kegiatan', getReportFilterLabel('report-category-filter', 'Semua Kegiatan')],
+    ['Filter Status Input', getReportFilterLabel('report-status-filter', 'Semua Status Input')],
+    ['Filter Unit', getReportFilterLabel('report-unit-filter', 'Semua Unit')],
+    ['Filter Pembina/Pegawai', getReportFilterLabel('report-person-filter', 'Semua Pembina/Pegawai')],
+    ['Filter Kabupaten', getReportFilterLabel('report-kab-filter', 'Semua Kabupaten')],
+    ['Filter Kegiatan Detail', getReportFilterLabel('report-kegiatan-filter', 'Semua Kegiatan')],
+    ['Filter Tahun', getReportFilterLabel('report-year-filter', 'Semua Tahun')],
+    ['Tanggal Mulai', getReportFilterLabel('report-start-filter', '-') || '-'],
+    ['Tanggal Sampai', getReportFilterLabel('report-end-filter', '-') || '-']
+  ];
+  if (type === 'weekly') {
+    aoa.push(['Minggu Mulai', getReportFilterLabel('report-week-start-filter', '-') || '-']);
+    aoa.push(['Minggu Sampai', getReportFilterLabel('report-week-end-filter', '-') || '-']);
+  }
+  aoa = aoa.concat([
+    [],
+    ['KPI', 'Nilai'],
+    ['Total Baris Export', rows.length],
+    ['Kategori Aktif', Object.keys(cats).length],
+    ['Akumulasi Luasan', totalLuas ? formatLuasHa(totalLuas) + ' Ha' : '-'],
+    ['Mode', type === 'monthly' ? 'Bulanan' : 'Mingguan'],
+    ['Hutan Binaan Sudah Input', compliance.reported],
+    ['Hutan Binaan Belum Input', compliance.missing],
+    ['Pembina Terbanyak', pembinaStats.topName],
+    ['Jumlah Input Pembina Terbanyak', pembinaStats.topCount],
+    ['Pembina Terendah', pembinaStats.lowName],
+    ['Jumlah Input Pembina Terendah', pembinaStats.lowCount]
+  ]);
+  var ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [{ wch: 30 }, { wch: 48 }];
+  XLSX.utils.book_append_sheet(wb, ws, 'Ringkasan KPI');
 }
 
 function exportWeeklyBinaanReports() {
@@ -7396,7 +8253,7 @@ function exportWeeklyBinaanReports() {
     return;
   }
   var header = [
-    'No', 'Kabupaten', 'Kecamatan', 'Desa', 'Longitude', 'Latitude',
+    'No', 'Status Input', 'Kabupaten', 'Kecamatan', 'Desa', 'Longitude', 'Latitude',
     'Kegiatan', 'Tahun Kegiatan', 'Luas (Ha)', 'Pembina/Pengampu',
     'Unit Kerja', 'Jabatan', 'DPL',
     'LM_ID', 'LM_Kategori', 'LM_Pelaksana', 'LM_Lokasi', 'LM_Waktu',
@@ -7415,6 +8272,7 @@ function exportWeeklyBinaanReports() {
     var lng = weeklyExportValue(r, 'lng') || weeklyExportValue(r, 'longitude');
     aoa.push([
       idx + 1,
+      r._reportStatus === 'missing' ? 'Belum Input' : 'Sudah Input',
       getReportRowKabupaten(r),
       weeklyExportValue(r, 'kecamatan') || getBinaanField(r._sourceRow, 'kecamatan'),
       weeklyExportValue(r, 'desa') || getBinaanField(r._sourceRow, 'desa'),
@@ -7466,8 +8324,93 @@ function exportWeeklyBinaanReports() {
   ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: aoa.length - 1, c: header.length - 1 } }) };
   var wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Laporan Mingguan');
+  appendReportKpiSheet(wb, 'weekly', rows);
   XLSX.writeFile(wb, 'Export_Laporan_Mingguan_Hutan_Binaan.xlsx');
   showToast('Export laporan mingguan hutan binaan berhasil dibuat.', 'success');
+}
+
+function getYearlyBinaanField(row, base, year) {
+  if (!row) return '';
+  var keys = [
+    base + '_' + year,
+    base + ' ' + year,
+    base + '-' + year,
+    base.toUpperCase() + '_' + year,
+    base.toLowerCase() + '_' + year
+  ];
+  for (var i = 0; i < keys.length; i++) {
+    if (row[keys[i]] !== undefined && row[keys[i]] !== null && String(row[keys[i]]).trim() !== '') return row[keys[i]];
+  }
+  return '';
+}
+
+function exportMonthlyBinaanReports() {
+  if ((WEEKLY_REPORT_STATE.monitorType || 'weekly') !== 'monthly') {
+    showToast('Export ini khusus Laporan 3 Bulanan.', 'error');
+    return;
+  }
+  var sources = getBinaanComplianceSources('monthly');
+  if (!sources.length) {
+    showToast('Tidak ada data hutan binaan pada filter laporan 3 bulanan saat ini.', 'warning');
+    return;
+  }
+  var header = [
+    'No', 'Status Input', 'Kabupaten', 'Kecamatan', 'Desa', 'Longitude', 'Latitude',
+    'Kegiatan', 'Tahun Kegiatan', 'Luas (Ha)', 'Pembina/Pengampu',
+    'Unit Kerja', 'Jabatan', 'DPL'
+  ];
+  PHOTO_YEARS.forEach(function(year) {
+    header.push('Foto_' + year, 'Tanggal_' + year);
+  });
+  header.push('Keterangan');
+  PHOTO_YEARS.forEach(function(year) {
+    ['Tutupan', 'Jenis', 'Kerapatan', 'Lereng', 'Umur', 'Pengelolaan', 'Ekosistem', 'Usulan'].forEach(function(base) {
+      header.push(base + '_' + year);
+    });
+  });
+
+  var aoa = [header];
+  sources.forEach(function(item, idx) {
+    var r = item.row;
+    var coords = getPhotoCoords(r);
+    var baseRow = [
+      idx + 1,
+      item.status === 'missing' ? 'Belum Input' : 'Sudah Input',
+      getReportRowKabupaten(r),
+      getBinaanField(r, 'kecamatan') || r['Kecamatan'] || '',
+      getBinaanField(r, 'desa') || r['Desa/Kelurahan'] || r['Desa/ Kelurahan'] || r['Desa'] || '',
+      coords.lng || '',
+      coords.lat || '',
+      getReportRowKegiatan(r),
+      getReportRowTahun(r),
+      getBinaanLuasRaw(r) || (getReportRowLuas(r) ? formatLuasHa(getReportRowLuas(r)) : ''),
+      getReportRowPerson(r),
+      getReportRowUnit(r),
+      getBinaanField(r, 'jabatan'),
+      r.DPL || r.MDPL || ''
+    ];
+    PHOTO_YEARS.forEach(function(year) {
+      baseRow.push(r['Foto_' + year] || '', r['Tanggal_' + year] || '');
+    });
+    baseRow.push(r.Keterangan || r.keterangan || r['Keterangan Lokasi'] || '');
+    PHOTO_YEARS.forEach(function(year) {
+      ['Tutupan', 'Jenis', 'Kerapatan', 'Lereng', 'Umur', 'Pengelolaan', 'Ekosistem', 'Usulan'].forEach(function(base) {
+        baseRow.push(getYearlyBinaanField(r, base, year));
+      });
+    });
+    aoa.push(baseRow);
+  });
+
+  var ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = header.map(function(h) {
+    return { wch: Math.max(10, Math.min(32, String(h).length + 3)) };
+  });
+  ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: aoa.length - 1, c: header.length - 1 } }) };
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Hutan Binaan 3 Bulanan');
+  appendReportKpiSheet(wb, 'monthly', sources);
+  XLSX.writeFile(wb, 'Export_Laporan_3_Bulanan_Hutan_Binaan.xlsx');
+  showToast('Export laporan 3 bulanan hutan binaan berhasil dibuat.', 'success');
 }
 
 function previewMonthlyMonitorPhoto(idx) {
@@ -7475,10 +8418,10 @@ function previewMonthlyMonitorPhoto(idx) {
   if (!row || !row.fotoUrl) return;
   LB_STATE.photos = [normalizeImageUrl(row.fotoUrl)];
   LB_STATE.dates = [row.waktu || ''];
-  LB_STATE.years = [row.tahun || ''];
+  LB_STATE.years = [row.fotoTahun || row.tahun || ''];
   LB_STATE.angles = [row.sudut || ''];
   LB_STATE.idx = 0;
-  LB_STATE.year = row.tahun || '';
+  LB_STATE.year = row.fotoTahun || row.tahun || '';
   LB_STATE.context = 'single';
   LB_STATE.locName = '<strong style="color:#fff;">' + escapeHtml(row.nama || row.kategoriLabel || 'Laporan 3 Bulanan') + '</strong><br/>' + escapeHtml(row.unit || '');
   document.getElementById('photo-lightbox').classList.add('open');
