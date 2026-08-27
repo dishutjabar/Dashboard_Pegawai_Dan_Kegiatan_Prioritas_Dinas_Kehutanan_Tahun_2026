@@ -1,6 +1,6 @@
-﻿/* GeoHutan Service Worker */
+/* GeoHutan Service Worker */
 
-const CACHE_VERSION = 'geohutan-2026-report-monitor-v11.0.3.V.1.1';
+const CACHE_VERSION = 'geohutan-2026-report-monitor-v10.0.0.v1.1';
 const CACHE_NAME = `geohutan-static-${CACHE_VERSION}`;
 const CACHE_DYNAMIC = `geohutan-dynamic-${CACHE_VERSION}`;
 
@@ -13,7 +13,6 @@ const STATIC_ASSETS = [
   './app-features.js',
   './js/ai.js',
   './manifest.json',
-  './dashboard/dashboard-pimpinan.html',
   './img/pwa-icon-192.png',
   './img/pwa-icon-512.png'
 ];

@@ -1,4 +1,4 @@
-﻿// Custom ShapeMarker Extension for Canvas
+// Custom ShapeMarker Extension for Canvas
 if (typeof L !== 'undefined' && L.Canvas) {
     L.Canvas.include({
         _updateShapeMarker: function (layer) {
@@ -636,25 +636,8 @@ function unlockDashboard(user) {
   if (portal) portal.classList.add("hidden");
   document.body.classList.add("auth-unlocked");
   updateAuthUserUI(user);
-  
-  // REDIRECT UNTUK ROLE PIMPINAN (Group 1, 2, 3)
-  var group = getRoleGroup(user && user.role);
-  if (group <= 3) {
-    var dashUrl = 'dashboard/dashboard-pimpinan.html';
-    var container = document.getElementById('pimpinan-dashboard-container');
-    var frame = document.getElementById('pimpinan-dashboard-frame');
-    if (container && frame) {
-      container.style.display = 'block';
-      if (frame.src.indexOf(dashUrl) === -1) frame.src = dashUrl;
-    }
-  }
-  
   ensureMobileCleanLayout_(true);
-  renderUserCalendar();
-  checkMonthlyReportedNotification();
-  setTimeout(function() { ensureMobileCleanLayout_(true);
-  renderUserCalendar();
-  checkMonthlyReportedNotification(); }, 120);
+  setTimeout(function() { ensureMobileCleanLayout_(true); }, 120);
   if (typeof fetchSpatialFileList === "function") fetchSpatialFileList();
   ensureBackendDplColumns();
 }
@@ -665,8 +648,6 @@ function lockDashboard(message) {
   clearStoredAuth();
   document.body.classList.remove("auth-unlocked");
   ensureMobileCleanLayout_(true);
-  renderUserCalendar();
-  checkMonthlyReportedNotification();
   updateAuthUserUI(null);
   var portal = document.getElementById("auth-portal");
   if (portal) portal.classList.remove("hidden");
@@ -6447,15 +6428,12 @@ function shouldRequireWeeklyGpsBeforeCamera() {
 
 function mergeWeeklyPhotoMetadata(exifMeta, gpsMeta) {
   exifMeta = exifMeta || {};
-  var isMobile = shouldRequireWeeklyGpsBeforeCamera();
   var gpsOk = gpsMeta && gpsMeta.lat != null && gpsMeta.lng != null;
-  var exifHasCoords = exifMeta && exifMeta.lat != null && exifMeta.lng != null;
-  
   return {
     date: exifMeta.date || (gpsOk && gpsMeta.date ? gpsMeta.date : ''),
-    lat: isMobile ? (gpsOk ? gpsMeta.lat : exifMeta.lat) : (exifHasCoords ? exifMeta.lat : (gpsOk ? gpsMeta.lat : null)),
-    lng: isMobile ? (gpsOk ? gpsMeta.lng : exifMeta.lng) : (exifHasCoords ? exifMeta.lng : (gpsOk ? gpsMeta.lng : null)),
-    source: isMobile ? (gpsOk ? 'GPS lokasi perangkat' : 'Metadata kamera/EXIF') : (exifHasCoords ? 'Metadata foto/EXIF' : 'GPS lokasi perangkat'),
+    lat: gpsOk ? gpsMeta.lat : exifMeta.lat,
+    lng: gpsOk ? gpsMeta.lng : exifMeta.lng,
+    source: gpsOk ? 'GPS lokasi perangkat' : 'Metadata kamera/EXIF',
     accuracy: gpsOk ? gpsMeta.accuracy : '',
     exifDate: exifMeta.date || '',
     exifLat: exifMeta.lat,
@@ -7397,7 +7375,7 @@ function openReportMonitor(type) {
   if (modal) modal.classList.add('open');
   initReportMonitorSelect2();
   if (categoryFilter) setReportFilterValues(categoryFilter, ['pegawaibinaanformatsistem'], true);
-  if (statusFilter) setReportFilterValues(statusFilter, ['reported'], true);
+  if (statusFilter) setReportFilterValues(statusFilter, [], true);
   if (type === 'monthly') {
     if (weekStart) weekStart.value = '';
     if (weekEnd) weekEnd.value = '';
@@ -8143,9 +8121,13 @@ function renderReportMonitorTable() {
     var compliance = getBinaanComplianceKpi(type);
     var pembinaStats = getReportPembinaStats(getReportPembinaStatsRows());
     kpi.innerHTML = '<div><strong>' + rows.length + '</strong><span>Total Laporan</span></div>' +
+      '<div><strong>' + Object.keys(cats).length + '</strong><span>Kategori Aktif</span></div>' +
+      '<div><strong>' + (totalLuas ? formatLuasHa(totalLuas) + ' Ha' : '-') + '</strong><span>Akumulasi Luasan</span></div>' +
+      '<div><strong>' + (type === 'monthly' ? 'Bulanan' : 'Mingguan') + '</strong><span>Mode</span></div>' +
       '<div><strong>' + compliance.reported + '</strong><span>Hutan Binaan Sudah Input</span></div>' +
       '<div><strong>' + compliance.missing + '</strong><span>Hutan Binaan Belum Input</span></div>' +
-      '<div><strong>' + escapeHtml(pembinaStats.topName) + '</strong><span>Pembina Terbanyak (' + pembinaStats.topCount + ')</span></div>';
+      '<div><strong>' + escapeHtml(pembinaStats.topName) + '</strong><span>Pembina Terbanyak (' + pembinaStats.topCount + ')</span></div>' +
+      '<div><strong>' + escapeHtml(pembinaStats.lowName) + '</strong><span>Pembina Terendah (' + pembinaStats.lowCount + ')</span></div>';
   }
   if (type === 'monthly') {
     head.innerHTML = '<tr><th>Status</th><th>Kegiatan</th><th>Lokasi & Administratif</th><th>Unit</th><th>Pembina/Pegawai</th><th>Luas</th><th>Foto</th><th>Tanggal</th><th>Aksi</th></tr>';
@@ -9112,146 +9094,3 @@ function openDrawerFromFeature(featId, type) {
 
 
 
-
-function renderUserCalendar() {
-  var user = getStoredAuthUser();
-  if (!user) return;
-  var group = getRoleGroup(user.role);
-  if (group <= 3) return; // Hanya untuk non-pimpinan
-  
-  var topbarRight = document.querySelector('.topbar-right');
-  if (!topbarRight) return;
-  
-  var existing = document.getElementById('user-weekly-calendar');
-  if (existing) existing.remove();
-  
-  var wrap = document.createElement('div');
-  wrap.id = 'user-weekly-calendar';
-  wrap.style.cssText = 'display:flex; gap:4px; align-items:center; margin-right:15px; background:rgba(255,255,255,0.1); padding:4px 8px; border-radius:6px; font-size:11px; font-weight:bold;';
-  
-  var today = new Date();
-  var currentDay = today.getDay(); // 0 = Minggu, 1 = Senin
-  
-  // Senin -> Minggu
-  var days = ['Sn', 'Sl', 'Rb', 'Km', 'Jm', 'Sb', 'Mg'];
-  var todayIndex = currentDay === 0 ? 6 : currentDay - 1;
-  
-  // Hitung apakah sudah laporan minggu ini
-  var hasReported = checkUserReportedThisWeek();
-  
-  var html = '<span style="color:#fff;margin-right:4px;">Minggu Ini:</span>';
-  days.forEach(function(day, idx) {
-    var bg = '#ccc';
-    var color = '#333';
-    if (idx === todayIndex) {
-      bg = hasReported ? '#43a047' : '#e53935';
-      color = '#fff';
-    } else if (idx < todayIndex) {
-      bg = hasReported ? '#43a047' : '#e53935';
-      color = '#fff';
-    }
-    
-    html += '<div style="width:20px;height:20px;display:flex;align-items:center;justify-content:center;border-radius:3px;background:' + bg + ';color:' + color + ';" title="' + (hasReported ? 'Sudah Input' : 'Belum Input') + '">' + day + '</div>';
-  });
-  
-  wrap.innerHTML = html;
-  
-  var clock = document.getElementById('clock');
-  if (clock) {
-    topbarRight.insertBefore(wrap, clock);
-  } else {
-    topbarRight.insertBefore(wrap, topbarRight.firstChild);
-  }
-}
-
-function checkUserReportedThisWeek() {
-  // Cek jika ada source yang statusnya dilaporkan
-  // atau kalau user spesifik udah melaporkan sesuatu minggu ini
-  // Berdasarkan user saat ini, tapi karena app-features memuat SEMUA data, 
-  // kita cek di DATA.pegawaiBinaan yang pembina == current user.nama
-  var user = getStoredAuthUser();
-  if (!user || !user.nama) return false;
-  
-  var reported = false;
-  var binaanUser = (DATA.pegawaiBinaan || []).filter(function(r) {
-    return getReportRowPerson(r) === user.nama;
-  });
-  
-  binaanUser.forEach(function(r) {
-    if (sourceHasWeeklyReport(r)) reported = true;
-  });
-  return reported;
-}
-
-
-function checkMonthlyReportedNotification() {
-  var user = getStoredAuthUser();
-  if (!user || !user.nama) return;
-  var group = getRoleGroup(user.role);
-  if (group <= 3) return; // Not for pimpinan
-  
-  setTimeout(function() {
-    var reported = false;
-    var binaanUser = (DATA.pegawaiBinaan || []).filter(function(r) {
-      return getReportRowPerson(r) === user.nama;
-    });
-    
-    binaanUser.forEach(function(r) {
-      if (sourceHasMonthlyPhoto(r)) reported = true;
-    });
-    
-    if (reported) {
-      if (typeof showToast === 'function') {
-        showToast('Anda sudah menginput laporan 3 bulanan.', 'success');
-      }
-    }
-  }, 2000);
-}
-
-function checkWeeklyGlobalLimit() {
-  var user = getStoredAuthUser();
-  if (!user || !user.nama) return false;
-  
-  var reported = false;
-  var binaanUser = (DATA.pegawaiBinaan || []).filter(function(r) {
-    return getReportRowPerson(r) === user.nama;
-  });
-  
-  binaanUser.forEach(function(r) {
-    if (sourceHasWeeklyReport(r)) reported = true;
-  });
-  return reported;
-}
-
-
-window.getGeoHutanData = function() {
-  // Extract data from DATA global object in app-core.js
-  var mapData = [];
-  var pembinaData = [];
-  
-  if (window.DATA && window.DATA.pegawaiBinaan) {
-    // Generate mapData dynamically or use static mapping if needed
-    // The dashboard already has static fallback for mapData, we can just supply pembinaData
-  }
-  
-  // Actually, we can return the exact structure the dashboard expects
-  return {
-     // Let dashboard use its own static mapData
-    pembinaData: window.DATA && window.DATA.pegawaiBinaan ? window.DATA.pegawaiBinaan.map(function(r, i) {
-      return {
-        no: i + 1,
-        nama: r['Nama Pembina/Pegawai'] || r['Nama'] || 'Anonim',
-        cdk: r['Instansi / Unit Kerja'] || r['Unit'] || 'N/A',
-        lokasi: (r['Desa/Kelurahan'] || r['Desa/ Kelurahan'] || '') + ', ' + (r['Kecamatan'] || ''),
-        luas: r['Luas (Ha)'] || 0,
-        mingguan: sourceHasWeeklyReport(r) ? 1 : 0,
-        linimasa: sourceHasMonthlyPhoto(r) ? 1 : 0
-      };
-    }) : null
-  };
-};
-
-window.closePimpinanDashboard = function() {
-  var container = document.getElementById('pimpinan-dashboard-container');
-  if (container) container.style.display = 'none';
-};

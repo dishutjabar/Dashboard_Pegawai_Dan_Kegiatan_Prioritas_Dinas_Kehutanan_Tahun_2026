@@ -1,4 +1,4 @@
-﻿/* ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â GeoHutan Jabar ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“ Core ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â */
+/* ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â GeoHutan Jabar ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“ Core ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â */
 
 /* 0. Globals */
 var mapObj, GEO = null, GEO_LAYER = null, GEO_LOAD_PROMISE = null, GEO_FEATURE_BOUNDS = null, LOADED = 0, TOTAL = 21, CHARTS = {}, RTIMER = null;
@@ -18,7 +18,7 @@ var HEATMAP_LAYER = null;
 var BUFFER_LAYERS = null;
 var DYNAMIC_SOURCES = [];
 
-var POP_COLOR = { pjl: '#FFE600', per: '#1e88e5', peg: '#8bc34a', jum: '#ff80ff', pegb: '#fb8c00' };
+var POP_COLOR = { pjl: '#43a047', per: '#1e88e5', peg: '#8bc34a', jum: '#ff80ff', pegb: '#fb8c00' };
 var POP_LABEL = {
   pjl: 'Petugas Jaga Leuweung',
   per: 'Lokasi Persemaian Jaga Leuweung',
