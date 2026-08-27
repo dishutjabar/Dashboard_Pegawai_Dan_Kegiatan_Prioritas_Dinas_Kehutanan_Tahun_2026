@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Monitoring Hutan Binaan</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body { background-color: #11161c; color: #ffffff; font-family: 'Inter', sans-serif; margin: 0; overflow-x: hidden; }
+        
+        /* Layout Variables */
+        :root {
+            --bg-dark: #11161c;
+            --bg-card: #141921;
+            --bg-header: #141921;
+            --accent-green: #2d8c33;
+            --accent-yellow: #fcd34d;
+            --text-muted: #8b9bb4;
+            --sidebar-width: 240px;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: var(--bg-dark); }
+        ::-webkit-scrollbar-thumb { background: #374151; border-radius: 4px; }
+
+        /* Typography */
+        .text-xxs { font-size: 0.65rem; line-height: 1rem; }
+        
+        /* Components */
+        .sidebar { background-color: var(--bg-dark); width: var(--sidebar-width); height: 100vh; position: fixed; left: 0; top: 0; padding-top: 20px; z-index: 50; transition: transform 0.3s; border-right: 1px solid #1f2937; }
+        .main-content { margin-left: var(--sidebar-width); padding: 0; min-height: 100vh; background-color: var(--bg-dark); }
+        .topbar { background-color: var(--bg-header); padding: 12px 24px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #1f2937; position: sticky; top: 0; z-index: 40;}
+        
+        .nav-item { padding: 12px 20px; margin: 4px 12px; cursor: pointer; display: flex; align-items: center; gap: 12px; color: var(--text-muted); text-decoration: none; border-radius: 8px; transition: all 0.2s; font-size: 14px;}
+        .nav-item:hover { color: #fff; background-color: rgba(255,255,255,0.05); }
+        .nav-item.active { background-color: var(--accent-green); color: #fff; font-weight: 500; box-shadow: 0 4px 12px rgba(45,140,51,0.3); }
+        .nav-dot { width: 8px; height: 8px; border-radius: 50%; background-color: currentColor; opacity: 0.7; }
+        .nav-item.active .nav-dot { background-color: #fff; opacity: 1;}
+
+        .card { background-color: var(--bg-card); border-radius: 12px; padding: 16px; border: 1px solid rgba(255,255,255,0.05); }
+        .card-title { font-size: 14px; font-weight: 600; color: #fff; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;}
+        
+        #map { height: 350px; border-radius: 8px; background: #0a0e14; z-index: 1;}
+        .leaflet-container { font-family: 'Inter', sans-serif; }
+        .leaflet-popup-content-wrapper { background: var(--bg-card); color: #fff; border-radius: 8px; }
+        .leaflet-popup-tip { background: var(--bg-card); }
+        .leaflet-tooltip { background: rgba(24, 31, 38, 0.95); color: #fff; border: 1px solid #374151; border-radius: 6px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); font-family: 'Inter', sans-serif;}
+        
+        /* Table */
+        table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; }
+        th { background-color: rgba(0,0,0,0.2); font-weight: 500; color: var(--text-muted); padding: 10px 12px; text-align: left; border-bottom: 1px solid #2d3748; }
+        td { padding: 10px 12px; border-bottom: 1px solid #1f2937; color: #e2e8f0; }
+        tr:hover td { background-color: rgba(255,255,255,0.02); }
+        
+        .badge { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; font-size: 11px; font-weight: bold; background: rgba(255,255,255,0.1);}
+
+        /* Mobile */
+        .mobile-toggle { display: none; background: none; border: none; color: #fff; font-size: 24px; cursor: pointer; }
+        @media (max-width: 1024px) {
+            .sidebar { transform: translateX(-100%); }
+            .sidebar.open { transform: translateX(0); box-shadow: 4px 0 24px rgba(0,0,0,0.5); }
+            .main-content { margin-left: 0; }
+            .mobile-toggle { display: block; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="sidebar" id="sidebar">
+    <div class="px-6 mb-8 flex items-center gap-3">
+        <div class="w-8 h-8 rounded-full flex items-center justify-center text-white" style="background: var(--accent-green);">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 22h20L12 2z"/></svg>
+        </div>
+        <div>
+            <div class="text-white font-bold tracking-wide">GeoHutan Jabar</div>
+            <div class="text-xxs text-gray-400 leading-tight">Dinas Kehutanan Provinsi Jawa Barat</div>
+        </div>
+    </div>
+    <div class="flex flex-col gap-1">
+        <a class="nav-item active" onclick="showDashboard()"><div class="nav-dot"></div> Dashboard</a>
+        <a class="nav-item" onclick="openMainAppAction('peta')"><div class="nav-dot"></div> Peta GeoHutan</a>
+        <a class="nav-item" onclick="openMainAppAction('mingguan')"><div class="nav-dot"></div> Aktivitas Mingguan</a>
+        <a class="nav-item" onclick="openMainAppAction('bulanan')"><div class="nav-dot"></div> Linimasa 3 Bulanan</a>
+        <a class="nav-item" onclick="scrollToTable()"><div class="nav-dot"></div> Data Pembina</a>
+        <a class="nav-item"><div class="nav-dot"></div> Karbon</a>
+        <a class="nav-item"><div class="nav-dot"></div> Pengaturan</a>
+        <div class="my-3 mx-5 border-t border-gray-800"></div>
+        <a class="nav-item" onclick="openMainAppAction('gantipass')"><div class="nav-dot"></div> Ganti Password</a>
+        <a class="nav-item" onclick="openMainAppAction('lupapass')"><div class="nav-dot"></div> Lupa Password</a>
+        <a class="nav-item text-red-400" onclick="openMainAppAction('keluar')"><div class="nav-dot" style="background:#f87171;"></div> Keluar</a>
+    </div>
+</div>
+
+<div class="main-content">
+    <div class="topbar">
+        <div class="flex items-center gap-4">
+            <button class="mobile-toggle" onclick="document.getElementById('sidebar').classList.toggle('open')">&#9776;</button>
+            <div>
+                <h1 class="text-xl font-bold text-white">Dashboard Monitoring Hutan Binaan</h1>
+            </div>
+        </div>
+        <div class="flex items-center gap-6">
+            <div class="text-right hidden sm:block">
+                <div class="text-xs text-gray-400" id="current-datetime"></div>
+            </div>
+            <div class="flex items-center gap-3">
+                <div class="text-right">
+                    <div class="font-semibold text-white text-sm" id="user-role">Pimpinan</div>
+                    <div class="text-xs text-gray-400" id="user-name">Admin Utama</div>
+                </div>
+                <div class="w-9 h-9 rounded-full bg-green-800 flex items-center justify-center text-white font-bold">P</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="p-6">
+        <!-- Top Section: Map & Feeds -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+            <!-- Map Area -->
+            <div class="card lg:col-span-2 relative">
+                <div class="card-title">Peta Sebaran Aktivitas</div>
+                <div id="map"></div>
+                <!-- Filter Overlay on Map -->
+                <div class="absolute bottom-6 left-6 right-6 bg-gray-900 bg-opacity-90 rounded-lg p-3 flex flex-wrap gap-4 items-end border border-gray-700 backdrop-blur z-[400]" style="z-index: 400;">
+                    <div class="flex items-center gap-2">
+                        <div class="w-3 h-3 rounded-full bg-blue-500"></div>
+                        <span class="text-xs text-white">Filter Data</span>
+                    </div>
+                    <div class="flex-1 min-w-[120px]">
+                        <label class="block text-xxs text-gray-400 mb-1">Cabang Dinas Kehutanan / UPTD</label>
+                        <select id="map-filter-cdk" class="w-full bg-gray-800 border-none rounded p-1.5 text-xs text-white" onchange="applyGlobalFilter()">
+                            <option value="all">Semua Wilayah</option>
+                        </select>
+                    </div>
+                    <div class="flex-1 min-w-[120px]">
+                        <label class="block text-xxs text-gray-400 mb-1">Jabatan</label>
+                        <select id="map-filter-jabatan" class="w-full bg-gray-800 border-none rounded p-1.5 text-xs text-white" onchange="applyGlobalFilter()">
+                            <option value="all">Semua</option>
+                        </select>
+                    </div>
+                    <div class="flex-1 min-w-[120px]">
+                        <label class="block text-xxs text-gray-400 mb-1">Filter Tanggal</label>
+                        <input type="month" id="map-filter-tgl" class="w-full bg-gray-800 border-none rounded p-1.5 text-xs text-white" onchange="applyGlobalFilter()">
+                    </div>
+                    <div>
+                        <button onclick="resetGlobalFilter()" class="text-xs text-blue-400 hover:text-blue-300">Terapkan - Reset</button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Activity Feed -->
+            <div class="card flex flex-col">
+                <div class="card-title">
+                    <span>Aktivitas Terbaru</span>
+                    <span class="text-xs text-green-400 cursor-pointer">Lihat Semua</span>
+                </div>
+                <div class="flex-1 flex flex-col gap-3 overflow-y-auto" id="activity-feed">
+                    <!-- Populated by JS -->
+                </div>
+                <!-- Feed Pagination -->
+                <div class="flex justify-center gap-2 mt-4 pt-3 border-t border-gray-800">
+                    <button class="w-6 h-6 rounded bg-gray-800 flex items-center justify-center text-xs hover:bg-gray-700" onclick="prevActivity()">&#9664;</button>
+                    <span class="text-xs text-gray-400 flex items-center" id="activity-page">1 / 1</span>
+                    <button class="w-6 h-6 rounded bg-gray-800 flex items-center justify-center text-xs hover:bg-gray-700" onclick="nextActivity()">&#9654;</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- KPI Row -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6" id="kpi-container">
+            <!-- Laporan Mingguan -->
+            <div class="card">
+                <div class="text-xs text-gray-400 mb-2">Laporan Aktivitas Mingguan</div>
+                <div class="flex items-end gap-2 mb-2">
+                    <span class="text-3xl font-bold text-white" id="kpi-mingguan">0</span>
+                    <span class="text-sm text-gray-500 mb-1">laporan</span>
+                </div>
+                <div class="text-xs text-gray-500 mb-3">dari 1763 titik hutan binaan.</div>
+                <div class="text-xxs text-yellow-400">Periode : Minggu Berjalan ▲ <span id="kpi-p-mingguan">0</span>% dari seluruh titik hutan binaan.</div>
+            </div>
+            <!-- Laporan Bulanan -->
+            <div class="card">
+                <div class="text-xs text-gray-400 mb-2">Laporan Aktivitas Bulanan</div>
+                <div class="flex items-end gap-2 mb-2">
+                    <span class="text-3xl font-bold text-white" id="kpi-bulanan">0</span>
+                    <span class="text-sm text-gray-500 mb-1">laporan</span>
+                </div>
+                <div class="text-xs text-gray-500 mb-3">dari 1763 titik hutan binaan.</div>
+                <div class="text-xxs text-yellow-400">Periode : Triwulan Berjalan ▲ <span id="kpi-p-bulanan">0</span>% dari seluruh titik hutan binaan.</div>
+            </div>
+            <!-- Pembina Terbanyak -->
+            <div class="card">
+                <div class="text-xs text-gray-400 mb-2">Pembina dengan Input Terbanyak</div>
+                <div class="text-2xl font-bold text-white mb-1 truncate" id="kpi-pembina-nama">-</div>
+                <div class="text-xs text-gray-500 mb-3">menginput : <span id="kpi-pembina-val">0</span> laporan</div>
+                <div class="text-xxs text-yellow-400">Periode : <span id="kpi-period-month">Bulan Ini</span> ▲ 8% dari laporan bulan lalu.</div>
+            </div>
+            <!-- CDK Terbanyak -->
+            <div class="card">
+                <div class="text-xs text-gray-400 mb-2">CDK dengan Input Terbanyak</div>
+                <div class="text-2xl font-bold text-white mb-1 truncate" id="kpi-cdk-nama">-</div>
+                <div class="text-xs text-gray-500 mb-3">menginput : <span id="kpi-cdk-val">0</span> laporan</div>
+                <div class="text-xxs text-yellow-400">Periode : <span id="kpi-period-month2">Bulan Ini</span> ▲ <span id="kpi-p-cdk">0</span>% dari total laporan.</div>
+            </div>
+        </div>
+
+        <!-- Bottom Section: Chart & Stats -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+            <!-- Chart -->
+            <div class="card lg:col-span-2">
+                <div class="card-title">
+                    <span>Statistik CDK/UPTD Yang sudah Melapor</span>
+                    <div class="flex gap-4">
+                        <div class="flex items-center gap-2"><div class="w-3 h-3 bg-yellow-400 rounded"></div><span class="text-xs">Mingguan</span></div>
+                        <div class="flex items-center gap-2"><div class="w-3 h-3 bg-blue-500 rounded-full"></div><span class="text-xs">3 Bulanan</span></div>
+                    </div>
+                </div>
+                <div class="h-64 relative">
+                    <canvas id="cdkChart"></canvas>
+                </div>
+                <div class="text-xxs text-gray-500 mt-2 text-center">Periode : Triwulan ke III (Default Mengikuti Waktu)</div>
+            </div>
+
+            <!-- Global Stats List -->
+            <div class="card">
+                <div class="card-title">Statistik Data Keseluruhan</div>
+                <div class="flex flex-col justify-between h-64">
+                    <div class="space-y-4 mt-2">
+                        <div class="flex justify-between items-center text-sm"><div class="flex items-center gap-2 text-green-400"><span>🌿</span> Petugas Jaga Leuweung</div> <span class="font-bold">836 Orang</span></div>
+                        <div class="flex justify-between items-center text-sm"><div class="flex items-center gap-2 text-green-400"><span>🌱</span> Persemaian</div> <span class="font-bold">755 Lokasi</span></div>
+                        <div class="flex justify-between items-center text-sm"><div class="flex items-center gap-2 text-gray-400"><span>👷</span> Pegawai Dinas Kehutanan</div> <span class="font-bold text-green-400">623 Orang</span></div>
+                        <div class="flex justify-between items-center text-sm"><div class="flex items-center gap-2 text-purple-400"><span>⛺</span> Juna Permanen</div> <span class="font-bold">29 Lokasi</span></div>
+                        <div class="flex justify-between items-center text-sm"><div class="flex items-center gap-2 text-purple-400"><span>📍</span> Hutan Binaan</div> <span class="font-bold text-green-400">1763 Titik</span></div>
+                        <div class="flex justify-between items-center text-sm"><div class="flex items-center gap-2 text-purple-400"><span>🗺️</span> Luasan Hektar Hutan Binaan</div> <span class="font-bold text-green-400">5.363,68 Ha</span></div>
+                    </div>
+                    <div class="mt-4 pt-4 border-t border-gray-800 flex justify-between items-center">
+                        <span class="text-xs text-gray-500">Periode Monitoring<br>Agustus 2026</span>
+                        <button onclick="openMainAppAction('peta')" class="text-xs bg-green-700 hover:bg-green-600 px-3 py-1.5 rounded transition">Lihat Laporan ></button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Data Pembina Table -->
+        <div class="card" id="tabel-pembina-section">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+                <div>
+                    <h2 class="text-lg font-bold text-white">Statistik Data Pembina Yang sudah Melapor</h2>
+                    <div class="flex items-center gap-4 mt-2">
+                        <div class="bg-gray-800 rounded px-3 py-1 flex items-center gap-2"><div class="w-2 h-2 rounded-full bg-yellow-400"></div><span class="text-xs">Total Pembina: <b id="tb-total-pembina">0</b></span></div>
+                        <div class="bg-gray-800 rounded px-3 py-1 flex items-center gap-2"><div class="w-2 h-2 rounded-full bg-blue-400"></div><span class="text-xs">Hutan Binaan: <b id="tb-total-hutan">0</b></span></div>
+                        <div class="bg-gray-800 rounded px-3 py-1 flex items-center gap-2"><div class="w-2 h-2 rounded-full bg-green-400"></div><span class="text-xs">Luasan: <b id="tb-total-luas">0 Ha</b></span></div>
+                    </div>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <select id="table-filter-sort" class="bg-gray-800 border border-gray-700 rounded p-1.5 text-xs text-white" onchange="applyTableFilter()">
+                        <option value="az">A-Z (Nama)</option>
+                        <option value="za">Z-A (Nama)</option>
+                        <option value="high">Tertinggi (Laporan)</option>
+                        <option value="low">Terendah (Laporan)</option>
+                    </select>
+                    <button onclick="exportExcel()" class="bg-green-600 hover:bg-green-500 text-white px-3 py-1.5 rounded text-xs transition shadow-lg">Export XLS</button>
+                </div>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table id="pembinaTable">
+                    <thead>
+                        <tr>
+                            <th>NO</th>
+                            <th>Nama Pembina</th>
+                            <th>CDK</th>
+                            <th>Lokasi</th>
+                            <th>Luas</th>
+                            <th>Total Laporan Mingguan</th>
+                            <th>Total Laporan Linimasa</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pembina-tbody">
+                        <!-- Populated by JS -->
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Table Pagination -->
+            <div class="flex justify-between items-center mt-4 pt-4 border-t border-gray-800">
+                <div class="text-xs text-gray-500" id="table-info">Menampilkan 0 - 0 dari 0 data</div>
+                <div class="flex gap-2">
+                    <button onclick="prevTablePage()" class="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 rounded text-xs transition">Sebelumnya</button>
+                    <div class="px-3 py-1.5 text-xs" id="table-page">1 / 1</div>
+                    <button onclick="nextTablePage()" class="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 rounded text-xs transition">Berikutnya</button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<script>
+    // --- UTILS & CLOCK ---
+    function updateDateTime() {
+        const now = new Date();
+        const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' };
+        document.getElementById('current-datetime').textContent = now.toLocaleDateString('id-ID', options) + ' WIB';
+        
+        const m = now.toLocaleString('id-ID', { month: 'long' });
+        const y = now.getFullYear();
+        document.getElementById('kpi-period-month').textContent = m + ' ' + y;
+        document.getElementById('kpi-period-month2').textContent = m + ' ' + y;
+    }
+    updateDateTime(); setInterval(updateDateTime, 60000);
+
+    // --- PARENT COMMUNICATION ---
+    const parentWin = window.parent !== window ? window.parent : window.opener;
+    function openMainAppAction(action) {
+        if (parentWin) {
+            if (typeof parentWin.closePimpinanDashboard === 'function') parentWin.closePimpinanDashboard();
+            parentWin.focus();
+            if (action === 'mingguan' && typeof parentWin.openReportMonitor === 'function') parentWin.openReportMonitor('weekly');
+            if (action === 'bulanan' && typeof parentWin.openReportMonitor === 'function') parentWin.openReportMonitor('monthly');
+            if (action === 'gantipass' && typeof parentWin.openCredentialModal === 'function') parentWin.openCredentialModal();
+            if (action === 'lupapass' && typeof parentWin.openForgotPasswordModal === 'function') parentWin.openForgotPasswordModal();
+            if (action === 'keluar' && typeof parentWin.logoutGeoHutan === 'function') parentWin.logoutGeoHutan();
+        } else {
+            alert("Aksi ini membutuhkan aplikasi utama GeoHutan.");
+        }
+    }
+    
+    function scrollToTable() {
+        document.getElementById('tabel-pembina-section').scrollIntoView({behavior: 'smooth'});
+        if(window.innerWidth <= 1024) document.getElementById('sidebar').classList.remove('open');
+    }
+
+    // --- DATA FETCH & STATE ---
+    const cdkCoords = [
+        { id: "CDK 1", lat: -6.603102, lng: 106.806561 }, { id: "CDK 2", lat: -6.560615, lng: 107.447188 },
+        { id: "CDK 3", lat: -6.905681, lng: 106.983354 }, { id: "CDK 4", lat: -6.744432, lng: 107.062124 },
+        { id: "CDK 5", lat: -7.214439, lng: 107.901382 }, { id: "CDK 6", lat: -7.370324, lng: 108.220195 },
+        { id: "CDK 7", lat: -6.969359, lng: 108.518847 }, { id: "CDK 8", lat: -6.969401, lng: 108.518727 },
+        { id: "CDK 9", lat: -6.835586, lng: 107.907709 }, { id: "SPTH", lat: -6.932772, lng: 107.771134 },
+        { id: "P2HH", lat: -6.783905, lng: 108.625826 }, { id: "Tahura", lat: -6.858743, lng: 107.630705 },
+        { id: "Sekre", lat: -6.938027, lng: 107.671926 }
+    ];
+
+    let globalData = [];
+    let mapDataAggr = [];
+
+    function initData() {
+        if(parentWin && typeof parentWin.getGeoHutanData === 'function') {
+            const ext = parentWin.getGeoHutanData();
+            if(ext && ext.pembinaData) globalData = ext.pembinaData;
+            
+            // Set User Info
+            if(parentWin.getStoredAuthUser) {
+                const usr = parentWin.getStoredAuthUser();
+                if(usr) {
+                    document.getElementById('user-role').textContent = usr.role || 'Pimpinan';
+                    document.getElementById('user-name').textContent = usr.nama || 'Admin';
+                }
+            }
+        }
+        
+        // Generate Dummy if empty
+        if(globalData.length === 0) {
+            globalData = Array.from({length: 450}).map((_, i) => {
+                const c = cdkCoords[Math.floor(Math.random()*cdkCoords.length)].id;
+                return {
+                    no: i+1, nama: 'Pegawai ' + i, cdk: c, jabatan: 'Penyuluh',
+                    lokasi: 'Desa ' + i, luas: parseFloat((Math.random()*5+0.1).toFixed(2)),
+                    mingguan: Math.floor(Math.random()*3), linimasa: Math.floor(Math.random()*2),
+                    timestamp: new Date(Date.now() - Math.floor(Math.random()*1000000000))
+                }
+            });
+        }
+        
+        processAggr();
+        populateFilters();
+        initMap();
+        initChart();
+        renderKPI();
+        renderTable();
+        renderFeed();
+    }
+
+    function processAggr(filteredData = globalData) {
+        mapDataAggr = cdkCoords.map(c => {
+            const list = filteredData.filter(d => d.cdk.toLowerCase().includes(c.id.toLowerCase()));
+            return {
+                ...c,
+                total: list.length,
+                mingguan: list.reduce((a,b)=>a+(b.mingguan||0),0),
+                bulanan: list.reduce((a,b)=>a+(b.linimasa||0),0)
+            };
+        });
+    }
+
+    // --- MAP ---
+    let map;
+    function initMap() {
+        map = L.map('map', { zoomControl: false }).setView([-6.9204, 107.6046], 8);
+        L.control.zoom({ position: 'topright' }).addTo(map);
+        // Dark basemap
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 18 }).addTo(map);
+        drawMarkers();
+    }
+    
+    let markerLayer = L.layerGroup();
+    function drawMarkers() {
+        if(map.hasLayer(markerLayer)) map.removeLayer(markerLayer);
+        markerLayer = L.layerGroup().addTo(map);
+        
+        mapDataAggr.forEach(loc => {
+            // Circle markers like Figma
+            const marker = L.circleMarker([loc.lat, loc.lng], {
+                radius: 7, fillColor: '#3b82f6', color: '#1e3a8a', weight: 2, opacity: 1, fillOpacity: 0.9
+            }).addTo(markerLayer);
+            
+            const tip = `<div style="text-align:center;"><b>${loc.id}</b></div>
+            <div style="font-size:11px; margin-top:4px;">
+            Pegawai: ${loc.total}<br>Lap. Mingguan: ${loc.mingguan}<br>Lap. Bulanan: ${loc.bulanan}
+            </div>`;
+            marker.bindTooltip(tip, {className: 'bg-gray-800 text-white p-2 rounded shadow-lg'});
+            
+            marker.on('click', () => {
+                if(parentWin && typeof parentWin.flyToLocation === 'function') {
+                    if (typeof parentWin.closePimpinanDashboard === 'function') parentWin.closePimpinanDashboard();
+                    parentWin.focus();
+                    parentWin.flyToLocation(loc.lat, loc.lng, loc.id);
+                }
+            });
+        });
+    }
+
+    // --- CHART ---
+    let myChart;
+    function initChart() {
+        const ctx = document.getElementById('cdkChart').getContext('2d');
+        const labels = mapDataAggr.map(d => d.id);
+        const dataMingguan = mapDataAggr.map(d => d.mingguan);
+        const dataBulanan = mapDataAggr.map(d => d.bulanan);
+
+        myChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        type: 'bar',
+                        label: 'Mingguan',
+                        data: dataMingguan,
+                        backgroundColor: '#fcd34d', // Yellow
+                        borderRadius: 2,
+                        barPercentage: 0.6
+                    },
+                    {
+                        type: 'line',
+                        label: '3 Bulanan',
+                        data: dataBulanan,
+                        borderColor: '#3b82f6', // Blue
+                        backgroundColor: '#3b82f6',
+                        borderWidth: 2,
+                        tension: 0.4,
+                        pointBackgroundColor: '#3b82f6',
+                        pointRadius: 4
+                    }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                scales: {
+                    y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8b9bb4', font: {size: 10} } },
+                    x: { grid: { display: false }, ticks: { color: '#8b9bb4', font: {size: 10}, maxRotation: 45, minRotation: 45 } }
+                },
+                plugins: { legend: { display: false } } // Custom legend in HTML
+            }
+        });
+    }
+    
+    function updateChart() {
+        myChart.data.datasets[0].data = mapDataAggr.map(d => d.mingguan);
+        myChart.data.datasets[1].data = mapDataAggr.map(d => d.bulanan);
+        myChart.update();
+    }
+
+    // --- KPI & GLOBALS ---
+    function renderKPI(data = globalData) {
+        let tMingguan = 0, tBulanan = 0, tLuas = 0;
+        let pMap = {}; let cMap = {};
+        
+        data.forEach(d => {
+            tMingguan += d.mingguan;
+            tBulanan += d.linimasa;
+            tLuas += (parseFloat(d.luas) || 0);
+            
+            if(d.mingguan > 0 || d.linimasa > 0) {
+                pMap[d.nama] = (pMap[d.nama] || 0) + d.mingguan + d.linimasa;
+                cMap[d.cdk] = (cMap[d.cdk] || 0) + d.mingguan + d.linimasa;
+            }
+        });
+
+        document.getElementById('kpi-mingguan').textContent = tMingguan;
+        document.getElementById('kpi-bulanan').textContent = tBulanan;
+        
+        document.getElementById('kpi-p-mingguan').textContent = (tMingguan / 1763 * 100).toFixed(1);
+        document.getElementById('kpi-p-bulanan').textContent = (tBulanan / 1763 * 100).toFixed(1);
+        
+        document.getElementById('tb-total-pembina').textContent = data.length;
+        document.getElementById('tb-total-hutan').textContent = data.length; // 1 titik per pembina asumsi
+        document.getElementById('tb-total-luas').textContent = tLuas.toFixed(2) + ' Ha';
+
+        let topP = Object.entries(pMap).sort((a,b)=>b[1]-a[1])[0];
+        let topC = Object.entries(cMap).sort((a,b)=>b[1]-a[1])[0];
+        
+        document.getElementById('kpi-pembina-nama').textContent = topP ? topP[0] : '-';
+        document.getElementById('kpi-pembina-val').textContent = topP ? topP[1] : '0';
+        
+        document.getElementById('kpi-cdk-nama').textContent = topC ? topC[0] : '-';
+        document.getElementById('kpi-cdk-val').textContent = topC ? topC[1] : '0';
+        
+        let tLap = tMingguan + tBulanan;
+        document.getElementById('kpi-p-cdk').textContent = tLap > 0 ? ( (topC ? topC[1] : 0) / tLap * 100 ).toFixed(1) : '0';
+    }
+
+    // --- ACTIVITY FEED (Pagination) ---
+    let feedData = [];
+    let feedPage = 1;
+    const feedLimit = 5;
+    
+    function renderFeed() {
+        // Sort by mingguan/bulanan presence, simulated timestamp
+        feedData = [...globalData].sort((a,b) => (b.timestamp || 0) - (a.timestamp || 0)).filter(d => d.mingguan > 0 || d.linimasa > 0);
+        
+        const box = document.getElementById('activity-feed');
+        box.innerHTML = '';
+        
+        if(feedData.length === 0) {
+            box.innerHTML = '<div class="text-xs text-gray-500 p-2">Belum ada aktivitas.</div>';
+            return;
+        }
+
+        const start = (feedPage - 1) * feedLimit;
+        const end = Math.min(start + feedLimit, feedData.length);
+        
+        for(let i=start; i<end; i++) {
+            const d = feedData[i];
+            const type = d.mingguan > 0 ? 'Laporan Mingguan' : 'Laporan Bulanan';
+            const html = `
+                <div class="flex gap-3 bg-gray-800 p-3 rounded-lg border-l-4 border-green-500">
+                    <div class="w-10 h-10 rounded bg-green-900 flex items-center justify-center text-green-400 font-bold">${d.nama.charAt(0)}</div>
+                    <div class="flex-1">
+                        <div class="flex justify-between items-start">
+                            <div class="text-sm font-semibold">${d.nama}</div>
+                            <div class="text-xxs text-gray-400">Hari ini</div>
+                        </div>
+                        <div class="text-xs text-green-400 font-medium">${type}</div>
+                        <div class="text-xxs text-gray-400 truncate">${d.cdk} - ${d.lokasi}</div>
+                    </div>
+                </div>`;
+            box.innerHTML += html;
+        }
+        
+        document.getElementById('activity-page').textContent = `${feedPage} / ${Math.max(1, Math.ceil(feedData.length/feedLimit))}`;
+    }
+    
+    function prevActivity() { if(feedPage > 1) { feedPage--; renderFeed(); } }
+    function nextActivity() { if(feedPage < Math.ceil(feedData.length/feedLimit)) { feedPage++; renderFeed(); } }
+
+    // --- TABLE (Pagination & Filters) ---
+    let tableData = [];
+    let tablePage = 1;
+    const tableLimit = 50;
+
+    function populateFilters() {
+        const cdkF = document.getElementById('map-filter-cdk');
+        cdkCoords.forEach(c => {
+            const o = document.createElement('option'); o.value = c.id; o.textContent = c.id; cdkF.appendChild(o);
+        });
+        tableData = [...globalData];
+    }
+    
+    function applyGlobalFilter() {
+        const cdk = document.getElementById('map-filter-cdk').value;
+        let filtered = globalData;
+        if(cdk !== 'all') filtered = filtered.filter(d => d.cdk.toLowerCase().includes(cdk.toLowerCase()));
+        
+        tableData = [...filtered];
+        applyTableFilter(); // also applies sort
+        
+        processAggr(filtered);
+        drawMarkers();
+        updateChart();
+        renderKPI(filtered);
+    }
+    
+    function resetGlobalFilter() {
+        document.getElementById('map-filter-cdk').value = 'all';
+        document.getElementById('map-filter-jabatan').value = 'all';
+        document.getElementById('map-filter-tgl').value = '';
+        applyGlobalFilter();
+    }
+
+    function applyTableFilter() {
+        const sort = document.getElementById('table-filter-sort').value;
+        if(sort === 'az') tableData.sort((a,b) => a.nama.localeCompare(b.nama));
+        if(sort === 'za') tableData.sort((a,b) => b.nama.localeCompare(a.nama));
+        if(sort === 'high') tableData.sort((a,b) => (b.mingguan+b.linimasa) - (a.mingguan+a.linimasa));
+        if(sort === 'low') tableData.sort((a,b) => (a.mingguan+a.linimasa) - (b.mingguan+b.linimasa));
+        
+        tablePage = 1;
+        renderTable();
+    }
+
+    function renderTable() {
+        const tbody = document.getElementById('pembina-tbody');
+        let html = '';
+        
+        const start = (tablePage - 1) * tableLimit;
+        const end = Math.min(start + tableLimit, tableData.length);
+        
+        for (let i = start; i < end; i++) {
+            let p = tableData[i];
+            p.no = i + 1; // fix number
+            html += `
+                <tr>
+                    <td>${p.no}</td>
+                    <td class="font-medium">${p.nama || '-'}</td>
+                    <td>${p.cdk || '-'}</td>
+                    <td>${p.lokasi || '-'}</td>
+                    <td>${p.luas || '0'}</td>
+                    <td class="text-green-400 font-bold">${p.mingguan || '0'}</td>
+                    <td class="text-blue-400 font-bold">${p.linimasa || '0'}</td>
+                </tr>
+            `;
+        }
+        if(tableData.length === 0) html = '<tr><td colspan="7" class="text-center text-gray-500 py-4">Tidak ada data.</td></tr>';
+        
+        tbody.innerHTML = html;
+        document.getElementById('table-info').textContent = tableData.length ? `Menampilkan ${start+1} - ${end} dari total ${tableData.length} data` : `Menampilkan 0 - 0 dari 0 data`;
+        document.getElementById('table-page').textContent = `${tablePage} / ${Math.max(1, Math.ceil(tableData.length/tableLimit))}`;
+    }
+
+    function prevTablePage() { if(tablePage > 1) { tablePage--; renderTable(); } }
+    function nextTablePage() { if(tablePage < Math.ceil(tableData.length/tableLimit)) { tablePage++; renderTable(); } }
+
+    function exportExcel() {
+        if(typeof XLSX === 'undefined') return alert("Library SheetJS (XLSX) gagal dimuat.");
+        const ws = XLSX.utils.json_to_sheet(tableData.map(t => ({
+            "NO": t.no, "Nama Pembina": t.nama, "CDK/Instansi": t.cdk, "Lokasi": t.lokasi, "Luas (Ha)": t.luas, "Laporan Mingguan": t.mingguan, "Laporan Linimasa": t.linimasa
+        })));
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Data Pembina");
+        XLSX.writeFile(wb, 'Rekap_Data_Pembina_GeoHutan.xlsx');
+    }
+
+    // BOOTSTRAP
+    window.onload = initData;
+</script>
+</body>
+</html>

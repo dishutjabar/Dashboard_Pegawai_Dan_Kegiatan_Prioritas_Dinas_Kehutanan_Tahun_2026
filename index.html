@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="id">
 <head>
 <meta charset="utf-8"/>
@@ -44,6 +44,9 @@
 </head>
 <body>
 
+<div id="pimpinan-dashboard-container" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; z-index:99999; background:#111827;">
+  <iframe id="pimpinan-dashboard-frame" src="about:blank" style="width:100%; height:100%; border:none;"></iframe>
+</div>
 <section id="auth-portal" class="auth-portal hidden" aria-label="Portal login GeoHutan">
   <div class="auth-shell">
     <div class="auth-brand">
@@ -662,12 +665,6 @@
             <label><input type="radio" name="mon-lereng" value="Sangat Curam (>40%)"> Sangat Curam (&gt;40%)</label>
           </fieldset>
           <fieldset class="monitoring-field">
-            <legend>Tinggi Tanaman (Cm)</legend>
-            <label><input type="radio" name="mon-umur" value="Kurang dari 1 meter"> Kurang dari 1 meter</label>
-            <label><input type="radio" name="mon-umur" value="1 sampai dengan 2 meter"> 1 sampai dengan 2 meter</label>
-            <label><input type="radio" name="mon-umur" value="Lebih dari 2 meter"> Lebih dari 2 meter</label>
-          </fieldset>
-          <fieldset class="monitoring-field">
             <legend>Kondisi Hutan</legend>
             <label><input type="radio" name="mon-pengelolaan" value="Baik"> Baik</label>
             <label><input type="radio" name="mon-pengelolaan" value="Cukup"> Cukup</label>
@@ -689,6 +686,33 @@
             <label><input type="checkbox" name="mon-usulan" value="Pembersihan Gulma"> Pembersihan Gulma</label>
             <label><input type="checkbox" name="mon-usulan" value="Penambahan Sumber Air"> Penambahan Sumber Air</label>
             <label><input type="checkbox" name="mon-usulan" value="Sipil Teknis"> Sipil Teknis</label>
+          </fieldset>
+          <fieldset class="monitoring-field" style="grid-column:1/-1">
+            <legend>&#127807; Kelas Diameter Pohon &amp; Estimasi Simpanan Karbon (CO&#8322;e)</legend>
+            <div style="font-size:10px;color:#888;margin-bottom:8px">Masukkan jumlah pohon per kelas diameter. Total simpanan karbon dihitung otomatis. Biarkan 0 jika tidak ada penanaman pohon pada kelas tersebut.</div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:8px">
+              <label style="display:flex;flex-direction:column;gap:3px;font-size:11px">&lt;10 cm | Kode: h | Faktor: 0,055
+                <input type="number" name="mon-diameter-h" id="mon-diam-h" min="0" value="0" style="padding:5px;border-radius:5px;border:1px solid #ddd;font-size:12px;background:rgba(255,255,255,0.9)" oninput="calcMonCO2e()">
+              </label>
+              <label style="display:flex;flex-direction:column;gap:3px;font-size:11px">11-20 cm | Kode: i | Faktor: 0,165
+                <input type="number" name="mon-diameter-i" id="mon-diam-i" min="0" value="0" style="padding:5px;border-radius:5px;border:1px solid #ddd;font-size:12px;background:rgba(255,255,255,0.9)" oninput="calcMonCO2e()">
+              </label>
+              <label style="display:flex;flex-direction:column;gap:3px;font-size:11px">21-30 cm | Kode: j | Faktor: 0,43
+                <input type="number" name="mon-diameter-j" id="mon-diam-j" min="0" value="0" style="padding:5px;border-radius:5px;border:1px solid #ddd;font-size:12px;background:rgba(255,255,255,0.9)" oninput="calcMonCO2e()">
+              </label>
+              <label style="display:flex;flex-direction:column;gap:3px;font-size:11px">31-40 cm | Kode: k | Faktor: 0,91
+                <input type="number" name="mon-diameter-k" id="mon-diam-k" min="0" value="0" style="padding:5px;border-radius:5px;border:1px solid #ddd;font-size:12px;background:rgba(255,255,255,0.9)" oninput="calcMonCO2e()">
+              </label>
+              <label style="display:flex;flex-direction:column;gap:3px;font-size:11px">41-50 cm | Kode: l | Faktor: 1,64
+                <input type="number" name="mon-diameter-l" id="mon-diam-l" min="0" value="0" style="padding:5px;border-radius:5px;border:1px solid #ddd;font-size:12px;background:rgba(255,255,255,0.9)" oninput="calcMonCO2e()">
+              </label>
+              <label style="display:flex;flex-direction:column;gap:3px;font-size:11px">&gt;50 cm | Kode: m | Faktor: 2,07
+                <input type="number" name="mon-diameter-m" id="mon-diam-m" min="0" value="0" style="padding:5px;border-radius:5px;border:1px solid #ddd;font-size:12px;background:rgba(255,255,255,0.9)" oninput="calcMonCO2e()">
+              </label>
+            </div>
+            <div id="mon-co2e-result" style="background:rgba(46,125,50,0.12);border:1px solid rgba(46,125,50,0.3);border-radius:6px;padding:8px 12px;font-size:12px;font-weight:600;color:#2e7d32;display:none">
+              &#127807; Total Pohon Ditanam: <span id="mon-total-pohon">0</span> pohon &nbsp;|&nbsp; Total Estimasi Simpanan Karbon (CO&#8322;e): <strong><span id="mon-co2e-val">0,000</span> ton</strong>
+            </div>
           </fieldset>
         </div>
       </div>
