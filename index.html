@@ -39,7 +39,7 @@
 <script src="https://unpkg.com/shpjs@4.0.4/dist/shp.js" defer></script>
 <script src="https://unpkg.com/@tmcw/togeojson@5.8.1/dist/togeojson.umd.js" defer></script>
 <script src="https://unpkg.com/leaflet.vectorgrid@latest/dist/Leaflet.VectorGrid.bundled.js" defer></script>
-<link rel="stylesheet" href="styles.css?v=20260824-report-monitor-v8"/>
+<link rel="stylesheet" href="styles.css?v=20260901-report-monitor-v65"/>
 <link rel="stylesheet" href="css/ai.css"/>
 </head>
 <body>
@@ -137,8 +137,9 @@
     <div id="report-menu" class="report-menu">
       <button id="btn-report" class="btn-icon" type="button" onclick="toggleReportMenu(event)">&#128202; <span class="d-none-mobile">Laporan</span></button>
       <div id="report-dropdown" class="report-dropdown">
-        <button type="button" onclick="openReportMonitor('weekly')">Laporan Mingguan</button>
-        <button type="button" onclick="openReportMonitor('monthly')">Laporan 3 Bulanan</button>
+        <button id="btn-report-weekly" type="button" onclick="openReportMonitor('weekly')">Laporan Mingguan</button>
+        <button id="btn-report-monthly" type="button" onclick="openReportMonitor('monthly')">Laporan 3 Bulanan</button>
+        <button id="btn-kalender-reminder" type="button" onclick="openCalendarReminderModal()">Kalender Pengingat</button>
       </div>
     </div>
     <button id="btn-export" class="btn-icon" onclick="openExportModal()">&#128196; <span class="d-none-mobile">Export</span></button>
@@ -152,7 +153,7 @@
       <div class="profile-dropdown" id="profile-dropdown">
         <div class="profile-name" id="profile-name">GeoHutan</div>
         <div class="profile-role" id="profile-role">Pengguna Dashboard</div>
-        <button class="profile-logout" type="button" onclick="openCredentialModal()" style="margin-bottom: 6px; background: transparent; color: var(--primary); border: 1px solid var(--primary);">Ganti Username/Password</button>
+        <button class="profile-logout" type="button" onclick="openCredentialModal()" style="margin-bottom: 6px; background: transparent; color: var(--primary); border: 1px solid var(--primary);">Ganti Password</button>
         <button class="profile-logout" type="button" onclick="openForgotPasswordModal()" style="margin-bottom: 6px; background: transparent; color: #1565c0; border: 1px solid #1565c0;">Lupa Password</button>
         <button class="profile-logout" type="button" onclick="logoutGeoHutan()">Keluar</button>
       </div>
@@ -227,7 +228,7 @@
       <label class="staff-hidden-map-control"><input type="checkbox" id="toggle-polygon-kegiatan" checked onchange="togglePolygonKegiatanLayer()"> Tampilkan Area Polygon Kegiatan</label>
       <label class="staff-hidden-map-control"><input type="checkbox" id="toggle-pohon-marker" checked onchange="togglePohonMarkerLayer()"> Tampilkan Marker Titik Kegiatan (Pohon)</label>
       <label class="staff-hidden-map-control"><input type="checkbox" id="toggle-buffer" onchange="toggleBuffer()"> Buffer Zone Saat Diklik (10/20/30km)</label>
-      <button class="btn-icon map-download-btn" style="margin-top:10px; width:100%; justify-content:center; background:var(--secondary); color:white;" onclick="downloadMap()">&#128247; Unduh Tampilan Peta (.png)</button>
+      
     </div>
   </div>
 
@@ -257,6 +258,10 @@
       <div class="stat-info"><div class="stat-lbl" style="font-size:10px;">Total Luasan Binaan (Ha)</div><div class="stat-val" style="color:#00897b;" id="cnt-pegb-luas">0</div></div>
       <div class="stat-icon">&#128207;</div>
     </div>
+    <div class="stat-card" style="background:linear-gradient(135deg,#e3f2fd,#bbdefb);">
+      <div class="stat-info"><div class="stat-lbl" style="font-size:10px;color:#1565c0;font-weight:700;">Total Estimasi Serapan Karbon (CO&#8322;e)</div><div class="stat-val" style="color:#1565c0;font-size:14px;font-weight:800;" id="cnt-total-carbon">0.000</div><div style="font-size:9px;color:#1976d2;margin-top:2px;font-weight:600;">ton CO&#8322;e</div></div>
+      <div class="stat-icon" style="font-size:24px;">&#127961;&#127807;</div>
+    </div>
     
     <div class="chart-title mt-3">Sebaran Data per Kategori</div>
     <div class="chart-container"><canvas id="c-layer"></canvas></div>
@@ -276,7 +281,7 @@
 
   <div id="tab-legend" class="tab-content fade-in">
     <div class="leg-item" id="leg-pjl" onclick="toggleLayer('pjl')">
-      <svg class="leg-icon-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7" fill="#43a047" stroke="#fff" stroke-width="1.5"/></svg>
+      <svg class="leg-icon-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7" fill="#FFFF00" stroke="#fff" stroke-width="1.5"/></svg>
       <span class="leg-text">Petugas Jaga Leuweung</span>
     </div>
     <div class="leg-item" id="leg-jum" onclick="toggleLayer('jum')" style="flex-direction:column; align-items:flex-start;">
@@ -591,6 +596,29 @@
   </div>
 </div>
 
+
+<!-- Calendar Reminder Modal -->
+<div id="calendar-reminder-modal" class="modal-overlay" onclick="if(event.target==this) closeCalendarReminderModal()">
+  <div class="modal-content" style="max-width: 500px;">
+    <div class="modal-head">
+      <h2>Kalender Reminder Laporan</h2>
+      <button class="close-modal" onclick="closeCalendarReminderModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="filter-group">
+        <label>Pilih Jenis Kalender:</label>
+        <select id="calendar-type-select" onchange="renderCalendarReminder()" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; margin-bottom: 10px;">
+          <option value="weekly">Kalender Laporan Mingguan</option>
+          <option value="monthly">Kalender Laporan 3 Bulanan</option>
+        </select>
+      </div>
+      
+      
+      <div id="calendar-reminder-container" style="margin-top: 15px;"></div>
+    </div>
+  </div>
+</div>
+
 <!-- 7. Upload Photo Modal -->
 <div id="upload-modal" class="modal-overlay" onclick="if(event.target==this) closeUploadModal()">
   <div class="modal-content" style="max-width: 600px;">
@@ -627,8 +655,9 @@
 
       <div class="filter-group">
         <label>Pilih File Foto (Bisa dari Kamera HP):</label>
-        <input type="file" id="upload-files" accept="image/*, .heic, .heif" style="font-size:12px; flex:1; width: 100%; border: 1px solid #ddd; padding: 10px; border-radius: 6px; background: #fafafa;">
-        <div style="font-size:10px; color:#666; margin-top:4px; line-height:1.45;">Minimal upload: 1 foto. Maksimal upload: 1 foto tiap 1 sesi upload. Ukuran tiap file: &le; 5 MB. Hanya menerima seluruh format gambar termasuk HEIC/HEIF dari Apple. File rusak atau tidak dapat dibaca akan ditolak.</div>
+        <input type="file" id="upload-files" accept="image/*, .heic, .heif" onchange="typeof handleMonthlyFileChange === 'function' && handleMonthlyFileChange(this.files)" style="font-size:12px; flex:1; width: 100%; border: 1px solid #ddd; padding: 10px; border-radius: 6px; background: #fafafa;">
+        <div id="monthly-photo-meta-status" style="margin-top: 10px;"></div>
+        <div style="font-size:10px; color:#666; margin-top:4px; line-height:1.45;">Minimal upload: 1 foto. Maksimal upload: 1 foto tiap 1 sesi upload. Ukuran tiap file: &le; 10 MB. Hanya menerima seluruh format gambar termasuk HEIC/HEIF dari Apple. File rusak atau tidak dapat dibaca akan ditolak.</div>
       </div>
 
       <div id="upload-monitoring-fields" class="monitoring-form" style="display:none;">
@@ -661,12 +690,21 @@
             <label><input type="radio" name="mon-lereng" value="Curam (>25 - 40%)"> Curam (&gt;25 - 40%)</label>
             <label><input type="radio" name="mon-lereng" value="Sangat Curam (>40%)"> Sangat Curam (&gt;40%)</label>
           </fieldset>
-          <fieldset class="monitoring-field">
-            <legend>Tinggi Tanaman (Cm)</legend>
-            <label><input type="radio" name="mon-umur" value="Kurang dari 1 meter"> Kurang dari 1 meter</label>
-            <label><input type="radio" name="mon-umur" value="1 sampai dengan 2 meter"> 1 sampai dengan 2 meter</label>
-            <label><input type="radio" name="mon-umur" value="Lebih dari 2 meter"> Lebih dari 2 meter</label>
-          </fieldset>
+          <fieldset class="monitoring-field" style="grid-column: 1 / -1; display: flex; flex-direction: column; gap: 10px;">
+  <legend style="font-weight: bold; margin-bottom: 5px;">Kelas Diameter Pohon &amp; Karbon (Otomatis)</legend>
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+    <label style="display:flex; flex-direction:column; font-size:12px; font-weight:bold;">&lt; 10 cm (h)<input type="number" id="mon-pohon-h" placeholder="Isi jumlah pohon ditanam" min="0" oninput="hitungKarbon()" style="width:100%; box-sizing:border-box; padding:10px; margin-top:6px; border:1px solid #aaa; border-radius:4px; font-size:14px;"></label>
+    <label style="display:flex; flex-direction:column; font-size:12px; font-weight:bold;">11-20 cm (i)<input type="number" id="mon-pohon-i" placeholder="Isi jumlah pohon ditanam" min="0" oninput="hitungKarbon()" style="width:100%; box-sizing:border-box; padding:10px; margin-top:6px; border:1px solid #aaa; border-radius:4px; font-size:14px;"></label>
+    <label style="display:flex; flex-direction:column; font-size:12px; font-weight:bold;">21-30 cm (j)<input type="number" id="mon-pohon-j" placeholder="Isi jumlah pohon ditanam" min="0" oninput="hitungKarbon()" style="width:100%; box-sizing:border-box; padding:10px; margin-top:6px; border:1px solid #aaa; border-radius:4px; font-size:14px;"></label>
+    <label style="display:flex; flex-direction:column; font-size:12px; font-weight:bold;">31-40 cm (k)<input type="number" id="mon-pohon-k" placeholder="Isi jumlah pohon ditanam" min="0" oninput="hitungKarbon()" style="width:100%; box-sizing:border-box; padding:10px; margin-top:6px; border:1px solid #aaa; border-radius:4px; font-size:14px;"></label>
+    <label style="display:flex; flex-direction:column; font-size:12px; font-weight:bold;">41-50 cm (l)<input type="number" id="mon-pohon-l" placeholder="Isi jumlah pohon ditanam" min="0" oninput="hitungKarbon()" style="width:100%; box-sizing:border-box; padding:10px; margin-top:6px; border:1px solid #aaa; border-radius:4px; font-size:14px;"></label>
+    <label style="display:flex; flex-direction:column; font-size:12px; font-weight:bold;">&gt; 50 cm (m)<input type="number" id="mon-pohon-m" placeholder="Isi jumlah pohon ditanam" min="0" oninput="hitungKarbon()" style="width:100%; box-sizing:border-box; padding:10px; margin-top:6px; border:1px solid #aaa; border-radius:4px; font-size:14px;"></label>
+  </div>
+  <div style="background: #e8f5e9; padding: 16px; border-radius: 6px; display: flex; align-items: center; justify-content: space-between; border: 1px solid #c8e6c9; margin-top: 5px;">
+    <span style="font-weight: bold; font-size: 14px; color: #2e7d32; flex:1;">Total Estimasi Simpanan Karbon (CO₂e)</span>
+    <input type="text" id="mon-total-karbon" readonly style="background: transparent; border: none; font-weight: bold; color: #1b5e20; font-size: 18px; text-align: right; width: 120px; padding:0;" value="0">
+  </div>
+</fieldset>
           <fieldset class="monitoring-field">
             <legend>Kondisi Hutan</legend>
             <label><input type="radio" name="mon-pengelolaan" value="Baik"> Baik</label>
@@ -848,13 +886,21 @@
         <select id="report-kab-filter" multiple data-placeholder="Semua Kabupaten" onchange="onReportFilterChanged()"></select>
         <select id="report-kegiatan-filter" multiple data-placeholder="Semua Kegiatan" onchange="onReportFilterChanged()"></select>
         <select id="report-year-filter" multiple data-placeholder="Semua Tahun" onchange="onReportFilterChanged()"></select>
-        <input type="date" id="report-start-filter" onchange="onReportFilterChanged()" title="Tanggal mulai">
-        <input type="date" id="report-end-filter" onchange="onReportFilterChanged()" title="Tanggal sampai">
-        <input type="week" id="report-week-start-filter" class="report-week-input" onchange="normalizeReportWeekInput(this)" title="Minggu mulai">
-        <input type="week" id="report-week-end-filter" class="report-week-input" onchange="normalizeReportWeekInput(this)" title="Minggu sampai">
+        <div class="report-date-range-wrap" id="wrap-report-date" style="display:flex;align-items:center;gap:5px;">
+          <span style="font-size:11px;font-weight:600;color:#555;">Rentang Tgl:</span>
+          <input type="date" id="report-start-filter" onchange="onReportFilterChanged()" title="Tanggal mulai">
+          <span style="font-size:11px;font-weight:600;color:#555;">s.d</span>
+          <input type="date" id="report-end-filter" onchange="onReportFilterChanged()" title="Tanggal sampai">
+        </div>
+        <div class="report-week-range-wrap" id="wrap-report-week" style="display:flex;align-items:center;gap:5px;">
+          <span style="font-size:11px;font-weight:600;color:#555;">Rentang Mg:</span>
+          <input type="week" id="report-week-start-filter" class="report-week-input" onchange="normalizeReportWeekInput(this)" title="Minggu mulai">
+          <span style="font-size:11px;font-weight:600;color:#555;">s.d</span>
+          <input type="week" id="report-week-end-filter" class="report-week-input" onchange="normalizeReportWeekInput(this)" title="Minggu sampai">
+        </div>
         <button type="button" id="report-weekly-export-btn" class="btn-reset report-export-btn" onclick="exportWeeklyBinaanReports()">Export Mingguan XLSX</button>
         <button type="button" id="report-monthly-export-btn" class="btn-reset report-export-btn" onclick="exportMonthlyBinaanReports()">Export 3 Bulanan XLSX</button>
-        <button type="button" class="btn-apply report-reload-btn" onclick="reloadReportMonitor(true)">Muat Ulang</button>
+        
       </div>
       <div class="report-kpi-row" id="report-kpi-row"></div>
       <div class="report-table-wrap">
@@ -924,21 +970,18 @@
 <div id="credential-modal" class="modal-overlay" style="display: none; z-index: 10001;">
   <div class="modal-content" style="max-width: 400px; padding: 24px;">
     <div class="modal-header">
-      <h3>Ganti Username / Password</h3>
+      <h3>Ganti Password</h3>
       <button type="button" class="btn-close" onclick="closeCredentialModal()">&times;</button>
     </div>
     <form id="credential-form" class="auth-form compact" onsubmit="submitCredentialChange(event)">
       <label for="old-username">Username lama</label>
-      <input id="old-username" type="text" autocomplete="username" placeholder="Username lama" required style="width: 100%; box-sizing: border-box; padding: 10px; margin-bottom: 12px; border: 1px solid #ccc; border-radius: 6px;">
+      <input id="old-username" type="text" autocomplete="username" placeholder="Username" disabled style="width: 100%; box-sizing: border-box; padding: 10px; margin-bottom: 12px; border: 1px solid #ccc; border-radius: 6px; background: #f0f0f0;">
       
       <label for="old-password">Password lama</label>
       <div class="auth-password-field" style="display: flex; gap: 8px; margin-bottom: 12px;">
         <input id="old-password" type="password" autocomplete="current-password" placeholder="Password lama" required style="flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 6px;">
         <button type="button" onclick="togglePasswordVisibility('old-password', this)" style="padding: 0 10px; border-radius: 6px; border: 1px solid #ccc; background: #eee;">Show</button>
       </div>
-
-      <label for="new-username">Username baru</label>
-      <input id="new-username" type="text" autocomplete="username" placeholder="Username baru" required style="width: 100%; box-sizing: border-box; padding: 10px; margin-bottom: 12px; border: 1px solid #ccc; border-radius: 6px;">
       
       <label for="new-password">Password baru</label>
       <div class="auth-password-field" style="display: flex; gap: 8px; margin-bottom: 12px;">
@@ -975,8 +1018,8 @@
   </div>
 </div>
 
-<script src="app-core.js?v=20260824-report-monitor-v8" defer></script>
-<script src="app-features.js?v=20260824-report-monitor-v8" defer></script>
+<script src="app-core.js?v=20260901-report-monitor-v65" defer></script>
+<script src="app-features.js?v=20260901-report-monitor-v65" defer></script>
 <script src="js/ai.js" defer></script>
 
 <!-- ===== MODAL UPLOAD SPASIAL ===== -->
@@ -1047,6 +1090,20 @@
     </div>
   </div>
 </div>
+
+<script>
+  function hitungKarbon() {
+    var h = parseFloat(document.getElementById('mon-pohon-h').value) || 0;
+    var i = parseFloat(document.getElementById('mon-pohon-i').value) || 0;
+    var j = parseFloat(document.getElementById('mon-pohon-j').value) || 0;
+    var k = parseFloat(document.getElementById('mon-pohon-k').value) || 0;
+    var l = parseFloat(document.getElementById('mon-pohon-l').value) || 0;
+    var m = parseFloat(document.getElementById('mon-pohon-m').value) || 0;
+    var total = (h * 0.055) + (i * 0.165) + (j * 0.43) + (k * 0.91) + (l * 1.64) + (m * 2.07);
+    var el = document.getElementById('mon-total-karbon');
+    if (el) el.value = total.toFixed(3).replace('.', ',');
+  }
+</script>
 </body>
 </html>
 

@@ -46,7 +46,7 @@
         .card { background-color: var(--bg-card); border-radius: 12px; padding: 16px; border: 1px solid rgba(255,255,255,0.05); }
         .card-title { font-size: 14px; font-weight: 600; color: #fff; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;}
         
-        #map { height: 350px; border-radius: 8px; background: #0a0e14; z-index: 1;}
+        #map { height: 500px; border-radius: 8px; background: #0a0e14; z-index: 1;}
         .leaflet-container { font-family: 'Inter', sans-serif; }
         .leaflet-popup-content-wrapper { background: var(--bg-card); color: #fff; border-radius: 8px; }
         .leaflet-popup-tip { background: var(--bg-card); }
@@ -83,11 +83,12 @@
         </div>
     </div>
     <div class="flex flex-col gap-1">
-        <a class="nav-item active" onclick="showDashboard()"><div class="nav-dot"></div> Dashboard</a>
+        <a class="nav-item" onclick="openMainAppAction('peta')"><div class="nav-dot"></div> Dashboard Progress Input Data Kehutanan</a>
+        <a class="nav-item active" onclick="showDashboard()"><div class="nav-dot"></div> Dashboard Monitoring Hutan Binaan</a>
         <a class="nav-item" onclick="openMainAppAction('peta')"><div class="nav-dot"></div> Peta GeoHutan</a>
         <a class="nav-item" onclick="openMainAppAction('mingguan')"><div class="nav-dot"></div> Aktivitas Mingguan</a>
         <a class="nav-item" onclick="openMainAppAction('bulanan')"><div class="nav-dot"></div> Linimasa 3 Bulanan</a>
-        <a class="nav-item" onclick="scrollToTable()"><div class="nav-dot"></div> Data Pembina</a>
+        <a class="nav-item" onclick="scrollToTable()"><div class="nav-dot"></div> Data Hutan Binaan</a>
         <a class="nav-item"><div class="nav-dot"></div> Karbon</a>
         <a class="nav-item"><div class="nav-dot"></div> Pengaturan</a>
         <div class="my-3 mx-5 border-t border-gray-800"></div>
@@ -119,21 +120,43 @@
         </div>
     </div>
 
-    <div class="p-6">
+   <div class="p-6">
         <!-- Top Section: Map & Feeds -->
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-            <!-- Map Area -->
-            <div class="card lg:col-span-2 relative">
-                <div class="card-title">Peta Sebaran Aktivitas</div>
-                <div id="map"></div>
-                <!-- Filter Overlay on Map -->
-                <div class="absolute bottom-6 left-6 right-6 bg-gray-900 bg-opacity-90 rounded-lg p-3 flex flex-wrap gap-4 items-end border border-gray-700 backdrop-blur z-[400]" style="z-index: 400;">
+            <!-- Map + Filter Area -->
+            <div class="lg:col-span-2">
+                <!-- Map Area -->
+                <div class="card relative">
+                    <div class="card-title">Peta Sebaran Aktivitas</div>
+                    <div id="map"></div>
+                </div>
+            </div>
+              
+            <!-- Activity Feed -->
+            <div class="card flex flex-col">
+                <div class="card-title">
+                    <span>Aktivitas Terbaru</span>
+                </div>
+                <div class="flex-1 flex flex-col gap-3 overflow-y-auto" id="activity-feed">
+                    <!-- Populated by JS -->
+                </div>
+                <!-- Feed Pagination -->
+                <div class="flex justify-center gap-2 mt-4 pt-3 border-t border-gray-800">
+                    <button class="w-6 h-6 rounded bg-gray-800 flex items-center justify-center text-xs hover:bg-gray-700" onclick="prevActivity()">&#9664;</button>
+                    <span class="text-xs text-gray-400 flex items-center" id="activity-page">1 / 1</span>
+                    <button class="w-6 h-6 rounded bg-gray-800 flex items-center justify-center text-xs hover:bg-gray-700" onclick="nextActivity()">&#9654;</button>
+                </div>
+            </div>
+        </div>
+
+         <!-- Filter moved below the map -->
+                <div class="mt-4 bg-gray-900 bg-opacity-90 rounded-lg p-3 flex flex-wrap gap-4 items-end border border-gray-700 backdrop-blur">
                     <div class="flex items-center gap-2">
                         <div class="w-3 h-3 rounded-full bg-blue-500"></div>
                         <span class="text-xs text-white">Filter Data</span>
                     </div>
                     <div class="flex-1 min-w-[120px]">
-                        <label class="block text-xxs text-gray-400 mb-1">Cabang Dinas Kehutanan / UPTD</label>
+                        <label class="block text-xxs text-gray-400 mb-1">Unit Kerja</label>
                         <select id="map-filter-cdk" class="w-full bg-gray-800 border-none rounded p-1.5 text-xs text-white" onchange="applyGlobalFilter()">
                             <option value="all">Semua Wilayah</option>
                         </select>
@@ -152,28 +175,9 @@
                         <button onclick="resetGlobalFilter()" class="text-xs text-blue-400 hover:text-blue-300">Terapkan - Reset</button>
                     </div>
                 </div>
-            </div>
-            
-            <!-- Activity Feed -->
-            <div class="card flex flex-col">
-                <div class="card-title">
-                    <span>Aktivitas Terbaru</span>
-                    <span class="text-xs text-green-400 cursor-pointer">Lihat Semua</span>
-                </div>
-                <div class="flex-1 flex flex-col gap-3 overflow-y-auto" id="activity-feed">
-                    <!-- Populated by JS -->
-                </div>
-                <!-- Feed Pagination -->
-                <div class="flex justify-center gap-2 mt-4 pt-3 border-t border-gray-800">
-                    <button class="w-6 h-6 rounded bg-gray-800 flex items-center justify-center text-xs hover:bg-gray-700" onclick="prevActivity()">&#9664;</button>
-                    <span class="text-xs text-gray-400 flex items-center" id="activity-page">1 / 1</span>
-                    <button class="w-6 h-6 rounded bg-gray-800 flex items-center justify-center text-xs hover:bg-gray-700" onclick="nextActivity()">&#9654;</button>
-                </div>
-            </div>
-        </div>
 
         <!-- KPI Row -->
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6" id="kpi-container">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 mt-6" id="kpi-container">
             <!-- Laporan Mingguan -->
             <div class="card">
                 <div class="text-xs text-gray-400 mb-2">Laporan Aktivitas Mingguan</div>
@@ -182,7 +186,7 @@
                     <span class="text-sm text-gray-500 mb-1">laporan</span>
                 </div>
                 <div class="text-xs text-gray-500 mb-3">dari 1763 titik hutan binaan.</div>
-                <div class="text-xxs text-yellow-400">Periode : Minggu Berjalan ▲ <span id="kpi-p-mingguan">0</span>% dari seluruh titik hutan binaan.</div>
+                <div class="text-xxs text-yellow-400">Periode : 24-30 Agustus 2026 Minggu Berjalan ▲ <span id="kpi-p-mingguan">0</span>% dari seluruh titik hutan binaan.</div>
             </div>
             <!-- Laporan Bulanan -->
             <div class="card">
@@ -192,7 +196,7 @@
                     <span class="text-sm text-gray-500 mb-1">laporan</span>
                 </div>
                 <div class="text-xs text-gray-500 mb-3">dari 1763 titik hutan binaan.</div>
-                <div class="text-xxs text-yellow-400">Periode : Triwulan Berjalan ▲ <span id="kpi-p-bulanan">0</span>% dari seluruh titik hutan binaan.</div>
+                <div class="text-xxs text-yellow-400">Periode : Triwulan Berjalan (Triwulan 1 Jan-Feb-Mar 2026) ▲ <span id="kpi-p-bulanan">0</span>% dari seluruh titik hutan binaan.</div>
             </div>
             <!-- Pembina Terbanyak -->
             <div class="card">
@@ -216,15 +220,23 @@
             <div class="card lg:col-span-2">
                 <div class="card-title">
                     <span>Statistik CDK/UPTD Yang sudah Melapor</span>
-                    <div class="flex gap-4">
-                        <div class="flex items-center gap-2"><div class="w-3 h-3 bg-yellow-400 rounded"></div><span class="text-xs">Mingguan</span></div>
-                        <div class="flex items-center gap-2"><div class="w-3 h-3 bg-blue-500 rounded-full"></div><span class="text-xs">3 Bulanan</span></div>
-                    </div>
-                </div>
+                    <div class="flex gap-2">
+                        <button
+                        onclick="setChartPeriod('mingguan')"
+                       class="px-2 py-1 rounded text-xs font-semibold bg-yellow-400 text-wwhite">
+                       Laporan Mingguan
+                    </button>
+                    <button 
+                    onclick="setChartPeriod('3bulanan')"
+                    class="px-2 py-1 rounded text-xs font-semibold bg-blue-500 text-white">
+                    Laporan 3 Bulanan
+                </button>
+            </div>
+        </div>
                 <div class="h-64 relative">
                     <canvas id="cdkChart"></canvas>
                 </div>
-                <div class="text-xxs text-gray-500 mt-2 text-center">Periode : Triwulan ke III (Default Mengikuti Waktu)</div>
+                <div class="text-xxs text-gray-500 mt-2 text-center">Statistik Laporan Mingguan dan 3 Bulanan Cabang Dinas Kehutanan dan UPTD</div>
             </div>
 
             <!-- Global Stats List -->
@@ -232,16 +244,15 @@
                 <div class="card-title">Statistik Data Keseluruhan</div>
                 <div class="flex flex-col justify-between h-64">
                     <div class="space-y-4 mt-2">
-                        <div class="flex justify-between items-center text-sm"><div class="flex items-center gap-2 text-green-400"><span>🌿</span> Petugas Jaga Leuweung</div> <span class="font-bold">836 Orang</span></div>
-                        <div class="flex justify-between items-center text-sm"><div class="flex items-center gap-2 text-green-400"><span>🌱</span> Persemaian</div> <span class="font-bold">755 Lokasi</span></div>
-                        <div class="flex justify-between items-center text-sm"><div class="flex items-center gap-2 text-gray-400"><span>👷</span> Pegawai Dinas Kehutanan</div> <span class="font-bold text-green-400">623 Orang</span></div>
+                        <div class="flex justify-between items-center text-sm"><div class="flex items-center gap-2 text-yellow-400"><span>🌿</span> Petugas Jaga Leuweung</div> <span class="font-bold">836 Orang</span></div>
+                        <div class="flex justify-between items-center text-sm"><div class="flex items-center gap-2 text-blue-400"><span>🌱</span> Persemaian</div> <span class="font-bold">755 Lokasi</span></div>
+                        <div class="flex justify-between items-center text-sm"><div class="flex items-center gap-2 text-green-400"><span>👷</span> Pegawai Dinas Kehutanan</div> <span class="font-bold text-green-400">623 Orang</span></div>
                         <div class="flex justify-between items-center text-sm"><div class="flex items-center gap-2 text-purple-400"><span>⛺</span> Juna Permanen</div> <span class="font-bold">29 Lokasi</span></div>
-                        <div class="flex justify-between items-center text-sm"><div class="flex items-center gap-2 text-purple-400"><span>📍</span> Hutan Binaan</div> <span class="font-bold text-green-400">1763 Titik</span></div>
-                        <div class="flex justify-between items-center text-sm"><div class="flex items-center gap-2 text-purple-400"><span>🗺️</span> Luasan Hektar Hutan Binaan</div> <span class="font-bold text-green-400">5.363,68 Ha</span></div>
+                        <div class="flex justify-between items-center text-sm"><div class="flex items-center gap-2 text-orange-400"><span>📍</span> Hutan Binaan</div> <span class="font-bold text-green-400">1763 Titik</span></div>
+                        <div class="flex justify-between items-center text-sm"><div class="flex items-center gap-2 text-orange-400"><span>🗺️</span> Luasan Hektar Hutan Binaan</div> <span class="font-bold text-green-400">5.363,68 Ha</span></div>
                     </div>
                     <div class="mt-4 pt-4 border-t border-gray-800 flex justify-between items-center">
-                        <span class="text-xs text-gray-500">Periode Monitoring<br>Agustus 2026</span>
-                        <button onclick="openMainAppAction('peta')" class="text-xs bg-green-700 hover:bg-green-600 px-3 py-1.5 rounded transition">Lihat Laporan ></button>
+                        
                     </div>
                 </div>
             </div>
@@ -260,8 +271,8 @@
                 </div>
                 <div class="flex flex-wrap gap-2">
                     <select id="table-filter-sort" class="bg-gray-800 border border-gray-700 rounded p-1.5 text-xs text-white" onchange="applyTableFilter()">
-                        <option value="az">A-Z (Nama)</option>
-                        <option value="za">Z-A (Nama)</option>
+                        <option value="az">A-Z (Nama Pembina)</option>
+                        <option value="za">Z-A (Nama Pembina)</option>
                         <option value="high">Tertinggi (Laporan)</option>
                         <option value="low">Terendah (Laporan)</option>
                     </select>
@@ -275,11 +286,11 @@
                         <tr>
                             <th>NO</th>
                             <th>Nama Pembina</th>
-                            <th>CDK</th>
+                            <th>Unit Kerja</th>
                             <th>Lokasi</th>
-                            <th>Luas</th>
+                            <th>Luas Hutan Binaan (Ha)</th>
                             <th>Total Laporan Mingguan</th>
-                            <th>Total Laporan Linimasa</th>
+                            <th>Total Laporan 3 Bulanan</th>
                         </tr>
                     </thead>
                     <tbody id="pembina-tbody">
@@ -339,11 +350,11 @@
 
     // --- DATA FETCH & STATE ---
     const cdkCoords = [
-        { id: "CDK 1", lat: -6.603102, lng: 106.806561 }, { id: "CDK 2", lat: -6.560615, lng: 107.447188 },
-        { id: "CDK 3", lat: -6.905681, lng: 106.983354 }, { id: "CDK 4", lat: -6.744432, lng: 107.062124 },
-        { id: "CDK 5", lat: -7.214439, lng: 107.901382 }, { id: "CDK 6", lat: -7.370324, lng: 108.220195 },
-        { id: "CDK 7", lat: -6.969359, lng: 108.518847 }, { id: "CDK 8", lat: -6.969401, lng: 108.518727 },
-        { id: "CDK 9", lat: -6.835586, lng: 107.907709 }, { id: "SPTH", lat: -6.932772, lng: 107.771134 },
+        { id: "Cabang Dinas Kehutanan Wilayah 1", lat: -6.603102, lng: 106.806561 }, { id: "Cabang Dinas Kehutanan Wilayah 2", lat: -6.560615, lng: 107.447188 },
+        { id: "Cabang Dinas Kehutanan Wilayah 3", lat: -6.905681, lng: 106.983354 }, { id: "Cabang Dinas Kehutanan Wilayah 4", lat: -6.744432, lng: 107.062124 },
+        { id: "Cabang Dinas Kehutanan Wilayah 5", lat: -7.214439, lng: 107.901382 }, { id: "Cabang Dinas Kehutanan Wilayah 6", lat: -7.370324, lng: 108.220195 },
+        { id: "Cabang Dinas Kehutanan Wilayah 7", lat: -6.969359, lng: 108.518847 }, { id: "Cabang Dinas Kehutanan Wilayah 8", lat: -6.969401, lng: 108.518727 },
+        { id: "Cabang Dinas Kehutanan Wilayah 9", lat: -6.835586, lng: 107.907709 }, { id: "SPTH", lat: -6.932772, lng: 107.771134 },
         { id: "P2HH", lat: -6.783905, lng: 108.625826 }, { id: "Tahura", lat: -6.858743, lng: 107.630705 },
         { id: "Sekre", lat: -6.938027, lng: 107.671926 }
     ];
@@ -423,7 +434,7 @@
             
             const tip = `<div style="text-align:center;"><b>${loc.id}</b></div>
             <div style="font-size:11px; margin-top:4px;">
-            Pegawai: ${loc.total}<br>Lap. Mingguan: ${loc.mingguan}<br>Lap. Bulanan: ${loc.bulanan}
+            Jumlah_Jaga_Leuweung: ${loc.total}<br>Jumlah_Persemaian: ${loc.mingguan}<br>Data_Pegawai: ${loc.bulanan}<br>Jumlah_Juna_Permanen:${loc.total}<br>Jumlah_Hutan_Binaan:${loc.total}<br>Luasan_Hutan_Binaan:${loc.total}.
             </div>`;
             marker.bindTooltip(tip, {className: 'bg-gray-800 text-white p-2 rounded shadow-lg'});
             
@@ -550,18 +561,40 @@
         for(let i=start; i<end; i++) {
             const d = feedData[i];
             const type = d.mingguan > 0 ? 'Laporan Mingguan' : 'Laporan Bulanan';
+            const now = new Date();
+            const tanggalSekarang = now.toLocaleDateString('id-ID', {
+                day: '2-digit',
+                month: 'long',
+                year: 'numeric',
+                }) 
+                const jam= now.toLocaleTimeString('id-ID', {
+                hour: '2-digit',
+                minute: '2-digit'
+            });
             const html = `
                 <div class="flex gap-3 bg-gray-800 p-3 rounded-lg border-l-4 border-green-500">
-                    <div class="w-10 h-10 rounded bg-green-900 flex items-center justify-center text-green-400 font-bold">${d.nama.charAt(0)}</div>
+                    <div class="w-10 h-10 rounded overflow-hidden bg-gray-700 flex-shrink-0">${d.foto? `<img src="${d.foto}" class="w-full h-full object-cover" alt="${d.nama}">`: `<div class="w-full h-full flex items-center justify-center text-green-400 font-bold">${d.nama.charAt(0)}</div>`}</div>
                     <div class="flex-1">
-                        <div class="flex justify-between items-start">
-                            <div class="text-sm font-semibold">${d.nama}</div>
-                            <div class="text-xxs text-gray-400">Hari ini</div>
-                        </div>
-                        <div class="text-xs text-green-400 font-medium">${type}</div>
-                        <div class="text-xxs text-gray-400 truncate">${d.cdk} - ${d.lokasi}</div>
+                    <div class="flex justify-between items-start">
+                    <div class="text-sm font-semibold">${d.nama}</div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-[9px] text-gray-400">${tanggalSekarang}</span>
+                        <span class="text-[9px] text-green-400">${jam}</span>
                     </div>
-                </div>`;
+                </div>
+                        <div class="text-xs text-green-400 font-medium">${type}</div>
+                       <div class="flex justify-between items-center gap-2">
+                <div class="text-xxs text-gray-400 truncate">
+                    ${d.cdk} - ${d.lokasi}
+                </div>
+                <button
+                    type="button"
+                    class="flex-shrink-0 text-[9px] text-white bg-green-600 hover:bg-green-500 rounded-md px-3 py-1">
+                    Lihat Selengkapnya
+                        </button>
+                    </div>
+                </div>
+            </div>`;
             box.innerHTML += html;
         }
         

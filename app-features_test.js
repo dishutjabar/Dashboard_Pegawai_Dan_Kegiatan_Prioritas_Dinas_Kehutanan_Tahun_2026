@@ -1,15 +1,3 @@
-
-function calculateHaversineDistance(lat1, lon1, lat2, lon2) {
-  var R = 6371; // km
-  var dLat = (lat2 - lat1) * Math.PI / 180;
-  var dLon = (lon2 - lon1) * Math.PI / 180;
-  var a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-          Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-          Math.sin(dLon/2) * Math.sin(dLon/2);
-  var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-  return R * c;
-}
-
 // Custom ShapeMarker Extension for Canvas
 if (typeof L !== 'undefined' && L.Canvas) {
     L.Canvas.include({
@@ -307,7 +295,6 @@ function getRowUnit(row, type) {
   if (!row) return '';
   type = normalizeFilterType(type || (row._data_type || ''));
   if (type === 'pegawaiBinaan') return String(getBinaanField(row, 'unit') || '').trim();
-  if (type === 'polygon_kegiatan' || type === 'pohon') return String(row['CDK_Wilayah'] || row['CDK Wilayah'] || '').trim();
   return String(row['Unit Kerja'] || row['UNIT KERJA'] || row.Unit || row.unit || '').trim();
 }
 
@@ -428,7 +415,7 @@ function applyCurrentUserRoleDefaults(user) {
 
   if (group === 1) {
     schedRender();
-    if (typeof fetchPolygonFeatures === "function") fetchPolygonFeatures();
+    rerenderPolygonFeaturesFromCache();
     setTimeout(function() { try { if (mapObj) mapObj.invalidateSize(); } catch (e) {} }, 220);
     return;
   }
@@ -541,11 +528,6 @@ function updateAuthUserUI(user) {
 
   var chkSpatial = document.getElementById("toggle-spatial");
   var drawControl = document.querySelector(".leaflet-draw, .custom-draw-control");
-  var allDrawControls = function(show) {
-    document.querySelectorAll(".leaflet-draw, .custom-draw-control").forEach(function(el) {
-      el.style.display = show ? "" : "none";
-    });
-  };
   
   if (user && user.username) {
     if (pill) pill.textContent = user.nama || user.username;
@@ -568,19 +550,19 @@ function updateAuthUserUI(user) {
       if (btnTable) btnTable.style.display = '';
       if (btnSource) btnSource.style.display = '';
       if (btnExport) btnExport.style.display = '';
-      if (typeof allDrawControls === 'function') allDrawControls(true); else if (drawControl) drawControl.style.display = '';
+      if (drawControl) drawControl.style.display = '';
     } else if (group <= 3) {
       if (btnSpatial) { btnSpatial.style.display = ''; btnSpatial.innerHTML = '&#128506; <span class="d-none-mobile">Atur Polygon</span>'; }
       if (btnTable) btnTable.style.display = 'none';
       if (btnSource) btnSource.style.display = 'none';
       if (btnExport) btnExport.style.display = 'none';
-      if (typeof allDrawControls === 'function') allDrawControls(false); else if (drawControl) drawControl.style.display = 'none';
+      if (drawControl) drawControl.style.display = 'none';
     } else {
       if (btnSpatial) btnSpatial.style.display = 'none';
       if (btnTable) btnTable.style.display = 'none';
       if (btnSource) btnSource.style.display = 'none';
       if (btnExport) btnExport.style.display = 'none';
-      if (typeof allDrawControls === 'function') allDrawControls(false); else if (drawControl) drawControl.style.display = 'none';
+      if (drawControl) drawControl.style.display = 'none';
       
       // Auto enable Tampilkan Polygon Spasial
       if (chkSpatial && !chkSpatial.checked) {
@@ -658,9 +640,49 @@ function unlockDashboard(user) {
   if (portal) portal.classList.add("hidden");
   document.body.classList.add("auth-unlocked");
   updateAuthUserUI(user);
+  
+  // REDIRECT UNTUK ROLE PIMPINAN (Group 1, 2, 3)
+  var group = getRoleGroup(user && user.role);
+  if (group <= 3) {
+    var dashUrl = 'dashboard/dashboard-pimpinan.html';
+    var container = document.getElementById('pimpinan-dashboard-container');
+    var frame = document.getElementById('pimpinan-dashboard-frame');
+    
+    if (!container) {
+      container = document.createElement('div');
+      container.id = 'pimpinan-dashboard-container';
+      container.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; z-index:999999; background:#11161c;';
+      
+      frame = document.createElement('iframe');
+      frame.id = 'pimpinan-dashboard-frame';
+      frame.style.cssText = 'width:100%; height:100%; border:none;';
+      
+      var closeBtn = document.createElement('button');
+      closeBtn.innerHTML = '&#10005; Tutup Dashboard Pimpinan';
+      closeBtn.style.cssText = 'position:absolute; top:15px; right:20px; z-index:1000000; padding:8px 16px; background:#e53935; color:#fff; border:none; border-radius:6px; font-weight:bold; cursor:pointer; box-shadow:0 2px 5px rgba(0,0,0,0.3);';
+      closeBtn.onclick = function() {
+        container.style.display = 'none';
+      };
+      
+      container.appendChild(frame);
+      container.appendChild(closeBtn);
+      document.body.appendChild(container);
+    }
+    
+    if (container && frame) {
+      container.style.display = 'block';
+      if (frame.src.indexOf(dashUrl) === -1) frame.src = dashUrl;
+    }
+  }
+  
+  ensureMobileCleanLayout_(true);
+  renderUserCalendar();
+  checkMonthlyReportedNotification();
+  setTimeout(function() { ensureMobileCleanLayout_(true);
+  renderUserCalendar();
+  checkMonthlyReportedNotification(); }, 120);
   if (typeof fetchSpatialFileList === "function") fetchSpatialFileList();
   ensureBackendDplColumns();
-  if (typeof checkMonthlyReportedNotification === "function") checkMonthlyReportedNotification();
 }
 
 function lockDashboard(message) {
@@ -669,8 +691,8 @@ function lockDashboard(message) {
   clearStoredAuth();
   document.body.classList.remove("auth-unlocked");
   ensureMobileCleanLayout_(true);
-  if (typeof renderCalendarReminder === "function") renderCalendarReminder();
-  if (typeof checkMonthlyReportedNotification === "function") checkMonthlyReportedNotification();
+  renderUserCalendar();
+  checkMonthlyReportedNotification();
   updateAuthUserUI(null);
   var portal = document.getElementById("auth-portal");
   if (portal) portal.classList.remove("hidden");
@@ -681,15 +703,7 @@ function postAuthAction(payload) {
   return fetch(GAS_WEB_APP_URL, {
     method: "POST",
     body: JSON.stringify(payload)
-  }).then(function(r) {
-    return r.text().then(function(text) {
-      try {
-        return JSON.parse(text);
-      } catch(e) {
-        throw new Error('Server Google sedang sibuk atau timeout. Silakan klik Login sekali lagi.');
-      }
-    });
-  });
+  }).then(function(r) { return r.json(); });
 }
 
 function ensureBackendDplColumns() {
@@ -791,10 +805,12 @@ function submitLogin(event) {
 }
 
 function logoutGeoHutan() {
-  clearStoredAuth();
-  localStorage.removeItem(AUTH_USER_STORAGE_KEY);
-  localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
-  window.location.reload(true);
+  nextAuthFlow_();
+  var token = getAuthToken();
+  if (token && GAS_WEB_APP_URL.indexOf("script.google.com") !== -1) {
+    postAuthAction({ action: "logout", authToken: token }).catch(function() {});
+  }
+  lockDashboard("Anda sudah keluar dari dashboard.");
 }
 
 function togglePasswordVisibility(inputId, btn) {
@@ -2589,24 +2605,6 @@ function getRowCarbon(r) {
   return sum > 0 ? sum.toFixed(3) : '0.000';
 }
 
-function getRowCarbon(r) {
-  var sum = 0;
-  for (var y = 2024; y <= 2030; y++) {
-    var val = r['CO2e_' + y];
-    if (val && String(val).trim()) {
-       var arr = String(val).split('|');
-       arr.forEach(function(s) {
-         var v = parseFloat(s.trim().replace(/,/g, '.'));
-         if (!isNaN(v)) sum += v;
-       });
-    }
-  }
-  var native = parseFloat(String(r['Total Estimasi Simpanan Karbon (CO2e)'] || r['CO2e'] || '').replace(/,/g, '.'));
-  if (!isNaN(native)) sum += native;
-  
-  return sum > 0 ? sum.toFixed(3) : '0.000';
-}
-
 function appendDplRows(rows, row, lat, lng) {
   var info = getDplInfoForRow(row, lat, lng);
   rows.push(['DPL', info.value]);
@@ -2614,31 +2612,10 @@ function appendDplRows(rows, row, lat, lng) {
   return rows;
 }
 
-function getCarbonHtml(r) {
-  var sum = 0;
-  var lm = r['Data Linimasa'] || '';
-  if (lm) {
-    var parts = lm.split('||');
-    parts.forEach(function(p) {
-       var y = p.split('::')[0];
-       if (y) {
-         var val = parseFloat(String(r['CO2e_' + y] || '').replace(/,/g, '.'));
-         if (!isNaN(val)) sum += val;
-       }
-    });
-  }
-  var native = parseFloat(String(r['Total Estimasi Simpanan Karbon (CO2e)'] || r['CO2e'] || '').replace(/,/g, '.'));
-  if (!isNaN(native)) sum += native;
-  if (sum > 0) {
-    return '<div class="pjl-tooltip-row" style="margin-top:5px; background:#e8f5e9; padding:4px; border-radius:3px;"><span class="marker-tip-lbl" style="width:100%;font-size:10px;">Total Estimasi Simpanan Karbon CO₂e di wilayah ini = ' + sum.toFixed(3) + '</span></div>';
-  }
-  return '';
-}
-
 function buildDplTooltipRowsHtml(row, lat, lng) {
   var info = getDplInfoForRow(row, lat, lng);
   return '<div class="pjl-tooltip-row"><span class="marker-tip-lbl">DPL</span><span class="marker-tip-val">' + info.value + '</span></div>' +
-    '<div class="pjl-tooltip-row"><span class="marker-tip-lbl">Status DPL</span><span class="marker-tip-val">' + info.statusHtml + '</span></div>' + getCarbonHtml(row);
+    '<div class="pjl-tooltip-row"><span class="marker-tip-lbl">Status DPL</span><span class="marker-tip-val">' + info.statusHtml + '</span></div>';
 }
 
 var DPL_CACHE = {};
@@ -2970,7 +2947,6 @@ function parseLuasHa(value) {
   return isNaN(n) ? 0 : n;
 }
 
-
 function getBinaanLuasRaw(row) {
   return getSheetValue(row, [
     'Luas (Ha)', 'Luasan (Ha)', 'Luas_Ha', 'Luasan_Ha',
@@ -3115,8 +3091,7 @@ function openDrawer(type, r) {
       ['Unit Kerja', r['Unit Kerja'] || r['UNIT KERJA']],
       ['Jabatan', r['Nama Jabatan'] || r['Jabatan'] || r['JABATAN']],
       ['Alamat', r['Alamat'] || r['ALAMAT']],
-      ['Koordinat', coordText(lat, lng)],
-      ['Total Estimasi Simpanan Karbon (CO\u2082e)', (typeof getRowCarbon === 'function' ? getRowCarbon(r).toFixed(3) : '0.000') + ' ton CO\u2082e']
+      ['Koordinat', coordText(lat, lng)]
     ];
     var _pegPhotoRow = r;
   } else if (type === 'pegb' || type === 'pegawaiBinaan') {
@@ -3152,9 +3127,7 @@ function openDrawer(type, r) {
       ['Jumlah Bibit', r['Jumlah_Bibit'] || r['Jumlah Bibit']],
       ['Koordinat', coordText(pgLat, pgLng)],
       ['Keterangan', r['Keterangan']],
-      ['Tanggal Input', formatDateIndo(r['Tanggal_Input'] || r['Tanggal Input'])],
-      ['DPL', r['DPL'] ? r['DPL'] + ' mdpl' : null],
-      ['Status DPL', r['Status_DPL'] || r['Status DPL'] || null]
+      ['Tanggal Input', formatDateIndo(r['Tanggal_Input'] || r['Tanggal Input'])]
     ];
     var _pohonPhotoRow = r;
     cy = pgLat; cx = pgLng;
@@ -3187,12 +3160,6 @@ function openDrawer(type, r) {
 
   if (cy && cx && ['pjl', 'per', 'persemaian', 'pegb', 'pegawaiBinaan', 'pohon', 'polygon_kegiatan', 'jum', 'jumat'].indexOf(type) !== -1) {
     config = config.concat(buildDplRows(r, cy, cx));
-  }
-  if (type === 'pegb' || type === 'pegawaiBinaan') {
-    var sumVal = typeof getRowCarbon === 'function' ? getRowCarbon(r) : 0;
-    var sumStr = String(sumVal).trim();
-    if (sumStr === '0' || sumStr === 'NaN' || !sumStr) sumStr = '0.000';
-    config.push(['Total Estimasi Simpanan Karbon (CO\u2082e)', sumStr + ' ton CO\u2082e']);
   }
 
   var html = '';
@@ -3644,7 +3611,7 @@ function applyFilter() {
   FILTER.luas_val = luasValStr ? parseFloat(luasValStr) : null;
   
   schedRender();
-  if (typeof fetchPolygonFeatures === "function") fetchPolygonFeatures();
+  rerenderPolygonFeaturesFromCache();
 }
 function resetFilter() {
   FILTER = { cdk: [], pegawaiUnit: [], kab: [], status: [], kawasan: [], jabatan: [], nama_pegawai: [], penyuluh: [], kategori_lojuna: [], binaan_kegiatan: [], binaan_jabatan: [], binaan_pembina: [], luas_op: '>=', luas_val: null };
@@ -3665,7 +3632,7 @@ function resetFilter() {
   var luasOp = document.getElementById('f_luas_op'); if (luasOp) luasOp.value = '>=';
   
   schedRender();
-  if (typeof fetchPolygonFeatures === "function") fetchPolygonFeatures();
+  rerenderPolygonFeaturesFromCache();
 }
 function forceRefresh() { try { mapObj.invalidateSize(); } catch(e) {} schedRender(); showToast('Tampilan disegarkan'); }
 
@@ -3675,27 +3642,12 @@ function getCDKExtended(unitKerja) {
   if (u.includes('SPTH') || u.includes('SERTIFIKASI DAN PERBENIHAN')) return 'SPTH';
   if (u.includes('P2HH') || u.includes('PPPH') || u.includes('PPHH') || u.includes('PENGOLAHAN HASIL HUTAN')) return 'PPPH';
   if (u.includes('TAHURA') || u.includes('TAMAN HUTAN RAYA')) return 'TAHURA';
-  
-  if (u.includes('SEKRETARIAT')) return 'Sekretariat';
-  if (u.includes('PPKH') || u.includes('PEMOLAAN DAN PEMANFAATAN KAWASAN HUTAN')) return 'Bidang PPKH';
-  if (u.includes('PDAS') || u.includes('PENGELOLAAN DAERAH ALIRAN SUNGAI')) return 'Bidang PDAS';
-  if (u.includes('BUPM') || u.includes('BINA USAHA DAN PEMBERDAYAAN MASYARAKAT')) return 'Bidang BUPM';
-  if (u.includes('PKSDAE') || u.includes('PERLINDUNGAN DAN KONSERVASI SUMBER DAYA ALAM DAN EKOSISTEMNYA')) return 'Bidang PKSDAE';
-
   // Handle 'CABANG DINAS KEHUTANAN WILAYAH I BOGOR' ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ 'CDK WILAYAH I'
   var m = u.match(/CABANG\s+DINAS\s+KEHUTANAN\s+WILAYAH\s+([IVX]+|\d+)/i) ||
           u.match(/CABANG\s+DINAS\s+(?:KE)?HUT(?:ANAN)?\s+WIL(?:AYAH)?\s+([IVX]+|\d+)/i) ||
           u.match(/CDK\s*(?:WILAYAH\s*)?([IVX]+|\d+)/i);
-    if (m) return 'CDK Wilayah ' + romanOrNumberToInt(m[1]);
-  var res = getCDK(u);
-  if (res) return res;
-  
-  // Filter out noise/invalid data from spreadsheet summaries/errors
-  if (u.includes('#REF!') || u.includes('JUMLAH') || u.includes('PERSENTASE') || u === 'KARAWANG' || u === 'KABUPATEN') {
-    return '';
-  }
-
-  return u.replace(/\w\S*/g, function(txt) { return txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase(); });
+  if (m) return 'CDK Wilayah ' + romanOrNumberToInt(m[1]);
+  return getCDK(u);
 }
 
 function formatCDKChartLabel(label) {
@@ -3903,42 +3855,25 @@ function loadCSV(url, type) {
     finish();
   }
 }
-var _LOAD_SAFETY_TIMER = null;
-
-function finishLoadingSequence() {
-  if (_LOAD_SAFETY_TIMER) { clearTimeout(_LOAD_SAFETY_TIMER); _LOAD_SAFETY_TIMER = null; }
-  LOADED = TOTAL;
-  var loaderText = document.getElementById('loader-text');
-  if (loaderText) loaderText.textContent = 'Memuat GeoHutan Jabar... 100%';
-  fillDropdown(); schedRender();
-  applyCurrentUserRoleDefaults(getCurrentAuthUser());
-  hydrateDplForVisibleRows();
-  updateMapDplReadout();
-  setTimeout(function() {
-    var overlay = document.getElementById('loader-overlay');
-    if (overlay) {
-      overlay.style.opacity = '0';
-      setTimeout(function() { overlay.style.display = 'none'; }, 500);
-    }
-    showToast('Data berhasil dimuat sepenuhnya');
-    if (typeof initSpatialSystem === 'function') initSpatialSystem();
-  }, 500);
-}
-
 function onLoaded() {
   LOADED++;
   var pct = Math.min(Math.round(LOADED / TOTAL * 100), 100);
   var loaderText = document.getElementById('loader-text');
   if (loaderText) loaderText.textContent = 'Memuat GeoHutan Jabar... ' + pct + '%';
-  
   if (LOADED >= TOTAL) {
-    finishLoadingSequence();
-  } else if (!_LOAD_SAFETY_TIMER) {
-    // Safety fallback: If data loading gets stuck (e.g. 95%), force finish after 6 seconds max
-    _LOAD_SAFETY_TIMER = setTimeout(function() {
-      console.warn('[GeoHutan] Loading timeout safety triggered at ' + LOADED + '/' + TOTAL);
-      finishLoadingSequence();
-    }, 6000);
+    fillDropdown(); schedRender();
+    applyCurrentUserRoleDefaults(getCurrentAuthUser());
+    hydrateDplForVisibleRows();
+    updateMapDplReadout();
+    setTimeout(function() {
+      var overlay = document.getElementById('loader-overlay');
+      if (overlay) {
+        overlay.style.opacity = '0';
+        setTimeout(function() { overlay.style.display = 'none'; }, 500);
+      }
+      showToast('Data berhasil dimuat sepenuhnya');
+      if (typeof initSpatialSystem === 'function') initSpatialSystem();
+    }, 1000);
   }
 }
 
@@ -4000,24 +3935,6 @@ function fillDropdown() {
       });
       if(cur && cur.length) $(el).val(cur).trigger('change');
     }
-  }
-  
-  pop('f_cdk', S.cdk, 'Semua CDK'); pop('f_pegawai', S.unit, 'Semua Unit'); pop('f_kab', S.kab, 'Semua Kab/Kota');
-  pop('f_status', S.status, 'Semua Status'); pop('f_kawasan', S.kawasan, 'Semua Kawasan');
-  pop('f_jabatan', S.jabatan, 'Semua Jabatan'); pop('f_nama_pegawai', S.nama_pegawai, 'Semua Nama Pegawai');
-  pop('f_penyuluh', S.penyuluh, 'Semua Petugas Lapangan'); pop('f_kategori_lojuna', S.kategori_lojuna, 'Semua Kategori');
-  pop('f_binaan_kegiatan', S.binaan_kegiatan, 'Semua Kegiatan'); pop('f_binaan_jabatan', S.binaan_jabatan, 'Semua Jabatan'); pop('f_binaan_pembina', S.binaan_pembina, 'Semua Pembina');
-}
-
-var GLOBAL_POLY_COORDS = {};
-/* Render Engine */
-function schedRender() { clearTimeout(RTIMER); RTIMER = setTimeout(doRender, 100); }
-function doRender() {
-  var cnt = { pjl: 0, per: 0, peg: 0, jum: 0 };
-  
-  if (HEATMAP_LAYER) { mapObj.removeLayer(HEATMAP_LAYER); HEATMAP_LAYER = null; }
-  var heatData = [];
-  var pegJumPoints = [];
   var pegNames = [];
   var jumNames = [];
   GLOBAL_POLY_COORDS = {};
@@ -4256,7 +4173,6 @@ function doRender() {
               '<div class="pjl-tooltip-row"><span class="marker-tip-lbl">Kegiatan</span><span class="marker-tip-val">' + pegbKeg + '</span></div>' +
               '<div class="pjl-tooltip-row"><span class="marker-tip-lbl">Unit</span><span class="marker-tip-val">' + pegbUnit + '</span></div>' +
               '<div class="pjl-tooltip-row"><span class="marker-tip-lbl">Jabatan</span><span class="marker-tip-val">' + pegbJabatan + '</span></div>' +
-              '<div class="pjl-tooltip-row"><span class="marker-tip-lbl">Est. Karbon</span><span class="marker-tip-val">' + ((typeof getRowCarbon === 'function' ? getRowCarbon(r) : '0.000') + ' ton CO₂e') + '</span></div>' +
               buildDplTooltipRowsHtml(r, r._lat, r._lng) +
               '</div>';
             if (pegbThumb) {
@@ -4382,18 +4298,6 @@ function doRender() {
     });
     var elPegb = document.getElementById('cnt-pegb'); if (elPegb) elPegb.textContent = cntPegb;
     var elPegbLuas = document.getElementById('cnt-pegb-luas'); if (elPegbLuas) elPegbLuas.textContent = formatLuasHa(luasPegb);
-    
-    // Update Total Carbon KPI (filter-synced)
-    var totalCarbon = 0;
-    DATA.pegawaiBinaan.forEach(function(r) {
-      if (r && passFilter(r, 'pegawaiBinaan')) {
-        var c = typeof getRowCarbon === 'function' ? getRowCarbon(r) : 0;
-        var cv = parseFloat(String(c || '0').replace(/,/g, '.'));
-        if (!isNaN(cv)) totalCarbon += cv;
-      }
-    });
-    var elCarbon = document.getElementById('cnt-total-carbon');
-    if (elCarbon) elCarbon.textContent = totalCarbon.toFixed(3);
   } catch(e) {}
   updateCharts(cnt);
   if (typeof renderSpatialPolygons === 'function') renderSpatialPolygons(true);
@@ -4641,94 +4545,9 @@ var drawControl = new L.Control.Draw({
 });
 mapObj.addControl(drawControl);
 
-// ======== CUSTOM DRAW CONTROL (Polygon, Garis, Taruh Pohon) ========
-var drawPolygonKegiatan = new L.Draw.Polygon(mapObj, {
-  allowIntersection: false,
-  showArea: true,
-  shapeOptions: { color: '#388e3c', weight: 3, fillOpacity: 0.3 }
-});
-
-var drawGarisKegiatan = new L.Draw.Polyline(mapObj, {
-  shapeOptions: { color: '#388e3c', weight: 4 }
-});
-
-var drawPohonMarker = new L.Draw.Marker(mapObj, {
-  icon: L.divIcon({ className: '', html: '&#127807;', iconSize: [28, 28], iconAnchor: [14, 28] })
-});
-
-var CustomDrawControl = L.Control.extend({
-  options: { position: 'topright' },
-  onAdd: function (map) {
-    var container = L.DomUtil.create('div', 'leaflet-bar leaflet-control custom-draw-control');
-    container.style.cssText = 'background:white;padding:5px;display:flex;flex-direction:column;gap:5px;border:2px solid rgba(0,0,0,0.2);border-radius:5px;';
-    container.innerHTML =
-      '<button type="button" class="btn-icon" style="background:#e8f5e9;border:1px solid #43a047;color:#2e7d32;border-radius:4px;padding:6px;cursor:pointer;font-size:12px;font-weight:bold;width:100%;text-align:left;" onclick="startDrawPolygonKegiatan()" title="Gambar Polygon Area">&#128308; Polygon</button>' +
-      '<button type="button" class="btn-icon" style="background:#e8f5e9;border:1px solid #43a047;color:#2e7d32;border-radius:4px;padding:6px;cursor:pointer;font-size:12px;font-weight:bold;width:100%;text-align:left;" onclick="startDrawGarisKegiatan()" title="Gambar Garis Jalur/Greenbelt">&#128312; Garis</button>' +
-      '<button type="button" class="btn-icon" style="background:#e8f5e9;border:1px solid #43a047;color:#2e7d32;border-radius:4px;padding:6px;cursor:pointer;font-size:12px;font-weight:bold;width:100%;text-align:left;" onclick="startDrawPohonMarker()" title="Taruh Pohon">&#127807; Taruh Pohon</button>';
-    L.DomEvent.disableClickPropagation(container);
-    return container;
-  }
-});
-var customDrawControl = new CustomDrawControl();
-mapObj.addControl(customDrawControl);
-
-var _activeDrawTool = null; // Track which custom draw tool was last enabled
-
-function startDrawPolygonKegiatan() {
-  if (!canManageSpatialData()) { showToast('Akun ini tidak memiliki izin membuat polygon kegiatan.', 'error'); return; }
-  _activeDrawTool = 'polygon';
-  drawPohonMarker.disable();
-  drawGarisKegiatan.disable();
-  drawPolygonKegiatan.enable();
-  showToast('Silakan gambar area polygon di peta. Klik titik awal untuk selesai.', 'info');
-}
-
-function startDrawGarisKegiatan() {
-  if (!canManageSpatialData()) { showToast('Akun ini tidak memiliki izin membuat garis kegiatan.', 'error'); return; }
-  _activeDrawTool = 'garis';
-  drawPohonMarker.disable();
-  drawPolygonKegiatan.disable();
-  drawGarisKegiatan.enable();
-  showToast('Silakan gambar garis (jalur/greenbelt) di peta. Klik ganda titik terakhir untuk selesai.', 'info');
-}
-
-function startDrawPohonMarker() {
-  if (!canManageSpatialData()) { showToast('Akun ini tidak memiliki izin membuat marker kegiatan.', 'error'); return; }
-  _activeDrawTool = 'marker';
-  drawPolygonKegiatan.disable();
-  drawGarisKegiatan.disable();
-  drawPohonMarker.enable();
-  showToast('Silakan klik lokasi di peta untuk menaruh marker pohon kegiatan.', 'info');
-}
-
 mapObj.on(L.Draw.Event.CREATED, function (e) {
-  var layer = e.layer;
-  var tool = _activeDrawTool;
-  _activeDrawTool = null; // Reset
-
-  if (tool === 'polygon') {
-    var geojson = layer.toGeoJSON();
-    var area = (typeof turf !== 'undefined') ? turf.area(geojson) / 10000 : 0;
-    var center = layer.getBounds().getCenter();
-    if (typeof openPolygonForm === 'function') openPolygonForm('polygon', center.lat, center.lng, geojson, area);
-    return;
-  }
-
-  if (tool === 'garis') {
-    var geojson = layer.toGeoJSON();
-    var center = layer.getBounds().getCenter();
-    if (typeof openPolygonForm === 'function') openPolygonForm('polygon', center.lat, center.lng, geojson, 0);
-    return;
-  }
-
-  if (tool === 'marker') {
-    var latlng = layer.getLatLng();
-    if (typeof openPolygonForm === 'function') openPolygonForm('marker', latlng.lat, latlng.lng, null, 0);
-    return;
-  }
-
-  // Fallback: area analysis (original draw tool)
   drawnItems.clearLayers();
+  var layer = e.layer;
   drawnItems.addLayer(layer);
   analyzePolygon(layer);
 });
@@ -5035,37 +4854,39 @@ function formatDateIndo(dStr) {
 
 /** Parse DD/MM/YYYY [HH:mm] into timestamp for sorting */
 function parseExifDate(dStr) {
-    if (!dStr) return 0;
-    var s = String(dStr).trim();
-    var indoParts = typeof parseIndoDateParts === 'function' ? parseIndoDateParts(s) : null;
-    if (indoParts) {
-      return new Date(indoParts.year, indoParts.month, indoParts.day, indoParts.hour || 0, indoParts.minute || 0).getTime();
-    }
-    var isoParts = typeof parseIsoLiteralDateParts === 'function' ? parseIsoLiteralDateParts(s) : null;
-    if (isoParts) {
-      return new Date(isoParts.year, isoParts.month, isoParts.day, isoParts.hour || 0, isoParts.minute || 0).getTime();
-    }
-    var englishParts = typeof parseEnglishDateLiteralParts === 'function' ? parseEnglishDateLiteralParts(s) : null;
-    if (englishParts) {
-      return new Date(englishParts.year, englishParts.month, englishParts.day, englishParts.hour || 0, englishParts.minute || 0).getTime();
-    }
-    var m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2}))?/);
-    if (m) {
-      var h = m[4] ? parseInt(m[4], 10) : 0;
-      var min = m[5] ? parseInt(m[5], 10) : 0;
-      return new Date(parseInt(m[3], 10), parseInt(m[2], 10) - 1, parseInt(m[1], 10), h, min).getTime();
-    }
-    m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{1,2}):(\d{2}))?/);
-    if (m) {
-      return new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10), m[4] ? parseInt(m[4], 10) : 0, m[5] ? parseInt(m[5], 10) : 0).getTime();
-    }
-    m = s.match(/^(\d{4}):(\d{2}):(\d{2})(?:\s+(\d{1,2}):(\d{2}))?/);
-    if (m) {
-      return new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10), m[4] ? parseInt(m[4], 10) : 0, m[5] ? parseInt(m[5], 10) : 0).getTime();
-    }
-    var ts = Date.parse(s);
-    return isNaN(ts) ? 0 : ts;
+  if (!dStr) return 0;
+  var s = String(dStr).trim();
+  var indoParts = parseIndoDateParts(s);
+  if (indoParts) {
+    return new Date(indoParts.year, indoParts.month, indoParts.day, indoParts.hour || 0, indoParts.minute || 0).getTime();
   }
+  var isoParts = parseIsoLiteralDateParts(s);
+  if (isoParts) {
+    return new Date(isoParts.year, isoParts.month, isoParts.day, isoParts.hour || 0, isoParts.minute || 0).getTime();
+  }
+  var englishParts = parseEnglishDateLiteralParts(s);
+  if (englishParts) {
+    return new Date(englishParts.year, englishParts.month, englishParts.day, englishParts.hour || 0, englishParts.minute || 0).getTime();
+  }
+  var m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2}))?/);
+  if (m) {
+    var h = m[4] ? parseInt(m[4], 10) : 0;
+    var min = m[5] ? parseInt(m[5], 10) : 0;
+    return new Date(parseInt(m[3], 10), parseInt(m[2], 10) - 1, parseInt(m[1], 10), h, min).getTime();
+  }
+  m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{1,2}):(\d{2}))?/);
+  if (m) {
+    return new Date(
+      parseInt(m[1], 10),
+      parseInt(m[2], 10) - 1,
+      parseInt(m[3], 10),
+      m[4] ? parseInt(m[4], 10) : 0,
+      m[5] ? parseInt(m[5], 10) : 0
+    ).getTime();
+  }
+  var ts = Date.parse(s);
+  return isNaN(ts) ? 0 : ts;
+}
 
 /** Parse pipe-separated values from a spreadsheet cell */
 function parsePipeField(val) {
@@ -5988,9 +5809,6 @@ function deleteCurrentCarouselPhoto() {
       showToast('Gagal menghapus dari server: ' + data.error, 'error');
     }
     refreshGalleryForYear(year);
-    if (window.CURRENT_DRAWER_ROW && window.CURRENT_DRAWER_TYPE) {
-       openDrawer(window.CURRENT_DRAWER_TYPE, window.CURRENT_DRAWER_ROW);
-    }
   })
   .catch(function(err) {
     console.error(err);
@@ -6052,9 +5870,15 @@ function openUploadModal(r) {
   document.getElementById('upload-year').value = PHOTO_GALLERY.year;
   var btnUploadSubmit = document.querySelector('#upload-modal .btn-apply');
   if (btnUploadSubmit) {
-    btnUploadSubmit.disabled = false;
-    btnUploadSubmit.textContent = 'Simpan & Upload Foto';
-    btnUploadSubmit.style.background = '';
+    if (sourceHasMonthlyPhoto(r)) {
+      btnUploadSubmit.disabled = true;
+      btnUploadSubmit.textContent = 'Sudah Upload Laporan di Rentang Waktu Ini';
+      btnUploadSubmit.style.background = '#999';
+    } else {
+      btnUploadSubmit.disabled = false;
+      btnUploadSubmit.textContent = 'Simpan & Upload Foto';
+      btnUploadSubmit.style.background = '';
+    }
   }
 
   
@@ -6311,63 +6135,13 @@ function saveLocalPhoto() {
         if (reportCoords && reportCoords.lat != null && reportCoords.lng != null && meta.lat != null && meta.lng != null) {
           if (typeof calculateHaversineDistance === 'function') {
             var dist = calculateHaversineDistance(reportCoords.lat, reportCoords.lng, meta.lat, meta.lng);
-            if (dist !== null && dist > 1) {
-              throw new Error('Jarak foto (' + dist.toFixed(2) + ' KM) melebihi batas 1 KM dari titik koordinat Hutan Binaan!');
+            if (dist !== null && dist > 5) {
+              throw new Error('Jarak foto (' + dist.toFixed(2) + ' KM) melebihi batas 5 KM dari titik koordinat Hutan Binaan!');
             }
           }
         }
-        // Wajib metadata untuk Laporan 3 Bulanan Hutan Binaan
-        if (context === 'pegawaiBinaan') {
-          var missing = [];
-          if (!meta.date) missing.push('tanggal waktu');
-          if (meta.lat == null || meta.lng == null) missing.push('koordinat latitude/longitude');
-          if (missing.length) {
-            throw new Error('Ditolak: Foto Laporan 3 Bulanan Wajib memiliki metadata Koordinat Latitude Longitude dan Tanggal Waktu.');
-          }
-        }
-        
-        // Removed: Overwriting lat/lng with EXIF coords breaks backend row lookup
-        
-        if (context === 'pegawaiBinaan' && meta.date) {
-          var metaTs = typeof parseExifDate === 'function' ? parseExifDate(meta.date) : 0;
-          if (metaTs) {
-             var metaD = new Date(metaTs);
-             var pYear = metaD.getFullYear();
-             var pMonth = metaD.getMonth();
-             
-             var nowObj = new Date();
-             var currentQuarter = Math.floor(nowObj.getMonth() / 3);
-             var pQuarter = Math.floor(pMonth / 3);
-             if (pYear !== nowObj.getFullYear() || pQuarter !== currentQuarter) {
-                var mNames = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
-                var quarters = ['I (Jan-Mar)', 'II (Apr-Jun)', 'III (Jul-Sep)', 'IV (Okt-Des)'];
-                throw new Error('Ditolak: Foto dari bulan ' + mNames[pMonth] + ' ' + pYear + '. Laporan 3 Bulanan wajib menggunakan foto dalam rentang Triwulan saat ini (' + quarters[currentQuarter] + ').');
-             }
-              
-              // Cek duplicate per bulan
-              var rowData = window.PHOTO_GALLERY ? window.PHOTO_GALLERY.row : null;
-              if (rowData) {
-                 var datesArr = typeof getRowDates === 'function' ? getRowDates(rowData, pYear) : [];
-                 var rawLinimasa = String(rowData['Data Linimasa'] || '').split('|');
-                 var allMonthlyDateStrings = datesArr.concat(rawLinimasa);
-                 var isAlreadyUploadedForThisMonth = false;
-                 for (var _i = 0; _i < allMonthlyDateStrings.length; _i++) {
-                    var _ts = typeof parseExifDate === 'function' ? parseExifDate(allMonthlyDateStrings[_i]) : 0;
-                    if (_ts) {
-                       var _dObj = new Date(_ts);
-                       if (_dObj.getFullYear() === pYear && _dObj.getMonth() === pMonth) {
-                          isAlreadyUploadedForThisMonth = true;
-                          break;
-                       }
-                    }
-                 }
-                 if (isAlreadyUploadedForThisMonth) {
-                    var mNames = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
-                    throw new Error('Ditolak: Anda sudah pernah menginput laporan 3 Bulanan untuk bulan ' + mNames[pMonth] + ' ' + pYear + '. Maksimal 1 kali input per bulan dalam Triwulan.');
-                 }
-              }
-          }
-        }
+        coords.lat = meta.lat != null ? meta.lat : coords.lat;
+        coords.lng = meta.lng != null ? meta.lng : coords.lng;
         
         var manualDateVal = document.getElementById('upload-datetime') ? document.getElementById('upload-datetime').value : '';
         var finalDateStr = manualDateVal ? formatUploadDate(new Date(manualDateVal)) : (meta.date || formatUploadDate(new Date()));
@@ -6466,7 +6240,6 @@ function saveLocalPhoto() {
       }).catch(function(err) {
         failedCount++;
         console.error("Upload Error:", err);
-        window._lastUploadError = err.message || err;
       });
   }
 
@@ -6477,12 +6250,8 @@ function saveLocalPhoto() {
     if (successCount > 0) {
       showToast(successCount + ' Foto berhasil diupload ke Spreadsheet!' + (failedCount ? ' ' + failedCount + ' gagal.' : ''), successCount === files.length ? 'success' : 'warning');
       refreshGalleryForYear(year);
-      if (window.CURRENT_DRAWER_ROW && window.CURRENT_DRAWER_TYPE) {
-         openDrawer(window.CURRENT_DRAWER_TYPE, window.CURRENT_DRAWER_ROW);
-      }
     } else {
-      showToast(window._lastUploadError || 'Gagal mengupload foto. Pastikan sesuai panduan.', 'error');
-      window._lastUploadError = null;
+      showToast('Gagal mengupload foto. Cek console.', 'error');
     }
   }).finally(function() {
     btn.innerHTML = oldText;
@@ -6782,24 +6551,17 @@ function renderWeeklyPhotoMetaStatus(meta, file, errorText) {
     wrap.innerHTML = '';
     return;
   }
-  var hasMeta = meta && meta.date && meta.lat != null && meta.lng != null;
-  var ok = hasMeta && !errorText;
+  var ok = meta && meta.date && meta.lat != null && meta.lng != null && !errorText;
   var thumb = file ? '<img src="' + URL.createObjectURL(file) + '" alt="Preview foto laporan">' : '';
   var source = meta && meta.source ? meta.source : '-';
   var accuracy = meta && meta.accuracy ? ' (akurasi +/- ' + Math.round(Number(meta.accuracy)) + ' m)' : '';
-  
-  var title = 'Foto Tidak memiliki metadata Koordinat Latitude Longitude atau Tanggal Waktu';
-  if (ok) title = 'Foto Ini memiliki metadata Lengkap';
-  else if (hasMeta && errorText) title = 'Peringatan: Ada ketidaksesuaian laporan!';
-  
   wrap.className = 'weekly-photo-meta-status ' + (ok ? 'ok' : 'bad');
   wrap.innerHTML = '<div class="weekly-meta-card">' + thumb +
-    '<div><strong>' + title + '</strong>' +
+    '<div><strong>' + (ok ? 'Foto Ini memiliki metadata Lengkap' : 'Foto Tidak memiliki metadata Koordinat Latitude Longitude atau Tanggal Waktu') + '</strong>' +
     '<span>Latitude: ' + escapeHtml(meta && meta.lat != null ? meta.lat : '-') + '</span>' +
     '<span>Longitude: ' + escapeHtml(meta && meta.lng != null ? meta.lng : '-') + '</span>' +
     '<span>Tanggal waktu: ' + escapeHtml(meta && meta.date ? formatDateIndo(meta.date) : '-') + '</span>' +
     '<span>Sumber koordinat: ' + escapeHtml(source + accuracy) + '</span>' +
-    (meta && meta.distText ? '<span>Jarak Foto ke Titik: ' + escapeHtml(meta.distText) + '</span>' : '') +
     (meta && meta.note ? '<small>' + escapeHtml(meta.note) + '</small>' : '') +
     (errorText ? '<small>' + escapeHtml(errorText) + '</small>' : '') + '</div></div>';
 }
@@ -7109,12 +6871,12 @@ function submitWeeklyReport(event) {
       if (meta.lat == null || meta.lng == null) missing.push('koordinat latitude/longitude');
       var metaError = missing.length ? 'Metadata tidak lengkap: ' + missing.join(', ') : '';
       
-      // 2 KM Validation
+      // 5 KM Validation
       var reportCoords = getPhotoCoords(r);
       if (reportCoords && reportCoords.lat != null && reportCoords.lng != null && meta.lat != null && meta.lng != null) {
         var dist = calculateHaversineDistance(reportCoords.lat, reportCoords.lng, meta.lat, meta.lng);
-        if (dist !== null && dist > 1) {
-          showToast('Jarak foto (' + dist.toFixed(2) + ' KM) melebihi batas 1 KM dari titik koordinat hutan binaan!', 'error');
+        if (dist !== null && dist > 5) {
+          showToast('Jarak foto (' + dist.toFixed(2) + ' KM) melebihi batas 5 KM dari titik koordinat hutan binaan!', 'error');
           if (btn) { btn.disabled = false; btn.textContent = old; }
           return;
         }
@@ -7125,53 +6887,8 @@ function submitWeeklyReport(event) {
       } else if (meta.gpsError && meta.source !== 'GPS lokasi perangkat') {
         meta.note = 'GPS live belum tersedia, sistem memakai metadata kamera/EXIF yang lengkap.';
       }
-      
-      // Cek duplicate per minggu sebelum merender status
-      var mode = document.getElementById('weekly-report-mode').value || 'create';
-      var dupErrorMsg = '';
-      if (mode !== 'edit' && meta.date) {
-        var mt = typeof parseExifDate === 'function' ? parseExifDate(meta.date) : Date.parse(meta.date);
-        if (mt) {
-          var dObj = new Date(mt);
-          var copy = new Date(Date.UTC(dObj.getFullYear(), dObj.getMonth(), dObj.getDate()));
-          copy.setUTCDate(copy.getUTCDate() + 4 - (copy.getUTCDay()||7));
-          var yearStart = new Date(Date.UTC(copy.getUTCFullYear(),0,1));
-          var weekNo = Math.ceil(( ( (copy - yearStart) / 86400000) + 1)/7);
-          var weekStr = 'Minggu ke-' + weekNo + ', ' + copy.getUTCFullYear();
-          
-          var hasDuplicate = false;
-          var existingReports = window.WEEKLY_REPORT_STATE ? (window.WEEKLY_REPORT_STATE.reports || []) : [];
-          for (var i = 0; i < existingReports.length; i++) {
-            var wr = existingReports[i];
-            var wdStr = wr.waktu || wr.timestamp || wr.waktu_kegiatan || '';
-            if (wdStr) {
-               var wt = typeof parseExifDate === 'function' ? parseExifDate(wdStr) : 0;
-               if (wt) {
-                  var wdObj = new Date(wt);
-                  var wcopy = new Date(Date.UTC(wdObj.getFullYear(), wdObj.getMonth(), wdObj.getDate()));
-                  wcopy.setUTCDate(wcopy.getUTCDate() + 4 - (wcopy.getUTCDay()||7));
-                  var wyearStart = new Date(Date.UTC(wcopy.getUTCFullYear(),0,1));
-                  var wweekNo = Math.ceil(( ( (wcopy - wyearStart) / 86400000) + 1)/7);
-                  var existWeekStr = 'Minggu ke-' + wweekNo + ', ' + wcopy.getUTCFullYear();
-                  if (existWeekStr === weekStr) {
-                     hasDuplicate = true;
-                     break;
-                  }
-               }
-            }
-          }
-          if (hasDuplicate) {
-             dupErrorMsg = 'Ditolak: Laporan untuk ' + weekStr + ' sudah pernah diisi. Maksimal 1 kali input per minggu.';
-             metaError = metaError ? metaError + '\n' + dupErrorMsg : dupErrorMsg;
-          }
-        }
-      }
-      
       renderWeeklyPhotoMetaStatus(meta, file, metaError);
-      
       if (missing.length) throw new Error('Foto Tidak memiliki metadata Koordinat Latitude Longitude atau Tanggal Waktu.');
-      if (dupErrorMsg) throw new Error(dupErrorMsg);
-      
       return readFileAsDataUrl(file).then(function(dataUrl) {
         return { base64: String(dataUrl).split(',')[1] || '', mimeType: file.type || 'image/jpeg', filename: file.name || '', date: meta.date, exifDate: meta.exifDate || meta.date, lat: meta.lat, lng: meta.lng, source: meta.source || '', accuracy: meta.accuracy || '' };
       });
@@ -7204,11 +6921,7 @@ function submitWeeklyReport(event) {
       throw err;
     });
   }).catch(function(err) {
-    var errMsg = getFriendlyBackendErrorMessage(err);
-    if (errMsg && errMsg.includes('Ditolak')) {
-      closeWeeklyReportModal();
-    }
-    showToast(errMsg, 'error');
+    showToast(getFriendlyBackendErrorMessage(err), 'error');
   }).finally(function() {
     if (btn) { btn.disabled = false; btn.textContent = old || 'Simpan Laporan'; }
   });
@@ -7459,85 +7172,19 @@ if (wrFotoEl) {
       renderWeeklyPhotoMetaStatus(null, null);
       return;
     }
-    
-    function formatDate(dObj) {
-       var m = dObj.getMonth() + 1;
-       var day = dObj.getDate();
-       return dObj.getFullYear() + '-' + (m < 10 ? '0' + m : m) + '-' + (day < 10 ? '0' + day : day);
-    }
-    
-    validateSingleImageFile(f).then(function(fileErr) {
-      if (fileErr) {
-         renderWeeklyPhotoMetaStatus(null, f, fileErr);
-         return Promise.reject('validation_failed');
-      }
-      return getWeeklyPhotoFinalMetadata(f);
-    }).then(function(meta) {
+    getWeeklyPhotoFinalMetadata(f).then(function(meta) {
       WEEKLY_REPORT_STATE.currentPhotoMeta = meta;
       var missing = [];
       if (!meta.date) missing.push('tanggal waktu');
       if (meta.lat == null || meta.lng == null) missing.push('koordinat latitude/longitude');
       var metaError = missing.length ? 'Metadata tidak lengkap: ' + missing.join(', ') : '';
-      
-      var r = WEEKLY_REPORT_STATE.row || PHOTO_GALLERY.row;
-      if (!metaError && r && meta.lat != null && meta.lng != null) {
-         var reportCoords = typeof getPhotoCoords === 'function' ? getPhotoCoords(r) : {lat: r._lat, lng: r._lng};
-         if (reportCoords && reportCoords.lat != null && reportCoords.lng != null) {
-            var dist = typeof calculateHaversineDistance === 'function' ? calculateHaversineDistance(reportCoords.lat, reportCoords.lng, meta.lat, meta.lng) : 0;
-            meta.distText = dist.toFixed(2) + ' KM';
-            if (dist > 1) {
-               metaError = 'Jarak foto (' + dist.toFixed(2) + ' KM) melebihi batas 1 KM dari titik koordinat Hutan Binaan!';
-            }
-         }
-      }
-      
-      var mode = document.getElementById('weekly-report-mode').value || 'create';
-      if (!metaError && mode === 'create' && r && meta.date) {
-         var mt = typeof parseExifDate === 'function' ? parseExifDate(meta.date) : Date.parse(meta.date);
-         if (mt) {
-            var dObj = new Date(mt);
-            var copy = new Date(Date.UTC(dObj.getFullYear(), dObj.getMonth(), dObj.getDate()));
-            copy.setUTCDate(copy.getUTCDate() + 4 - (copy.getUTCDay()||7));
-            var yearStart = new Date(Date.UTC(copy.getUTCFullYear(),0,1));
-            var weekNo = Math.ceil(( ( (copy - yearStart) / 86400000) + 1)/7);
-            var weekStr = 'Minggu ke-' + weekNo + ', ' + copy.getUTCFullYear();
-            
-            var existingReports = WEEKLY_REPORT_STATE.reports || [];
-            var hasThisWeek = false;
-            
-            for (var i = 0; i < existingReports.length; i++) {
-               var rep = existingReports[i];
-               var repT = typeof parseExifDate === 'function' ? parseExifDate(rep.waktu || rep.waktu_kegiatan) : 0;
-               if (repT) {
-                  var wdObj = new Date(repT);
-                  var wcopy = new Date(Date.UTC(wdObj.getFullYear(), wdObj.getMonth(), wdObj.getDate()));
-                  wcopy.setUTCDate(wcopy.getUTCDate() + 4 - (wcopy.getUTCDay()||7));
-                  var wyearStart = new Date(Date.UTC(wcopy.getUTCFullYear(),0,1));
-                  var wweekNo = Math.ceil(( ( (wcopy - wyearStart) / 86400000) + 1)/7);
-                  var existWeekStr = 'Minggu ke-' + wweekNo + ', ' + wcopy.getUTCFullYear();
-                  if (existWeekStr === weekStr) {
-                     hasThisWeek = true;
-                     break;
-                  }
-               }
-            }
-            
-            if (hasThisWeek) {
-               metaError = 'Anda sudah menginput laporan mingguan untuk titik ini pada minggu berjalan.';
-            }
-         }
-      }
-      
-      if (metaError === '' && meta.gpsError && meta.source !== 'GPS lokasi perangkat' && missing.length) {
-        metaError = meta.gpsError;
+      if (meta.gpsError && meta.source !== 'GPS lokasi perangkat' && missing.length) {
+        metaError += (metaError ? '. ' : '') + meta.gpsError;
       } else if (meta.gpsError && meta.source !== 'GPS lokasi perangkat') {
-        meta.note = 'GPS live belum tersedia, memakai metadata kamera/EXIF.';
+        meta.note = 'GPS live belum tersedia, sistem memakai metadata kamera/EXIF yang lengkap.';
       }
-      
       renderWeeklyPhotoMetaStatus(meta, f, metaError);
       saveWeeklyFormDraft();
-    }).catch(function(err) {
-       if (err !== 'validation_failed') console.error(err);
     });
   });
 }
@@ -7824,8 +7471,6 @@ function openReportMonitor(type) {
   var statusFilter = document.getElementById('report-status-filter');
   var exportBtn = document.getElementById('report-weekly-export-btn');
   var monthlyExportBtn = document.getElementById('report-monthly-export-btn');
-  var wrapWeek = document.getElementById('wrap-report-week');
-  if (wrapWeek) wrapWeek.style.display = type === 'monthly' ? 'none' : 'flex';
   if (weekStart) weekStart.style.display = type === 'monthly' ? 'none' : '';
   if (weekEnd) weekEnd.style.display = type === 'monthly' ? 'none' : '';
   if (exportBtn) exportBtn.style.display = type === 'monthly' ? 'none' : '';
@@ -8672,1005 +8317,1159 @@ function appendReportKpiSheet(wb, type, exportItems) {
     ['Tanggal Sampai', getReportFilterLabel('report-end-filter', '-') || '-']
   ];
   if (type === 'weekly') {
-    var sourceKey = typeof getBinaanSourceKey === 'function' ? getBinaanSourceKey(r) : '';
-    
-    // Auto-fetch if not loaded yet
-    if (!r._weeklyCalendarFetched && window.CURRENT_DRAWER_ROW) {
-       r._weeklyCalendarFetched = true;
-       var coords = getPhotoCoords(r);
-       var url = GAS_WEB_APP_URL + '?action=getWeeklyReports&category=pegawaibinaanformatsistem&lat=' + encodeURIComponent(coords.lat) + '&lng=' + encodeURIComponent(coords.lng) + '&rowIndex=' + encodeURIComponent(r._row_idx || '') + '&sheetGid=' + encodeURIComponent(r._source_gid || '') + '&featureId=' + encodeURIComponent(r['ID'] || r.featureId || '') + '&_ts=' + Date.now();
-       fetch(appendAuthParam(url)).then(function(res){return res.json();}).then(function(data){
-          if(data.reports) {
-             if (!window.WEEKLY_REPORT_STATE) window.WEEKLY_REPORT_STATE = {};
-             window.WEEKLY_REPORT_STATE.reports = data.reports;
-             renderCalendarReminder(); // Re-render!
-          }
-       }).catch(function(){});
-    }
-
-    var weekReports = [];
-    if (window.WEEKLY_REPORT_STATE && window.WEEKLY_REPORT_STATE.monitorRows && window.WEEKLY_REPORT_STATE.monitorRows.length > 0) {
-        weekReports = window.WEEKLY_REPORT_STATE.monitorRows.filter(function(row) { 
-           return typeof getReportBinaanSourceKey === 'function' && getReportBinaanSourceKey(row) === sourceKey; 
-        });
-    } else if (window.WEEKLY_REPORT_STATE && window.WEEKLY_REPORT_STATE.reports && window.WEEKLY_REPORT_STATE.reports.length > 0) {
-        weekReports = window.WEEKLY_REPORT_STATE.reports;
-    }
-    
-    var reportedWeeks = {};
-    
-    // Parse monitorRows
-    weekReports.forEach(function(row) { 
-      var t = row.waktu || row.waktu_kegiatan || row.timestamp || '';
-      if (typeof getWeekInputRange === 'function' && t) {
-         try { 
-            var ts = getWeekInputRange(t.split('T')[0].split(' ')[0], false);
-            if (ts) reportedWeeks[ts] = true;
-         } catch(e) {}
-      }
-    });
-    
-    // Parse Data Mingguan from Google Sheets
-    var rawMingguan = parsePipeField(r['Data Mingguan']);
-    rawMingguan.forEach(function(dStr) {
-       var t = typeof parseExifDate === 'function' ? parseExifDate(dStr) : 0;
-       if (t) {
-          var dObj = new Date(t);
-          var wTs = typeof getWeekInputRange === 'function' ? getWeekInputRange(formatDt(dObj), false) : 0;
-          if (wTs) reportedWeeks[wTs] = true;
-       }
-    });
-
-    html += '<h3 style="margin-bottom:10px; font-size:14px; text-align:center; color:#333;">Riwayat Laporan Mingguan</h3>';
-    html += '<div style="max-height:300px; overflow-y:auto; padding-right:5px;">';
-    
-    for (var mOffset = 0; mOffset < 3; mOffset++) {
-       var renderMonth = currentMonth - mOffset;
-       var renderYear = currentYear;
-       if (renderMonth < 0) {
-          renderMonth += 12;
-          renderYear -= 1;
-       }
-       
-       var daysInMonth = new Date(renderYear, renderMonth + 1, 0).getDate();
-       var firstDayIndex = new Date(renderYear, renderMonth, 1).getDay();
-       var firstDayMondayIndex = firstDayIndex === 0 ? 6 : firstDayIndex - 1;
-       
-       html += '<div style="background:#f9f9f9; padding:8px; border-radius:6px; margin-bottom:10px; border:1px solid #eee;">';
-       html += '<h4 style="margin:0 0 8px 0; font-size:12px; color:#2e7d32; text-align:center;">' + mNames[renderMonth] + ' ' + renderYear + '</h4>';
-       html += '<div style="display:grid; grid-template-columns:repeat(7, 1fr); gap:4px; text-align:center; font-weight:bold; font-size:11px; margin-bottom:4px; color:#777;">';
-       ['Sn','Sl','Rb','Km','Jm','Sb','Mg'].forEach(function(d) { html += '<div>'+d+'</div>'; });
-       html += '</div>';
-       html += '<div style="display:grid; grid-template-columns:repeat(7, 1fr); gap:4px; text-align:center; font-size:11px;">';
-       
-       for (var i = 0; i < firstDayMondayIndex; i++) {
-         html += '<div style="padding:6px; background:transparent;"></div>';
-       }
-       
-       for (var d = 1; d <= daysInMonth; d++) {
-         var dateObj = new Date(renderYear, renderMonth, d);
-         var isoWeek = '';
-         try {
-           if (typeof getWeekInputRange === 'function') {
-             isoWeek = getWeekInputRange(formatDt(dateObj), false);
-           }
-         } catch(e) {}
-         
-         var reported = reportedWeeks[isoWeek] === true;
-         var isFuture = formatDt(dateObj) > formatDt(now);
-         var bg = '#eee';
-         var color = '#333';
-         
-         if (reported) {
-           bg = '#43a047';
-           color = '#fff';
-         } else if (!isFuture) {
-           bg = '#e53935';
-           color = '#fff';
-         }
-         html += '<div style="padding:6px; background:'+bg+'; color:'+color+'; border-radius:3px;">'+d+'</div>';
-       }
-       html += '</div></div>';
-    }
-    
-    html += '</div>';
-  } else {
-    // Monthly (3 Bulanan)
-    var datesArray = (typeof getRowDates === 'function') ? getRowDates(r, currentYear) : [];
-    var rawLinimasa = String(r['Data Linimasa'] || '').split('|');
-    var allMonthlyDateStrings = datesArray.concat(rawLinimasa);
-    
-    var uploadedMonthsInCurrentYear = {};
-    allMonthlyDateStrings.forEach(function(dStr) {
-       var ts = typeof parseExifDate === 'function' ? parseExifDate(dStr) : 0;
-       if (ts) {
-          var dObj = new Date(ts);
-          if (dObj.getFullYear() === currentYear) {
-             var m = dObj.getMonth();
-             if (!uploadedMonthsInCurrentYear[m]) uploadedMonthsInCurrentYear[m] = [];
-             uploadedMonthsInCurrentYear[m].push(dObj.getDate() + ' ' + mNames[m]);
-          }
-       }
-    });
-    
-    html += '<h3 style="margin-bottom:15px; font-size:14px; text-align:center; color:#333;">Laporan 3 Bulanan ('+currentYear+')</h3>';
-    html += '<div style="display:flex; flex-direction:column; gap:10px;">';
-    
-    var quarters = [
-       { name: 'Triwulan I', months: [0, 1, 2] },
-       { name: 'Triwulan II', months: [3, 4, 5] },
-       { name: 'Triwulan III', months: [6, 7, 8] },
-       { name: 'Triwulan IV', months: [9, 10, 11] }
-    ];
-    
-    quarters.forEach(function(q, qIndex) {
-       var isActive = Math.floor(currentMonth / 3) === qIndex;
-       var bgHead = isActive ? '#2e7d32' : '#546e7a';
-       
-       html += '<div style="border:1px solid #ddd; border-radius:6px; overflow:hidden;">';
-       html += '<div style="background:'+bgHead+'; color:#fff; padding:6px 10px; font-size:12px; font-weight:bold; display:flex; justify-content:space-between;">';
-       html += '<span>' + q.name + '</span>';
-       if (isActive) html += '<span style="background:#fff; color:#2e7d32; padding:2px 6px; border-radius:4px; font-size:10px;">Berjalan</span>';
-       html += '</div>';
-       
-       html += '<div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:1px; background:#ddd;">';
-       q.months.forEach(function(m) {
-          var isPastMonth = m < currentMonth;
-          var isCurrentMonth = m === currentMonth;
-          
-          var hasThisMonth = uploadedMonthsInCurrentYear[m] && uploadedMonthsInCurrentYear[m].length > 0;
-          var bg = '#fff';
-          var color = '#333';
-          
-          if (hasThisMonth) {
-            bg = '#e8f5e9';
-            color = '#2e7d32';
-          } else if (isPastMonth || isCurrentMonth) {
-            bg = '#ffebee';
-            color = '#c62828';
-          }
-          
-          var icon = hasThisMonth ? '&#10004;' : ((isPastMonth || isCurrentMonth) ? '&#10006;' : '-');
-          
-          html += '<div style="background:'+bg+'; color:'+color+'; padding:8px 4px; text-align:center; display:flex; flex-direction:column; justify-content:center; align-items:center;">';
-          html += '<span style="font-weight:bold; font-size:12px; margin-bottom:4px;">' + mNames[m] + '</span>';
-          html += '<span style="font-size:14px;">' + icon + '</span>';
-          if (hasThisMonth) {
-             var detailText = uploadedMonthsInCurrentYear[m].join('<br>');
-             html += '<span style="font-size:9px; margin-top:2px; font-weight:normal; line-height:1.1;">' + detailText + '</span>';
-          }
-          html += '</div>';
-       });
-       html += '</div></div>';
-    });
-    html += '</div>';
+    aoa.push(['Minggu Mulai', getReportFilterLabel('report-week-start-filter', '-') || '-']);
+    aoa.push(['Minggu Sampai', getReportFilterLabel('report-week-end-filter', '-') || '-']);
   }
-  
-  container.innerHTML = html;
+  aoa = aoa.concat([
+    [],
+    ['KPI', 'Nilai'],
+    ['Total Baris Export', rows.length],
+    ['Kategori Aktif', Object.keys(cats).length],
+    ['Akumulasi Luasan', totalLuas ? formatLuasHa(totalLuas) + ' Ha' : '-'],
+    ['Mode', type === 'monthly' ? 'Bulanan' : 'Mingguan'],
+    ['Hutan Binaan Sudah Input', compliance.reported],
+    ['Hutan Binaan Belum Input', compliance.missing],
+    ['Pembina Terbanyak', pembinaStats.topName],
+    ['Jumlah Input Pembina Terbanyak', pembinaStats.topCount],
+    ['Pembina Terendah', pembinaStats.lowName],
+    ['Jumlah Input Pembina Terendah', pembinaStats.lowCount]
+  ]);
+  var ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [{ wch: 30 }, { wch: 48 }];
+  XLSX.utils.book_append_sheet(wb, ws, 'Ringkasan KPI');
 }
 
-
-/* Notification function for monthly / weekly report reminders */
-function checkMonthlyReportedNotification() {
-  var user = getStoredAuthUser();
-  if (!user || !user.nama) return;
-  var group = getRoleGroup(user.role);
-  if (group <= 3) return; // Only for Group 4 (Pegawai)
-  
-  var getWeekStr = function(dStr) {
-      var d = new Date(dStr);
-      if (isNaN(d.getTime())) return '';
-      var copy = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-      copy.setUTCDate(copy.getUTCDate() + 4 - (copy.getUTCDay()||7));
-      var yearStart = new Date(Date.UTC(copy.getUTCFullYear(),0,1));
-      var weekNo = Math.ceil(( ( (copy - yearStart) / 86400000) + 1)/7);
-      return 'Minggu ke-' + weekNo + ', ' + copy.getUTCFullYear();
-  };
-
-  setTimeout(function() {
-    var binaanUser = (window.DATA && window.DATA.pegawaiBinaan || []).filter(function(r) {
-      return getReportRowPerson(r) === user.nama;
-    });
-    if (binaanUser.length === 0) return;
-    
-    var nowObj = new Date();
-    var currentYear = nowObj.getFullYear();
-    var currentMonth = nowObj.getMonth();
-    var currentQuarter = Math.floor(currentMonth / 3);
-    var qMonths = [currentQuarter * 3, currentQuarter * 3 + 1, currentQuarter * 3 + 2];
-    var qNames = ['Triwulan I', 'Triwulan II', 'Triwulan III', 'Triwulan IV'];
-    var mNames = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
-    var currentWeekStrRaw = getWeekStr(nowObj);
-    
-    var missingMonthlyMarkers = [];
-    var missingWeeklyMarkers = [];
-    var latestMonthlyDateObj = null;
-    var latestWeeklyDateObj = null;
-    
-    // Check Monthly (Synchronous)
-    binaanUser.forEach(function(r) {
-      var datesArr = typeof getRowDates === 'function' ? getRowDates(r, currentYear) : [];
-      var rawLinimasa = String(r['Data Linimasa'] || '').split('|');
-      var allMonthlyDateStrings = datesArr.concat(rawLinimasa);
-      
-      var uploadedMonthsInQ = {};
-      allMonthlyDateStrings.forEach(function(dStr) {
-         var ts = typeof parseExifDate === 'function' ? parseExifDate(dStr) : 0;
-         if (ts) {
-            var dObj = new Date(ts);
-            if (!latestMonthlyDateObj || dObj > latestMonthlyDateObj) latestMonthlyDateObj = dObj;
-            var m = dObj.getMonth();
-            var q = Math.floor(m / 3);
-            if (q === currentQuarter && dObj.getFullYear() === currentYear) {
-               uploadedMonthsInQ[m] = true;
-            }
-         }
-      });
-      
-      var isMonthlyComplete = true;
-      qMonths.forEach(function(m) {
-         if (m <= currentMonth && !uploadedMonthsInQ[m]) isMonthlyComplete = false;
-      });
-      if (!isMonthlyComplete) missingMonthlyMarkers.push(r);
-    });
-    
-    // Check Weekly (Async)
-    var fetchPromises = binaanUser.map(function(r) {
-       var coords = getPhotoCoords(r);
-       var url = GAS_WEB_APP_URL + '?action=getWeeklyReports&category=pegawaibinaanformatsistem' +
-                 '&lat=' + encodeURIComponent(coords.lat) + '&lng=' + encodeURIComponent(coords.lng) +
-                 '&rowIndex=' + encodeURIComponent(r._row_idx || '') + 
-                 '&sheetGid=' + encodeURIComponent(r._source_gid || '') +
-                 '&featureId=' + encodeURIComponent(r['ID'] || r.featureId || '') +
-                 '&_ts=' + Date.now();
-       return fetch(appendAuthParam(url)).then(function(res) { return res.json(); }).then(function(data){ return {r:r, reports:data.reports||[]}; }).catch(function(){ return {r:r, reports:[]}; });
-    });
-    
-    Promise.all(fetchPromises).then(function(results) {
-       results.forEach(function(item) {
-          var reports = item.reports;
-          var hasCurrentWeek = false;
-          reports.forEach(function(wr) {
-             var dStr = wr.waktu || wr.timestamp || wr.waktu_kegiatan || '';
-             if (dStr) {
-                var dObj = new Date(dStr);
-                if (!isNaN(dObj.getTime())) {
-                   if (!latestWeeklyDateObj || dObj > latestWeeklyDateObj) latestWeeklyDateObj = dObj;
-                   if (getWeekStr(dObj) === currentWeekStrRaw) hasCurrentWeek = true;
-                }
-             }
-          });
-          if (!hasCurrentWeek) missingWeeklyMarkers.push(item.r);
-       });
-       
-       var allGood = (missingMonthlyMarkers.length === 0 && missingWeeklyMarkers.length === 0);
-       
-       var html = '<div style="padding:15px; text-align:left; font-family:Inter; color:#333;">';
-       html += '<h3 style="margin-top:0; color:' + (allGood?'#2e7d32':'#d32f2f') + '">';
-       html += allGood ? '✅ Laporan Anda Sudah Lengkap' : '⚠️ Pengingat Laporan Belum Lengkap';
-       html += '</h3>';
-       
-       var formatDtStr = function(dObj) {
-           if (!dObj) return 'Belum ada input';
-           return dObj.getDate() + ' ' + mNames[dObj.getMonth()] + ' ' + dObj.getFullYear();
-       };
-
-       html += '<div style="margin-top:15px; background:#f9f9f9; padding:10px; border-radius:6px; font-size:13px; line-height:1.6;">';
-       html += '<b>Laporan Mingguan (' + currentWeekStrRaw + '):</b><br>';
-       if (missingWeeklyMarkers.length === 0) {
-           html += '<span style="color:#2e7d32">Lengkap untuk semua (' + binaanUser.length + ') titik Hutan Binaan Anda.</span><br>';
-       } else {
-           html += '<span style="color:#d32f2f">Belum input di <b>' + missingWeeklyMarkers.length + '</b> dari ' + binaanUser.length + ' titik.</span><br>';
-           // List max 3 missing weekly
-           missingWeeklyMarkers.slice(0,3).forEach(function(mr, i) {
-              html += '• <a href="#" onclick="window.flyToLocalObj('+mr._lat+','+mr._lng+');document.getElementById(\'custom-notif-modal\').style.display=\'none\';return false;" style="color:#1565c0;text-decoration:underline;">' + (mr['Desa']||mr['Nama']||'Titik '+(i+1)) + '</a><br>';
-           });
-           if (missingWeeklyMarkers.length > 3) html += '<i>...dan ' + (missingWeeklyMarkers.length - 3) + ' lainnya.</i><br>';
-       }
-       html += '<span style="font-size:11px; color:#666;">Terakhir input: ' + formatDtStr(latestWeeklyDateObj) + '</span>';
-       html += '</div>';
-
-       html += '<div style="margin-top:15px; background:#f9f9f9; padding:10px; border-radius:6px; font-size:13px; line-height:1.6;">';
-       html += '<b>Laporan 3 Bulanan (' + qNames[currentQuarter] + ' ' + currentYear + '):</b><br>';
-       if (missingMonthlyMarkers.length === 0) {
-           html += '<span style="color:#2e7d32">Lengkap untuk semua (' + binaanUser.length + ') titik Hutan Binaan Anda.</span><br>';
-       } else {
-           html += '<span style="color:#d32f2f">Belum lengkap di <b>' + missingMonthlyMarkers.length + '</b> dari ' + binaanUser.length + ' titik.</span><br>';
-           // List max 3 missing monthly
-           missingMonthlyMarkers.slice(0,3).forEach(function(mr, i) {
-              html += '• <a href="#" onclick="window.flyToLocalObj('+mr._lat+','+mr._lng+');document.getElementById(\'custom-notif-modal\').style.display=\'none\';return false;" style="color:#1565c0;text-decoration:underline;">' + (mr['Desa']||mr['Nama']||'Titik '+(i+1)) + '</a><br>';
-           });
-           if (missingMonthlyMarkers.length > 3) html += '<i>...dan ' + (missingMonthlyMarkers.length - 3) + ' lainnya.</i><br>';
-       }
-       html += '<span style="font-size:11px; color:#666;">Terakhir input: ' + formatDtStr(latestMonthlyDateObj) + '</span>';
-       html += '</div>';
-       
-       html += '</div>';
-       
-       // Build native modal
-       var oldModal = document.getElementById('custom-notif-modal');
-       if (oldModal) oldModal.parentNode.removeChild(oldModal);
-       
-       var overlay = document.createElement('div');
-       overlay.id = 'custom-notif-modal';
-       overlay.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.6);z-index:99999;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity 0.3s;';
-       
-       var modalContent = document.createElement('div');
-       modalContent.style.cssText = 'background:#fff;width:90%;max-width:400px;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,0.3);overflow:hidden;transform:scale(0.9);transition:transform 0.3s;';
-       modalContent.innerHTML = html;
-       
-       var foot = document.createElement('div');
-       foot.style.cssText = 'padding:12px 15px; background:#f1f1f1; text-align:right; border-top:1px solid #ddd;';
-       var btn = document.createElement('button');
-       btn.innerText = 'Tutup & Lengkapi';
-       btn.style.cssText = 'background:#2e7d32;color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-weight:bold;';
-       btn.onclick = function() { overlay.style.opacity='0'; setTimeout(function(){overlay.style.display='none';}, 300); };
-       foot.appendChild(btn);
-       modalContent.appendChild(foot);
-       
-       overlay.appendChild(modalContent);
-       document.body.appendChild(overlay);
-       
-       // Expose helper to fly to object
-       window.flyToLocalObj = function(lat, lng) {
-          if (typeof mapObj !== 'undefined') {
-              mapObj.setView([lat, lng], 17);
-              // Trigger click on marker if possible
-          }
-       };
-       
-       setTimeout(function() {
-          overlay.style.opacity = '1';
-          modalContent.style.transform = 'scale(1)';
-       }, 50);
-       
-    });
-  }, 2000);
+function exportWeeklyBinaanReports() {
+  if ((WEEKLY_REPORT_STATE.monitorType || 'weekly') !== 'weekly') {
+    showToast('Export ini khusus Laporan Mingguan.', 'error');
+    return;
+  }
+  var rows = getFilteredReportMonitorRows().filter(function(r) {
+    return String(r.category || '').toLowerCase() === 'pegawaibinaanformatsistem';
+  });
+  if (!rows.length) {
+    showToast('Tidak ada data hutan binaan pada filter laporan mingguan saat ini.', 'warning');
+    return;
+  }
+  var header = [
+    'No', 'Status Input', 'Kabupaten', 'Kecamatan', 'Desa', 'Longitude', 'Latitude',
+    'Kegiatan', 'Tahun Kegiatan', 'Luas (Ha)', 'Pembina/Pengampu',
+    'Unit Kerja', 'Jabatan', 'DPL',
+    'LM_ID', 'LM_Kategori', 'LM_Pelaksana', 'LM_Lokasi', 'LM_Waktu',
+    'LM_Tutupan', 'LM_Kegiatan_Vegetatif', 'LM_Jenis_Jumlah_Bibit', 'LM_Total_Bibit',
+    'LM_Tinggi_Tanaman_CM', 'LM_Sumber_Bibit', 'LM_Kebutuhan_Bibit_Cukup',
+    'LM_Kekurangan_Jenis_Jumlah_Bibit', 'LM_Kekurangan_Total_Bibit',
+    'LM_Kekurangan_Tinggi_Tanaman_CM', 'LM_Kekurangan_Sumber_Bibit',
+    'LM_Kondisi_Tanaman', 'LM_Kegiatan_Monitoring', 'LM_Uraian',
+    'LM_Ada_Gangguan', 'LM_Jenis_Gangguan', 'LM_Tindak_Lanjut',
+    'LM_Foto_URL', 'LM_Foto_Tanggal', 'LM_Foto_Latitude', 'LM_Foto_Longitude',
+    'LM_Foto_FileID', 'LM_UpdatedAt', 'LM_UpdatedBy'
+  ];
+  var aoa = [header];
+  rows.forEach(function(r, idx) {
+    var lat = weeklyExportValue(r, 'lat') || weeklyExportValue(r, 'latitude');
+    var lng = weeklyExportValue(r, 'lng') || weeklyExportValue(r, 'longitude');
+    aoa.push([
+      idx + 1,
+      r._reportStatus === 'missing' ? 'Belum Input' : 'Sudah Input',
+      getReportRowKabupaten(r),
+      weeklyExportValue(r, 'kecamatan') || getBinaanField(r._sourceRow, 'kecamatan'),
+      weeklyExportValue(r, 'desa') || getBinaanField(r._sourceRow, 'desa'),
+      lng,
+      lat,
+      getReportRowKegiatan(r),
+      getReportRowTahun(r),
+      weeklyExportValue(r, 'luas') || (getReportRowLuas(r) ? formatLuasHa(getReportRowLuas(r)) : ''),
+      getReportRowPerson(r),
+      getReportRowUnit(r),
+      weeklyExportValue(r, 'jabatan') || getBinaanField(r._sourceRow, 'jabatan'),
+      weeklyExportValue(r, 'dpl') || weeklyExportValue(r, 'DPL'),
+      r.id || '',
+      r.kategoriLabel || r.category || '',
+      r.pelaksana || '',
+      r.lokasi || '',
+      normalizeExportDateIndo(r.waktu),
+      r.tutupan || '',
+      r.kegiatanVegetatif || '',
+      r.jenisJumlahBibit || '',
+      r.totalBibit || '',
+      r.tinggiTanaman || '',
+      r.sumberBibit || '',
+      r.kebutuhanBibitCukup || '',
+      r.kekuranganJenisJumlahBibit || '',
+      r.kekuranganTotalBibit || '',
+      r.kekuranganTinggiTanaman || '',
+      r.kekuranganSumberBibit || '',
+      r.kondisiTanaman || '',
+      r.kegiatanMonitoring || '',
+      r.uraian || '',
+      r.adaGangguan || '',
+      r.jenisGangguan || '',
+      r.tindakLanjut || '',
+      r.fotoUrl || '',
+      normalizeExportDateIndo(r.fotoTanggal),
+      r.fotoLat || '',
+      r.fotoLng || '',
+      r.fotoFileId || '',
+      normalizeExportDateIndo(r.updatedAt),
+      r.updatedBy || ''
+    ]);
+  });
+  var ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = header.map(function(h) {
+    var w = Math.max(10, Math.min(34, String(h).length + 4));
+    return { wch: w };
+  });
+  ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: aoa.length - 1, c: header.length - 1 } }) };
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Laporan Mingguan');
+  appendReportKpiSheet(wb, 'weekly', rows);
+  XLSX.writeFile(wb, 'Export_Laporan_Mingguan_Hutan_Binaan.xlsx');
+  showToast('Export laporan mingguan hutan binaan berhasil dibuat.', 'success');
 }
 
+function getYearlyBinaanField(row, base, year) {
+  if (!row) return '';
+  var keys = [
+    base + '_' + year,
+    base + ' ' + year,
+    base + '-' + year,
+    base.toUpperCase() + '_' + year,
+    base.toLowerCase() + '_' + year
+  ];
+  for (var i = 0; i < keys.length; i++) {
+    if (row[keys[i]] !== undefined && row[keys[i]] !== null && String(row[keys[i]]).trim() !== '') return row[keys[i]];
+  }
+  return '';
+}
 
-/* ===== Polygon Feature Management ===== */
+function exportMonthlyBinaanReports() {
+  if ((WEEKLY_REPORT_STATE.monitorType || 'weekly') !== 'monthly') {
+    showToast('Export ini khusus Laporan 3 Bulanan.', 'error');
+    return;
+  }
+  var sources = getBinaanComplianceSources('monthly');
+  if (!sources.length) {
+    showToast('Tidak ada data hutan binaan pada filter laporan 3 bulanan saat ini.', 'warning');
+    return;
+  }
+  var header = [
+    'No', 'Status Input', 'Kabupaten', 'Kecamatan', 'Desa', 'Longitude', 'Latitude',
+    'Kegiatan', 'Tahun Kegiatan', 'Luas (Ha)', 'Pembina/Pengampu',
+    'Unit Kerja', 'Jabatan', 'DPL'
+  ];
+  PHOTO_YEARS.forEach(function(year) {
+    header.push('Foto_' + year, 'Tanggal_' + year);
+  });
+  header.push('Keterangan');
+  PHOTO_YEARS.forEach(function(year) {
+    ['Tutupan', 'Jenis', 'Kerapatan', 'Lereng', 'Diam_h', 'Diam_i', 'Diam_j', 'Diam_k', 'Diam_l', 'Diam_m', 'CO2e', 'Pengelolaan', 'Ekosistem', 'Usulan'].forEach(function(base) {
+      header.push(base + '_' + year);
+    });
+  });
+
+  var aoa = [header];
+  sources.forEach(function(item, idx) {
+    var r = item.row;
+    var coords = getPhotoCoords(r);
+    var baseRow = [
+      idx + 1,
+      item.status === 'missing' ? 'Belum Input' : 'Sudah Input',
+      getReportRowKabupaten(r),
+      getBinaanField(r, 'kecamatan') || r['Kecamatan'] || '',
+      getBinaanField(r, 'desa') || r['Desa/Kelurahan'] || r['Desa/ Kelurahan'] || r['Desa'] || '',
+      coords.lng || '',
+      coords.lat || '',
+      getReportRowKegiatan(r),
+      getReportRowTahun(r),
+      getBinaanLuasRaw(r) || (getReportRowLuas(r) ? formatLuasHa(getReportRowLuas(r)) : ''),
+      getReportRowPerson(r),
+      getReportRowUnit(r),
+      getBinaanField(r, 'jabatan'),
+      r.DPL || r.MDPL || ''
+    ];
+    PHOTO_YEARS.forEach(function(year) {
+      baseRow.push(r['Foto_' + year] || '', r['Tanggal_' + year] || '');
+    });
+    baseRow.push(r.Keterangan || r.keterangan || r['Keterangan Lokasi'] || '');
+    PHOTO_YEARS.forEach(function(year) {
+      ['Tutupan', 'Jenis', 'Kerapatan', 'Lereng', 'Diam_h', 'Diam_i', 'Diam_j', 'Diam_k', 'Diam_l', 'Diam_m', 'CO2e', 'Pengelolaan', 'Ekosistem', 'Usulan'].forEach(function(base) {
+        baseRow.push(getYearlyBinaanField(r, base, year));
+      });
+    });
+    aoa.push(baseRow);
+  });
+
+  var ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = header.map(function(h) {
+    return { wch: Math.max(10, Math.min(32, String(h).length + 3)) };
+  });
+  ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: aoa.length - 1, c: header.length - 1 } }) };
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Hutan Binaan 3 Bulanan');
+  appendReportKpiSheet(wb, 'monthly', sources);
+  XLSX.writeFile(wb, 'Export_Laporan_3_Bulanan_Hutan_Binaan.xlsx');
+  showToast('Export laporan 3 bulanan hutan binaan berhasil dibuat.', 'success');
+}
+
+function previewMonthlyMonitorPhoto(idx) {
+  var row = (WEEKLY_REPORT_STATE.detailRows || [])[idx];
+  if (!row || !row.fotoUrl) return;
+  LB_STATE.photos = [normalizeImageUrl(row.fotoUrl)];
+  LB_STATE.dates = [row.waktu || ''];
+  LB_STATE.years = [row.fotoTahun || row.tahun || ''];
+  LB_STATE.angles = [row.sudut || ''];
+  LB_STATE.idx = 0;
+  LB_STATE.year = row.fotoTahun || row.tahun || '';
+  LB_STATE.context = 'single';
+  LB_STATE.locName = '<strong style="color:#fff;">' + escapeHtml(row.nama || row.kategoriLabel || 'Laporan 3 Bulanan') + '</strong><br/>' + escapeHtml(row.unit || '');
+  document.getElementById('photo-lightbox').classList.add('open');
+  document.body.style.overflow = 'hidden';
+  refreshLightbox();
+}
+/* ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â
+   ÃƒÂ°Ã…Â¸Ã…â€™Ã‚Â² POLYGON KEGIATAN & POHON MARKER
+   ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â */
+
+// ===== Coordinate helpers (supaya render polygon/titik kegiatan tidak tergantung file lain) =====
+function toFloat(v) {
+  if (v === null || v === undefined) return null;
+  var s = String(v).trim();
+  if (!s) return null;
+  s = s.replace(/^['"`\s]+|['"`\s]+$/g, '');
+  s = s.trim();
+  var n = parseFloat(s.replace(',', '.'));
+  return isNaN(n) ? null : n;
+}
+
+var POLYGON_AREA_LAYER = new L.FeatureGroup();
+var POHON_MARKER_LAYER = new L.MarkerClusterGroup({
+  iconCreateFunction: function(cluster) {
+    return L.divIcon({ html: '<div><span>' + cluster.getChildCount() + '</span></div>', className: 'marker-cluster marker-cluster-small', iconSize: new L.Point(40, 40) });
+  }
+});
 var POLYGON_FEATURES_CACHE = [];
-var POLYGON_AREA_LAYER = null;
-var POHON_MARKER_LAYER = null;
+var POLYGON_FEATURE_RENDER_TOKEN = 0;
 
-function fetchPolygonFeatures() {
-  if (typeof appendAuthParam === 'undefined' || typeof GAS_WEB_APP_URL === 'undefined') return;
-  fetch(appendAuthParam(GAS_WEB_APP_URL + '?action=getPolygonFeatures'))
-    .then(function(res) { return res.json(); })
-    .then(function(data) {
-      if (data.success) {
-        POLYGON_FEATURES_CACHE = Array.isArray(data.features) ? data.features : [];
-        if (typeof renderPolygonFeatures === 'function') renderPolygonFeatures(POLYGON_FEATURES_CACHE);
-      }
-    })
-    .catch(function(err) {
-      console.warn('[GeoHutan] Gagal memuat polygon features:', err);
-    });
-}
+mapObj.addLayer(POLYGON_AREA_LAYER);
+mapObj.addLayer(POHON_MARKER_LAYER);
 
-function renderPolygonFeatures(features) {
-  // Remove old layers
-  if (POLYGON_AREA_LAYER) { try { mapObj.removeLayer(POLYGON_AREA_LAYER); } catch(e){} POLYGON_AREA_LAYER = null; }
-  if (POHON_MARKER_LAYER) { try { mapObj.removeLayer(POHON_MARKER_LAYER); } catch(e){} POHON_MARKER_LAYER = null; }
-  if (!features || !features.length || !mapObj) return;
-  
-  POLYGON_AREA_LAYER = L.layerGroup().addTo(mapObj);
-  POHON_MARKER_LAYER = L.layerGroup().addTo(mapObj);
-  
-  features.forEach(function(feat) {
-    if (!feat) return;
-    try {
-      var type = String(feat.Type || feat.type || 'polygon').toLowerCase();
-      var lat = parseFloat(feat.Latitude || feat.latitude || 0);
-      var lng = parseFloat(feat.Longitude || feat.longitude || 0);
-      var featId = feat.ID || feat.id || '';
-      var namaKegiatan = feat.Kegiatan || feat.kegiatan || 'Kegiatan';
-      var luas = feat.Luas_Ha || feat.luas || '-';
-      var lokasi = [feat.Desa_Blok || feat.Desa || '', feat.Kecamatan || '', feat.Kabupaten || ''].filter(Boolean).join(', ');
-      var bibit = feat.Jenis_Bibit || feat.jenis_bibit || '';
-      var jmlBibit = feat.Jumlah_Bibit || feat.jumlah_bibit || '';
-      var cdk = feat.CDK_Wilayah || feat.cdk_wilayah || '';
-      var tglInput = feat.Tanggal_Input || feat.tanggal_input || '';
-      var keterangan = feat.Keterangan || feat.keterangan || '';
-      var gjUrl = feat.GeoJSON_URL || feat.geojson_url || '';
-      
-      var popHtml = '<div style="font-family:Inter,sans-serif;min-width:180px;">' +
-        '<b style="color:#2e7d32;font-size:13px;">&#128308; ' + namaKegiatan + '</b><br>' +
-        '<span style="font-size:11px;color:#555;">' + (lokasi || '-') + '</span><br>' +
-        '<span style="font-size:11px;">Luas: <b>' + (luas || '-') + ' Ha</b></span><br>' +
-        (bibit ? '<span style="font-size:11px;">Bibit: ' + bibit + (jmlBibit ? ' (' + jmlBibit + ')' : '') + '</span><br>' : '') +
-        '<button onclick="openPolygonKegiatanDrawer(' + JSON.stringify(featId) + ')" style="margin-top:6px;padding:4px 12px;background:#2e7d32;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:11px;width:100%;">&#128065; Lihat Detail &amp; Foto</button>' +
-        '</div>';
-      
-      var onClickFn = (function(fid) {
-        return function() { openPolygonKegiatanDrawer(fid); };
-      })(featId);
-      
-      if (type === 'marker') {
-        // Taruh Pohon: small green dot
-        if (!lat || !lng) return;
-        var pohonIcon = L.divIcon({
-          className: '',
-          html: '<div style="background:#2e7d32;border:2px solid #fff;border-radius:50%;width:10px;height:10px;box-shadow:0 1px 3px rgba(0,0,0,0.5);" title="Taruh Pohon"></div>',
-          iconSize: [10, 10],
-          iconAnchor: [5, 5]
-        });
-        var mk = L.marker([lat, lng], { icon: pohonIcon });
-        mk.bindPopup(popHtml, { maxWidth: 240 });
-        mk.on('click', onClickFn);
-        mk._featId = featId;
-        POHON_MARKER_LAYER.addLayer(mk);
-      } else {
-        // Polygon/Garis: use inline GeoJSON_Data first, fallback to URL fetch
-        var gjDataStr = feat.GeoJSON_Data || feat.geojson_data || '';
-        
-        var renderGeoJSON = function(gj, popupHtml, clickFn, fid) {
-          if (!POLYGON_AREA_LAYER || !mapObj) return;
-          var actualGeo = gj.geometry || gj;
-          var geomType = (actualGeo && actualGeo.type) ? actualGeo.type : '';
-          var styleOpts;
-          if (geomType === 'LineString' || geomType === 'MultiLineString') {
-            styleOpts = { color: '#1565c0', weight: 3.5, dashArray: '6,4', opacity: 0.9 };
-          } else {
-            styleOpts = { color: '#388e3c', weight: 2.5, fillOpacity: 0.22, fillColor: '#a5d6a7', opacity: 0.9 };
-          }
-          try {
-            var layer = L.geoJSON(gj, { style: styleOpts });
-            layer.bindPopup(popupHtml, { maxWidth: 240 });
-            layer.on('click', clickFn);
-            layer._featId = fid;
-            if (POLYGON_AREA_LAYER) POLYGON_AREA_LAYER.addLayer(layer);
-          } catch(e) {
-            console.warn('[GeoHutan] L.geoJSON render error:', e);
-          }
-        };
-        
-        if (gjDataStr) {
-          // Use inline data — no CORS issues
-          try {
-            var gjInline = JSON.parse(gjDataStr);
-            renderGeoJSON(gjInline, popHtml, onClickFn, featId);
-          } catch(parseErr) {
-            console.warn('[GeoHutan] GeoJSON_Data parse error:', parseErr);
-          }
-        } else if (gjUrl) {
-          // Fallback: try fetching from Drive (may fail due to CORS)
-          (function(url, popupHtml, clickFn, fid, fLat, fLng) {
-            fetch(url)
-              .then(function(r) { return r.json(); })
-              .then(function(gj) { renderGeoJSON(gj, popupHtml, clickFn, fid); })
-              .catch(function() {
-                // Last resort: drop a small marker
-                if (!fLat || !fLng || !POHON_MARKER_LAYER) return;
-                var mk2 = L.circleMarker([fLat, fLng], { radius: 5, color: '#388e3c', fillColor: '#a5d6a7', fillOpacity: 0.7, weight: 2 });
-                mk2.bindPopup(popupHtml, { maxWidth: 240 });
-                mk2.on('click', clickFn);
-                mk2._featId = fid;
-                if (POHON_MARKER_LAYER) POHON_MARKER_LAYER.addLayer(mk2);
-              });
-          })(gjUrl, popHtml, onClickFn, featId, lat, lng);
-        } else if (lat && lng) {
-          // No geometry at all: small circle marker
-          var mkCircle = L.circleMarker([lat, lng], { radius: 5, color: '#388e3c', fillColor: '#a5d6a7', fillOpacity: 0.7, weight: 2 });
-          mkCircle.bindPopup(popHtml, { maxWidth: 240 });
-          mkCircle.on('click', onClickFn);
-          mkCircle._featId = featId;
-          if (POHON_MARKER_LAYER) POHON_MARKER_LAYER.addLayer(mkCircle);
-        }
-      }
-    } catch(e) { console.warn('[GeoHutan] renderPolygonFeatures item error:', e); }
-  });
-}
+var SVG_POHON_KECIL = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.5" fill="#00e676"/></svg>';
+var ICON_POHON = L.divIcon({ html: SVG_POHON_KECIL, iconSize: [16, 16], iconAnchor: [8, 8], className: 'leaflet-marker-lightweight' });
 
-function openPolygonKegiatanDrawer(featId) {
-  var feat = (POLYGON_FEATURES_CACHE || []).find(function(f) { return String(f.ID || f.id || '') === String(featId); });
-  if (!feat) { showToast('Data kegiatan tidak ditemukan.', 'error'); return; }
-  
-  // Normalize: inject _lat/_lng so openDrawer can use them
-  var lat = parseFloat(feat.Latitude || feat.latitude || 0);
-  var lng = parseFloat(feat.Longitude || feat.longitude || 0);
-  feat._lat = lat || feat._lat || 0;
-  feat._lng = lng || feat._lng || 0;
-  
-  openDrawer('polygon_kegiatan', feat);
-}
+function togglePolygonKegiatanLayer() {
+  var cb = document.getElementById('toggle-polygon-kegiatan');
+  var leg = document.getElementById('leg-polygon-kegiatan');
+  // toggle from checkbox if ada, else derive from legend state
+  var isChecked = cb ? cb.checked : (leg ? leg.classList.contains('leg-hidden') ? false : true : true);
 
-/* ===== End Polygon Feature Management ===== */
-
-
-/* ===== Calendar Reminder Modal ===== */
-function openCalendarReminderModal() {
-  var modal = document.getElementById('calendar-reminder-modal');
-  if (modal) {
-    modal.style.display = 'flex';
-    modal.classList.add('active');
-  }
-  // Populate binaan select if user logged in
-  var binaanSel = document.getElementById('calendar-binaan-select');
-  if (binaanSel && window.DATA && window.DATA.pegawaiBinaan) {
-    binaanSel.innerHTML = '';
-    var user = typeof getStoredAuthUser === 'function' ? getStoredAuthUser() : null;
-    var binaanList = window.DATA.pegawaiBinaan || [];
-    // For non-admins filter to their own
-    if (user && typeof getRoleGroup === 'function' && getRoleGroup(user.role) >= 4) {
-      binaanList = binaanList.filter(function(r) { return typeof getReportRowPerson === 'function' && getReportRowPerson(r) === user.nama; });
-    }
-    binaanList.slice(0, 50).forEach(function(r, i) {
-      var opt = document.createElement('option');
-      opt.value = i;
-      var label = (r['Desa/Kelurahan'] || r['Desa'] || '') + ' - ' + (r['Kegiatan'] || r['Kegiaatan'] || '');
-      opt.textContent = label;
-      opt.dataset.idx = i;
-      binaanSel.appendChild(opt);
-    });
-    // Set current drawer row as default
-    if (window.CURRENT_DRAWER_ROW) {
-      window.CURRENT_CALENDAR_ROW = window.CURRENT_DRAWER_ROW;
-    } else if (binaanList.length > 0) {
-      window.CURRENT_CALENDAR_ROW = binaanList[0];
-    }
-  }
-  if (typeof renderCalendarReminder === 'function') renderCalendarReminder();
-}
-
-function closeCalendarReminderModal() {
-  var modal = document.getElementById('calendar-reminder-modal');
-  if (modal) {
-    modal.style.display = 'none';
-    modal.classList.remove('active');
-  }
-}
-/* ===== End Calendar Reminder Modal ===== */
-
-
-/* ===== Render Calendar Reminder ===== */
-function renderCalendarReminder() {
-  var container = document.getElementById('calendar-reminder-container');
-  if (!container) return;
-  
-  var selectType = document.getElementById('calendar-type-select');
-  var type = selectType ? selectType.value : 'weekly';
-
-  var r = window.CURRENT_CALENDAR_ROW || window.CURRENT_DRAWER_ROW;
-  if (!r) {
-    container.innerHTML = '<div style="text-align:center;color:#777;padding:20px;">Klik titik Hutan Binaan terlebih dahulu.</div>';
-    return;
+  if (cb) cb.checked = isChecked;
+  if (leg) {
+    if (isChecked) leg.classList.remove('leg-hidden');
+    else leg.classList.add('leg-hidden');
   }
 
-  var now = new Date();
-  var currentMonth = now.getMonth();
-  var currentYear = now.getFullYear();
-  var mNames = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
-  var html = '';
+  if (isChecked) mapObj.addLayer(POLYGON_AREA_LAYER);
+  else mapObj.removeLayer(POLYGON_AREA_LAYER);
 
-  var formatDt = function(dObj) {
-    var m = dObj.getMonth() + 1;
-    var day = dObj.getDate();
-    return dObj.getFullYear() + '-' + (m < 10 ? '0' + m : m) + '-' + (day < 10 ? '0' + day : day);
-  };
+  // ensure UI & marker/drawer state refresh
+  schedRender();
+}
 
-  if (type === 'weekly') {
-    var weekReports = [];
-    if (window.WEEKLY_REPORT_STATE && window.WEEKLY_REPORT_STATE.reports && window.WEEKLY_REPORT_STATE.reports.length > 0) {
-        weekReports = window.WEEKLY_REPORT_STATE.reports;
-    }
 
-    // Auto-fetch weekly reports for this marker
-    if (!r._weeklyCalendarFetched && typeof GAS_WEB_APP_URL !== 'undefined' && typeof appendAuthParam !== 'undefined') {
-      r._weeklyCalendarFetched = true;
-      var coords = typeof getPhotoCoords === 'function' ? getPhotoCoords(r) : {lat: r._lat, lng: r._lng};
-      var url = GAS_WEB_APP_URL + '?action=getWeeklyReports&category=pegawaibinaanformatsistem' +
-                '&lat=' + encodeURIComponent(coords.lat || '') + '&lng=' + encodeURIComponent(coords.lng || '') +
-                '&rowIndex=' + encodeURIComponent(r._row_idx || '') +
-                '&sheetGid=' + encodeURIComponent(r._source_gid || '') +
-                '&_ts=' + Date.now();
-      fetch(appendAuthParam(url)).then(function(res){ return res.json(); }).then(function(data){
-        if (data.reports) {
-          if (!window.WEEKLY_REPORT_STATE) window.WEEKLY_REPORT_STATE = {};
-          window.WEEKLY_REPORT_STATE.reports = data.reports;
-          renderCalendarReminder();
-        }
-      }).catch(function(){});
-    }
+function togglePohonMarkerLayer() {
+  var cb = document.getElementById('toggle-pohon-marker');
+  var leg = document.getElementById('leg-pohon-marker');
+  // toggle from checkbox if ada, else derive from legend state
+  var isChecked = cb ? cb.checked : (leg ? leg.classList.contains('leg-hidden') ? false : true : true);
 
-    var reportedWeeks = {};
-    var exactReportedDates = {};
-    weekReports.forEach(function(wr) {
-      var dStr = wr.waktu || wr.timestamp || wr.waktu_kegiatan || '';
-      if (dStr) {
-        var t = typeof parseExifDate === 'function' ? parseExifDate(dStr) : 0;
-        if (t) {
-          var dObj = new Date(t);
-          var m = dObj.getMonth() + 1;
-          var day = dObj.getDate();
-          var dateKey = dObj.getFullYear() + '-' + (m<10?'0':'')+m + '-' + (day<10?'0':'')+day;
-          exactReportedDates[dateKey] = true;
+  if (cb) cb.checked = isChecked;
+  if (leg) {
+    if (isChecked) leg.classList.remove('leg-hidden');
+    else leg.classList.add('leg-hidden');
+  }
 
-          var copy = new Date(Date.UTC(dObj.getFullYear(), dObj.getMonth(), dObj.getDate()));
-          copy.setUTCDate(copy.getUTCDate() + 4 - (copy.getUTCDay() || 7));
-          var yearStart = new Date(Date.UTC(copy.getUTCFullYear(), 0, 1));
-          var weekNo = Math.ceil(((copy - yearStart) / 86400000 + 1) / 7);
-          var key = copy.getUTCFullYear() + '-W' + weekNo;
-          reportedWeeks[key] = true;
-        }
-      }
-    });
+  if (isChecked) mapObj.addLayer(POHON_MARKER_LAYER);
+  else mapObj.removeLayer(POHON_MARKER_LAYER);
 
-    html += '<h3 style="margin-bottom:10px;font-size:14px;text-align:center;color:#333;">Riwayat Laporan Mingguan</h3>';
-    html += '<div style="max-height:300px;overflow-y:auto;padding-right:5px;">';
+  // ensure UI & marker/drawer state refresh
+  schedRender();
+}
 
-    for (var mOffset = 0; mOffset < 3; mOffset++) {
-      var renderMonth = currentMonth - mOffset;
-      var renderYear = currentYear;
-      if (renderMonth < 0) { renderMonth += 12; renderYear -= 1; }
 
-      var daysInMonth = new Date(renderYear, renderMonth + 1, 0).getDate();
-      var firstDay = new Date(renderYear, renderMonth, 1).getDay();
-      var firstMon = firstDay === 0 ? 6 : firstDay - 1;
+// Draw mode instances
+var drawPolygonKegiatan = new L.Draw.Polygon(mapObj, {
+  allowIntersection: false,
+  showArea: true,
+  shapeOptions: { color: '#388e3c', weight: 3, fillOpacity: 0.3 }
+});
 
-      html += '<div style="background:#f9f9f9;padding:8px;border-radius:6px;margin-bottom:10px;border:1px solid #eee;">';
-      html += '<h4 style="margin:0 0 8px 0;font-size:12px;color:#2e7d32;text-align:center;">' + mNames[renderMonth] + ' ' + renderYear + '</h4>';
-      html += '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;text-align:center;font-weight:bold;font-size:10px;margin-bottom:3px;color:#777;">';
-      ['Sn','Sl','Rb','Km','Jm','Sb','Mg'].forEach(function(d) { html += '<div>' + d + '</div>'; });
-      html += '</div><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;text-align:center;font-size:10px;">';
-      for (var i = 0; i < firstMon; i++) html += '<div></div>';
-      
-      for (var d = 1; d <= daysInMonth; d++) {
-        var dateObj = new Date(renderYear, renderMonth, d);
-        var copy2 = new Date(Date.UTC(renderYear, renderMonth, d));
-        copy2.setUTCDate(copy2.getUTCDate() + 4 - (copy2.getUTCDay() || 7));
-        var ys = new Date(Date.UTC(copy2.getUTCFullYear(), 0, 1));
-        var wn = Math.ceil(((copy2 - ys) / 86400000 + 1) / 7);
-        var wk = copy2.getUTCFullYear() + '-W' + wn;
-        
-        var currentFormatDt = formatDt(dateObj);
-        var isExactReported = exactReportedDates[currentFormatDt] === true;
-        var reported = reportedWeeks[wk] === true;
-        var isFuture = currentFormatDt > formatDt(now);
-        var bg = isFuture ? '#eee' : (reported ? '#43a047' : '#e53935');
-        var color = isFuture ? '#999' : '#fff';
-        
-        var cellContent = d;
-        if (isExactReported) {
-             cellContent = '<strong style="border-bottom: 2px solid white; display:inline-block; line-height: 1.1;">' + d + '</strong>';
-        }
-        html += '<div style="padding:5px 2px;background:' + bg + ';color:' + color + ';border-radius:3px;">' + cellContent + '</div>';
-      }
-      html += '</div></div>';
-    }
+var drawGarisKegiatan = new L.Draw.Polyline(mapObj, {
+  shapeOptions: { color: '#388e3c', weight: 4 }
+});
+
+var drawPohonMarker = new L.Draw.Marker(mapObj, {
+  icon: ICON_POHON
+});
+
+// Create map buttons for Drawing
+var CustomDrawControl = L.Control.extend({
+  options: { position: 'topright' },
+  onAdd: function (map) {
+    var container = L.DomUtil.create('div', 'leaflet-bar leaflet-control custom-draw-control');
+    container.style.backgroundColor = 'white';
+    container.style.padding = '5px';
+    container.style.display = 'flex';
+    container.style.flexDirection = 'column';
+    container.style.gap = '5px';
+    container.style.border = '2px solid rgba(0,0,0,0.2)';
+    container.style.borderRadius = '5px';
     
-    html += '</div>';
-  } else {
-    // Monthly (3 Bulanan)
-    var datesArr = typeof getRowDates === 'function' ? getRowDates(r, currentYear) : [];
-    var rawLin = String(r['Data Linimasa'] || '').split('|');
-    var allDates = datesArr.concat(rawLin);
-    var uploadedMonths = {};
-    allDates.forEach(function(dStr) {
-      var ts = typeof parseExifDate === 'function' ? parseExifDate(dStr) : 0;
-      if (ts) {
-        var dObj = new Date(ts);
-        if (dObj.getFullYear() === currentYear) {
-           var m = dObj.getMonth();
-           if (!uploadedMonths[m]) uploadedMonths[m] = [];
-           uploadedMonths[m].push(dObj.getDate() + ' ' + mNames[m]);
-        }
-      }
-    });
-
-    html += '<h3 style="margin-bottom:15px;font-size:14px;text-align:center;color:#333;">Laporan 3 Bulanan (' + currentYear + ')</h3>';
-    html += '<div style="display:flex;flex-direction:column;gap:10px;">';
-    var quarters = [
-      {name:'Triwulan I', months:[0,1,2]}, {name:'Triwulan II', months:[3,4,5]},
-      {name:'Triwulan III', months:[6,7,8]}, {name:'Triwulan IV', months:[9,10,11]}
-    ];
-    quarters.forEach(function(q, qi) {
-      var isActive = Math.floor(currentMonth / 3) === qi;
-      var hBg = isActive ? '#2e7d32' : '#546e7a';
-      html += '<div style="border:1px solid #ddd;border-radius:6px;overflow:hidden;">';
-      html += '<div style="background:' + hBg + ';color:#fff;padding:6px 10px;font-size:12px;font-weight:bold;display:flex;justify-content:space-between;">';
-      html += '<span>' + q.name + '</span>';
-      if (isActive) html += '<span style="background:#fff;color:#2e7d32;padding:2px 6px;border-radius:4px;font-size:10px;">Berjalan</span>';
-      html += '</div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:#ddd;">';
-      q.months.forEach(function(m) {
-        var past = m <= currentMonth;
-        var hasThisMonth = uploadedMonths[m] && uploadedMonths[m].length > 0;
-        var bg2 = hasThisMonth ? '#e8f5e9' : (past ? '#ffebee' : '#fff');
-        var col2 = hasThisMonth ? '#2e7d32' : (past ? '#c62828' : '#999');
-        var icon = hasThisMonth ? '&#10004;' : (past ? '&#10006;' : '-');
-        html += '<div style="background:' + bg2 + ';color:' + col2 + ';padding:8px 4px;text-align:center;display:flex;flex-direction:column;justify-content:center;align-items:center;">';
-        html += '<span style="font-weight:bold;font-size:11px;margin-bottom:4px;">' + mNames[m] + '</span>';
-        html += '<span style="font-size:14px;">' + icon + '</span>';
-        if (hasThisMonth) {
-           var detailText = uploadedMonths[m].join('<br>');
-           html += '<span style="font-size:9px;margin-top:2px;font-weight:normal;line-height:1.1;">' + detailText + '</span>';
-        }
-        html += '</div>';
-      });
-      html += '</div></div>';
-    });
-    html += '</div>';
+    container.innerHTML = 
+      '<button type="button" class="btn-icon" style="background:#e8f5e9; border:1px solid #43a047; color:#2e7d32; border-radius:4px; padding:6px; cursor:pointer; font-size:12px; font-weight:bold; width:100%; text-align:left;" onclick="startDrawPolygonKegiatan()" title="Gambar Polygon Area">&#128308; Polygon</button>' +
+      '<button type="button" class="btn-icon" style="background:#e8f5e9; border:1px solid #43a047; color:#2e7d32; border-radius:4px; padding:6px; cursor:pointer; font-size:12px; font-weight:bold; width:100%; text-align:left;" onclick="startDrawGarisKegiatan()" title="Gambar Garis Jalur/Greenbelt">&#128312; Garis</button>' +
+      '<button type="button" class="btn-icon" style="background:#e8f5e9; border:1px solid #43a047; color:#2e7d32; border-radius:4px; padding:6px; cursor:pointer; font-size:12px; font-weight:bold; width:100%; text-align:left;" onclick="startDrawPohonMarker()" title="Taruh Pohon">&#127807; Taruh Pohon</button>';
+    
+    L.DomEvent.disableClickPropagation(container);
+    return container;
   }
+});
+mapObj.addControl(new CustomDrawControl());
 
-  container.innerHTML = html;
-}
-/* ===== End Render Calendar Reminder ===== */
-
-
-function renderMonthlyPhotoMetaStatus(meta, file, errorText) {
-  var wrap = document.getElementById('monthly-photo-meta-status');
-  if (!wrap) return;
-  if (!file && !errorText) {
-    wrap.innerHTML = '';
+function startDrawPolygonKegiatan() {
+  if (!canManageSpatialData()) {
+    showToast('Akun ini tidak memiliki izin membuat polygon kegiatan.', 'error');
     return;
   }
-  var ok = meta && meta.date && meta.lat != null && meta.lng != null && !errorText;
-  var thumb = file ? '<img src="' + URL.createObjectURL(file) + '" alt="Preview foto" style="width: 80px; height: 80px; object-fit: cover; border-radius: 4px; border: 1px solid #ddd; margin-right: 12px; flex-shrink: 0;">' : '';
-  var source = meta && meta.source ? meta.source : '-';
-  var accuracy = meta && meta.accuracy ? ' (akurasi +/- ' + Math.round(Number(meta.accuracy)) + ' m)' : '';
-  
-  var bg = ok ? '#e8f5e9' : '#ffebee';
-  var border = ok ? '#c8e6c9' : '#ffcdd2';
-  var color = ok ? '#2e7d32' : '#c62828';
-  
-  wrap.innerHTML = '<div style="display: flex; align-items: flex-start; padding: 12px; background: ' + bg + '; border: 1px solid ' + border + '; border-radius: 6px; margin-top: 5px;">' +
-    thumb +
-    '<div style="display: flex; flex-direction: column; font-size: 11px; line-height: 1.4; color: #444; width: 100%;">' +
-    '<strong style="color: ' + color + '; font-size: 12px; margin-bottom: 4px;">' + (ok ? '✅ Foto Valid & Siap Upload' : '❌ Peringatan: Ada ketidaksesuaian laporan!') + '</strong>' +
-    '<span><b>Waktu:</b> ' + escapeHtml(meta && meta.date ? formatDateIndo(meta.date) : '-') + '</span>' +
-    '<span><b>Latitude:</b> ' + escapeHtml(meta && meta.lat != null ? meta.lat : '-') + '</span>' +
-    '<span><b>Longitude:</b> ' + escapeHtml(meta && meta.lng != null ? meta.lng : '-') + '</span>' +
-    (meta && meta.distText ? '<span><b>Jarak Foto ke Titik:</b> ' + escapeHtml(meta.distText) + '</span>' : '') +
-    (errorText ? '<div style="margin-top: 6px; padding: 6px; background: #fff; border-left: 3px solid #c62828; color: #c62828; font-weight: bold;">' + escapeHtml(errorText) + '</div>' : '') +
-    '</div></div>';
+  drawPohonMarker.disable();
+  drawGarisKegiatan.disable();
+  drawPolygonKegiatan.enable();
+  showToast('Silakan gambar area polygon di peta. Klik titik awal untuk selesai.', 'info');
 }
 
-function handleMonthlyFileChange(files) {
-  var file = files && files.length ? files[0] : null;
-  if (!file) {
-    renderMonthlyPhotoMetaStatus(null, null);
+function startDrawGarisKegiatan() {
+  if (!canManageSpatialData()) {
+    showToast('Akun ini tidak memiliki izin membuat garis kegiatan.', 'error');
+    return;
+  }
+  drawPohonMarker.disable();
+  drawPolygonKegiatan.disable();
+  drawGarisKegiatan.enable();
+  showToast('Silakan gambar garis (jalur/greenbelt) di peta. Klik ganda titik terakhir untuk selesai.', 'info');
+}
+
+function startDrawPohonMarker() {
+  if (!canManageSpatialData()) {
+    showToast('Akun ini tidak memiliki izin membuat marker kegiatan.', 'error');
+    return;
+  }
+  drawPolygonKegiatan.disable();
+  drawGarisKegiatan.disable();
+  drawPohonMarker.enable();
+  showToast('Silakan klik lokasi di peta untuk menaruh marker pohon kegiatan.', 'info');
+}
+
+// Listen to Draw Created Event
+mapObj.on(L.Draw.Event.CREATED, function (e) {
+  if (!canManageSpatialData()) {
+    showToast('Akun ini tidak memiliki izin menyimpan hasil gambar.', 'error');
+    return;
+  }
+  var type = e.layerType;
+  var layer = e.layer;
+  
+  // Deteksi jika dari custom draw (Polygon / Garis / Marker)
+  if (drawPolygonKegiatan._enabled || layer instanceof L.Polygon && layer.options.color === '#388e3c') {
+    var geojson = layer.toGeoJSON();
+    var area = turf.area(geojson) / 10000; // Ha
+    var latlngs = layer.getBounds().getCenter();
+    openPolygonForm('polygon', latlngs.lat, latlngs.lng, geojson, area);
+    drawPolygonKegiatan.disable();
+    return; // Cegah analyzePolygon
+  }
+
+  if (drawGarisKegiatan._enabled || layer instanceof L.Polyline && layer.options.color === '#388e3c') {
+    var geojson = layer.toGeoJSON();
+    var length = turf.length(geojson, {units: 'kilometers'}); // Panjang dalam km
+    var latlngs = layer.getBounds().getCenter();
+    // Kita anggap sebagai polygon di sistem form, tapi area diset 0 (atau bisa diinput manual)
+    openPolygonForm('polygon', latlngs.lat, latlngs.lng, geojson, 0); 
+    drawGarisKegiatan.disable();
     return;
   }
   
-  var btn = document.getElementById('btn-upload-file');
-  var oldText = btn ? btn.innerHTML : 'Upload';
-  if (btn) { btn.disabled = true; btn.innerHTML = 'Menganalisis Metadata...'; }
-  
-  validateSingleImageFile(file).then(function(err) {
-    if (err) throw new Error(err);
-    return getWeeklyPhotoFinalMetadata(file);
-  }).then(function(meta) {
-    var errorText = '';
-    
-    // Cek Wajib
-    if (!meta.date || meta.lat == null || meta.lng == null) {
-       errorText = 'Foto Laporan 3 Bulanan Wajib memiliki metadata Koordinat Latitude Longitude dan Tanggal Waktu yang valid.';
-    }
-    
-    // Hitung jarak jika koordinat lengkap
-    var r = window.PHOTO_GALLERY ? window.PHOTO_GALLERY.row : null;
-    var context = window.PHOTO_GALLERY ? window.PHOTO_GALLERY.context : 'juna';
-    if (!errorText && r && context === 'pegawaiBinaan') {
-       var coords = getPhotoCoords(r);
-       if (coords && coords.lat != null && coords.lng != null && meta.lat != null && meta.lng != null) {
-          if (typeof calculateHaversineDistance === 'function') {
-            var dist = calculateHaversineDistance(coords.lat, coords.lng, meta.lat, meta.lng);
-            meta.distText = dist.toFixed(2) + ' KM';
-            if (dist > 1) {
-              errorText = 'Jarak foto (' + dist.toFixed(2) + ' KM) melebihi batas 1 KM dari titik koordinat Hutan Binaan!';
-            }
-          }
-       }
-       
-       // Cek Tanggal Triwulan
-       if (!errorText && meta.date) {
-          var metaTs = typeof parseExifDate === 'function' ? parseExifDate(meta.date) : 0;
-          if (metaTs) {
-             var metaD = new Date(metaTs);
-             var pYear = metaD.getFullYear();
-             var pMonth = metaD.getMonth();
-             
-             var nowObj = new Date();
-             var currentQuarter = Math.floor(nowObj.getMonth() / 3);
-             var pQuarter = Math.floor(pMonth / 3);
-             
-             if (pYear !== nowObj.getFullYear() || pQuarter !== currentQuarter) {
-                var mNames = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
-                var quarters = ['I (Jan-Mar)', 'II (Apr-Jun)', 'III (Jul-Sep)', 'IV (Okt-Des)'];
-                errorText = 'Foto dari bulan ' + mNames[pMonth] + ' ' + pYear + '. Wajib menggunakan foto dalam rentang Triwulan saat ini (' + quarters[currentQuarter] + ').';
-             }
-          }
-       }
-    }
-    
-    renderMonthlyPhotoMetaStatus(meta, file, errorText);
-  }).catch(function(err) {
-    renderMonthlyPhotoMetaStatus(null, file, String(err.message || err));
-  }).finally(function() {
-    if (btn) { btn.disabled = false; btn.innerHTML = oldText; }
-  });
-}
+  if (drawPohonMarker._enabled || (layer instanceof L.Marker && layer.options.icon === ICON_POHON)) {
+    var latlng = layer.getLatLng();
+    openPolygonForm('marker', latlng.lat, latlng.lng, null, 0);
+    drawPohonMarker.disable();
+    return;
+  }
 
-// ======== POLYGON/GARIS/TARUH POHON FORM FUNCTIONS ========
+  // Jika draw biasa (analisis area)
+  drawnItems.clearLayers();
+  drawnItems.addLayer(layer);
+  analyzePolygon(layer);
+});
 
+// Modal Form Handling
 function checkKegiatanCustom() {
-  var sel = document.getElementById('pg-kegiatan');
+  var sel = document.getElementById('pg-kegiatan').value;
   var cust = document.getElementById('pg-kegiatan-custom');
-  if (!sel || !cust) return;
-  if (sel.value === '__custom__') { cust.style.display = 'block'; cust.focus(); }
+  if (sel === '__custom__') { cust.style.display = 'block'; cust.focus(); }
   else { cust.style.display = 'none'; }
 }
+
+document.getElementById('pg-cdk').addEventListener('change', function() {
+  var cust = document.getElementById('pg-cdk-custom');
+  if (this.value === '__custom__') { cust.style.display = 'block'; cust.focus(); }
+  else { cust.style.display = 'none'; }
+});
 
 function openPolygonForm(type, lat, lng, geojsonObj, areaHa) {
   if (!canManageSpatialData()) {
     showToast('Akun ini tidak memiliki izin membuat kegiatan.', 'error');
     return;
   }
-  var modal = document.getElementById('polygon-kegiatan-modal');
-  if (!modal) { showToast('Modal form tidak ditemukan di halaman.', 'error'); return; }
-  modal.classList.add('open');
+  document.getElementById('polygon-kegiatan-modal').classList.add('open');
+  document.getElementById('pg-feature-id').value = '';
+  document.getElementById('pg-type').value = type;
+  document.getElementById('pg-geojson').value = geojsonObj ? JSON.stringify(geojsonObj) : '';
   
-  var fid = document.getElementById('pg-feature-id');
-  var ftype = document.getElementById('pg-type');
-  var fgeojson = document.getElementById('pg-geojson');
-  var flat = document.getElementById('pg-lat');
-  var flng = document.getElementById('pg-lng');
-  var fkab = document.getElementById('pg-kabupaten');
-  var fluas = document.getElementById('pg-luas');
-  var ftitle = document.getElementById('polygon-modal-title');
-  var flokasi = document.getElementById('pg-lokasi');
-  var fkeg = document.getElementById('pg-kegiatan');
-  var fkegCust = document.getElementById('pg-kegiatan-custom');
-  var fcdk = document.getElementById('pg-cdk');
-  var fcdkCust = document.getElementById('pg-cdk-custom');
-  var fket = document.getElementById('pg-keterangan');
-  var fbibit = document.getElementById('bibit-container');
+  // Auto-fill
+  document.getElementById('pg-lat').value = lat;
+  document.getElementById('pg-lng').value = lng;
+  document.getElementById('pg-kabupaten').value = getKab(lat, lng) || '';
+  requestDplForRow({}, lat, lng);
+  if (type === 'polygon' && areaHa > 0) {
+    document.getElementById('pg-luas').value = areaHa.toFixed(2);
+  } else {
+    document.getElementById('pg-luas').value = '';
+  }
 
-  if (fid) fid.value = '';
-  if (ftype) ftype.value = type;
-  if (fgeojson) fgeojson.value = geojsonObj ? JSON.stringify(geojsonObj) : '';
-  if (flat) flat.value = lat;
-  if (flng) flng.value = lng;
-  if (fkab) fkab.value = (typeof getKab === 'function' ? getKab(lat, lng) : '') || '';
-  if (typeof requestDplForRow === 'function') requestDplForRow({}, lat, lng);
-  if (fluas) fluas.value = (type === 'polygon' && areaHa > 0) ? areaHa.toFixed(2) : '';
-  if (ftitle) ftitle.innerHTML = type === 'polygon' ? '&#128308; Tambah Area Kegiatan (Polygon/Garis)' : '&#127807; Tambah Titik Kegiatan (Marker)';
-  if (flokasi) flokasi.value = '';
-  if (fkeg) fkeg.value = 'Penanaman';
-  if (fkegCust) { fkegCust.style.display = 'none'; fkegCust.value = ''; }
-  if (fcdk) fcdk.value = '';
-  if (fcdkCust) { fcdkCust.style.display = 'none'; fcdkCust.value = ''; }
-  if (fket) fket.value = '';
-  if (fbibit) { fbibit.innerHTML = ''; addBibitRow(); }
+  document.getElementById('polygon-modal-title').innerHTML = type === 'polygon' ? '&#128308; Tambah Area Kegiatan (Polygon/Garis)' : '&#127807; Taruh Pohon';
+  document.getElementById('pg-lokasi').value = '';
+  document.getElementById('pg-kegiatan').value = 'Penanaman';
+  document.getElementById('pg-kegiatan-custom').style.display = 'none';
+  document.getElementById('pg-kegiatan-custom').value = '';
+  document.getElementById('pg-cdk').value = '';
+  document.getElementById('pg-cdk-custom').style.display = 'none';
+  document.getElementById('pg-cdk-custom').value = '';
+  document.getElementById('pg-keterangan').value = '';
+  
+  // Reset dynamic bibit rows
+  document.getElementById('bibit-container').innerHTML = '';
+  addBibitRow();
+  
+  document.getElementById('polygon-modal-title').innerHTML = type === 'polygon' ? '&#128308; Tambah Area Kegiatan (Polygon/Garis)' : '&#127807; Tambah Titik Kegiatan (Marker)';
 }
 
 function addBibitRow() {
   var c = document.getElementById('bibit-container');
-  if (!c) return;
   var div = document.createElement('div');
   div.className = 'bibit-row';
-  div.style.cssText = 'display:flex;gap:10px;margin-bottom:5px;';
-  div.innerHTML = '<input type="text" class="bibit-jenis" placeholder="Jenis Bibit (Mis: Mangga)" style="flex:2;padding:6px;border-radius:4px;border:1px solid #ccc;">' +
-                  '<input type="number" class="bibit-jumlah" placeholder="Jumlah" style="flex:1;padding:6px;border-radius:4px;border:1px solid #ccc;">' +
-                  '<button type="button" onclick="removeBibitRow(this)" style="color:red;font-size:16px;border:none;background:none;cursor:pointer;">&#x2212;</button>';
+  div.style.display = 'flex';
+  div.style.gap = '10px';
+  div.style.marginBottom = '5px';
+  div.innerHTML = '<input type="text" class="bibit-jenis" placeholder="Jenis Bibit (Mis: Mangga)" style="flex:2; padding:6px; border-radius:4px; border:1px solid #ccc;">' +
+                  '<input type="number" class="bibit-jumlah" placeholder="Jumlah (Mis: 100)" style="flex:1; padding:6px; border-radius:4px; border:1px solid #ccc;">' +
+                  '<button type="button" class="btn-icon" onclick="removeBibitRow(this)" style="color:red; font-size:16px; border:none; background:none;">ÃƒÂ¢Ã…â€œÃ¢â‚¬â€œ</button>';
   c.appendChild(div);
 }
 
 function removeBibitRow(btn) {
   var row = btn.parentElement;
-  if (row && row.parentElement && row.parentElement.children.length > 1) {
+  if (row.parentElement.children.length > 1) {
     row.remove();
-  } else if (row) {
-    var j = row.querySelector('.bibit-jenis'); if (j) j.value = '';
-    var n = row.querySelector('.bibit-jumlah'); if (n) n.value = '';
+  } else {
+    row.querySelector('.bibit-jenis').value = '';
+    row.querySelector('.bibit-jumlah').value = '';
   }
 }
 
 function cancelPolygonForm() {
-  var modal = document.getElementById('polygon-kegiatan-modal');
-  if (modal) modal.classList.remove('open');
+  document.getElementById('polygon-kegiatan-modal').classList.remove('open');
 }
 
 function deletePolygonKegiatan(featureId) {
-  if (!canManageSpatialData()) { showToast('Akun ini tidak memiliki izin menghapus kegiatan.', 'error'); return; }
-  if (!confirm('HAPUS PERMANEN?\n\nMenghapus kegiatan ini juga akan menghapus data di Spreadsheet.\n\nLanjutkan hapus?')) return;
-  showToast('Memproses penghapusan...', 'info');
-  var payload = { action: 'deletePolygonFeature', featureId: featureId };
+  if (!canManageSpatialData()) {
+    showToast('Akun ini tidak memiliki izin menghapus kegiatan.', 'error');
+    return;
+  }
+  if (!confirm('HAPUS PERMANEN?\n\nMenghapus kegiatan ini juga akan menghapus:\n- Data di Spreadsheet\n- File Polygon GeoJSON di Google Drive\n- Semua Foto yang ter-upload untuk kegiatan ini.\n\nLanjutkan hapus?')) return;
+  
+  showToast('Memproses penghapusan (jangan tutup halaman)...', 'info');
+  var payload = { action: "deletePolygonFeature", featureId: featureId };
+  
   fetch(GAS_WEB_APP_URL, {
     method: 'POST',
-    body: JSON.stringify(typeof withAuthPayload === 'function' ? withAuthPayload(payload) : payload)
+    body: JSON.stringify(withAuthPayload(payload))
   })
-  .then(function(res) { return res.json(); })
-  .then(function(data) {
+  .then(res => res.json())
+  .then(data => {
     if (data.success) {
-      showToast('Kegiatan berhasil dihapus!', 'success');
+      showToast('Kegiatan berhasil dihapus sepenuhnya!', 'success');
       closeDrawer();
-      if (typeof fetchPolygonFeatures === 'function') fetchPolygonFeatures();
+      fetchPolygonFeatures(); // Reload data
     } else {
-      showToast('Gagal menghapus: ' + (data.error || ''), 'error');
+      showToast('Gagal menghapus: ' + data.error, 'error');
     }
   })
-  .catch(function() { showToast('Terjadi kesalahan saat menghapus', 'error'); });
+  .catch(err => {
+    showToast('Terjadi kesalahan saat menghapus', 'error');
+  });
 }
 
 function savePolygonFeature() {
-  if (!canManageSpatialData()) { showToast('Akun ini tidak memiliki izin menyimpan kegiatan.', 'error'); return; }
-  var cdkEl = document.getElementById('pg-cdk');
-  var cdk = cdkEl ? cdkEl.value : '';
-  if (cdk === '__custom__') { var ce = document.getElementById('pg-cdk-custom'); cdk = ce ? ce.value : ''; }
-  var kegEl = document.getElementById('pg-kegiatan');
-  var keg = kegEl ? kegEl.value : '';
-  if (keg === '__custom__') { var ke = document.getElementById('pg-kegiatan-custom'); keg = ke ? ke.value : ''; }
-
+  if (!canManageSpatialData()) {
+    showToast('Akun ini tidak memiliki izin menyimpan kegiatan.', 'error');
+    return;
+  }
+  var cdk = document.getElementById('pg-cdk').value;
+  if (cdk === '__custom__') cdk = document.getElementById('pg-cdk-custom').value;
+  var keg = document.getElementById('pg-kegiatan').value;
+  if (keg === '__custom__') keg = document.getElementById('pg-kegiatan-custom').value;
+  
   var bibitArr = [];
   var totalBibit = 0;
   document.querySelectorAll('#bibit-container .bibit-row').forEach(function(row) {
-    var j = row.querySelector('.bibit-jenis'); j = j ? j.value.trim() : '';
-    var n = row.querySelector('.bibit-jumlah'); n = parseInt(n ? n.value : 0) || 0;
-    if (j) { bibitArr.push(j + (n > 0 ? ' (' + n + ')' : '')); totalBibit += n; }
+    var j = row.querySelector('.bibit-jenis').value.trim();
+    var n = parseInt(row.querySelector('.bibit-jumlah').value) || 0;
+    if (j) {
+      bibitArr.push(j + (n > 0 ? ' (' + n + ')' : ''));
+      totalBibit += n;
+    }
   });
-
-  function gv(id) { var e = document.getElementById(id); return e ? e.value : ''; }
-
+  
   var payload = {
-    action: 'savePolygonFeature',
-    type: gv('pg-type'),
+    action: "savePolygonFeature",
+    type: document.getElementById('pg-type').value,
     cdk_wilayah: cdk,
-    nama: gv('pg-nama'),
-    kabupaten: gv('pg-kabupaten'),
-    kecamatan: gv('pg-kecamatan'),
-    desa_blok: gv('pg-desa'),
-    lokasi: gv('pg-lokasi'),
+    nama: document.getElementById('pg-nama').value,
+    kabupaten: document.getElementById('pg-kabupaten').value,
+    kecamatan: document.getElementById('pg-kecamatan').value,
+    desa_blok: document.getElementById('pg-desa').value,
+    lokasi: document.getElementById('pg-lokasi').value,
     kegiatan: keg,
-    luas: gv('pg-luas'),
+    luas: document.getElementById('pg-luas').value,
     jenis_bibit: bibitArr.join(', '),
     jumlah_bibit: totalBibit,
-    latitude: gv('pg-lat'),
-    longitude: gv('pg-lng'),
-    keterangan: gv('pg-keterangan')
+    latitude: document.getElementById('pg-lat').value,
+    longitude: document.getElementById('pg-lng').value,
+    keterangan: document.getElementById('pg-keterangan').value
   };
-
-  var dplKey = typeof getDplCacheKey === 'function' ? getDplCacheKey(payload.latitude, payload.longitude) : null;
-  if (dplKey && typeof DPL_CACHE !== 'undefined' && DPL_CACHE.hasOwnProperty(dplKey)) {
+  var dplKey = getDplCacheKey(payload.latitude, payload.longitude);
+  if (dplKey && DPL_CACHE.hasOwnProperty(dplKey)) {
     payload.dpl = DPL_CACHE[dplKey];
-    payload.status_dpl = typeof getDplCategory === 'function' ? getDplCategory(DPL_CACHE[dplKey]).label : '';
+    payload.status_dpl = getDplCategory(DPL_CACHE[dplKey]).label;
   }
-
-  var gjStr = gv('pg-geojson');
-  if (gjStr) { try { payload.geojson = JSON.parse(gjStr); } catch(e) {} }
-
+  
+  var gjStr = document.getElementById('pg-geojson').value;
+  if (gjStr) {
+    try { payload.geojson = JSON.parse(gjStr); } catch(e) {}
+  }
+  
   var btn = document.querySelector('#polygon-kegiatan-modal .btn-apply');
-  var oldHtml = btn ? btn.innerHTML : '';
-  if (btn) { btn.innerHTML = 'Menyimpan...'; btn.disabled = true; }
-
+  var oldHtml = btn.innerHTML;
+  btn.innerHTML = 'Menyimpan...';
+  btn.disabled = true;
+  
   fetch(GAS_WEB_APP_URL, {
     method: 'POST',
-    body: JSON.stringify(typeof withAuthPayload === 'function' ? withAuthPayload(payload) : payload)
+    body: JSON.stringify(withAuthPayload(payload))
   })
-  .then(function(res) { return res.json(); })
-  .then(function(data) {
+  .then(res => res.json())
+  .then(data => {
     if (data.success) {
       showToast('Data berhasil disimpan!', 'success');
       cancelPolygonForm();
-      if (typeof fetchPolygonFeatures === 'function') fetchPolygonFeatures();
+      fetchPolygonFeatures(); // Reload data
     } else {
-      showToast('Gagal: ' + (data.error || ''), 'error');
+      showToast('Gagal: ' + data.error, 'error');
     }
   })
-  .catch(function() { showToast('Terjadi kesalahan jaringan', 'error'); })
-  .finally(function() { if (btn) { btn.innerHTML = oldHtml; btn.disabled = false; } });
+  .catch(err => {
+    showToast('Terjadi kesalahan jaringan', 'error');
+  })
+  .finally(() => {
+    btn.innerHTML = oldHtml;
+    btn.disabled = false;
+  });
 }
 
-// Setup pg-cdk change listener if element exists
-(function() {
-  var cdkEl = document.getElementById('pg-cdk');
-  if (cdkEl) {
-    cdkEl.addEventListener('change', function() {
-      var cust = document.getElementById('pg-cdk-custom');
-      if (!cust) return;
-      if (this.value === '__custom__') { cust.style.display = 'block'; cust.focus(); }
-      else { cust.style.display = 'none'; }
-    });
+function initSpatialSystem() {
+  if (typeof fetchSpatialFileList === 'function' && getAuthToken()) {
+    fetchSpatialFileList();
   }
-})();
+  fetchPolygonFeatures();
+}
+
+function fetchPolygonFeatures() {
+  fetch(appendAuthParam(GAS_WEB_APP_URL + '?action=getPolygonFeatures'))
+  .then(res => res.json())
+  .then(data => {
+    if (data.success) {
+      POLYGON_FEATURES_CACHE = Array.isArray(data.features) ? data.features : [];
+      renderPolygonFeatures(POLYGON_FEATURES_CACHE);
+    }
+  })
+  .catch(err => console.error(err));
+}
+
+function rerenderPolygonFeaturesFromCache() {
+  if (Array.isArray(POLYGON_FEATURES_CACHE) && POLYGON_FEATURES_CACHE.length) {
+    renderPolygonFeatures(POLYGON_FEATURES_CACHE);
+  }
+}
+
+function getPolygonFeatureCdk(feat) {
+  return getCDKExtended(feat && (feat.CDK_Wilayah || feat['CDK Wilayah'] || feat.cdk_wilayah || feat.Unit_Kerja || feat['Unit Kerja'] || '')) || '';
+}
+
+function polygonFeaturePoint(feat) {
+  var lat = toFloat(feat && feat.Latitude);
+  var lng = toFloat(feat && feat.Longitude);
+  return lat && lng ? { lat: lat, lng: lng } : null;
+}
+
+function polygonFeatureMatchesBinaanMeta(feat, activeBinaanPoints) {
+  if (!feat || !activeBinaanPoints || !activeBinaanPoints.length) return false;
+  var fPoint = polygonFeaturePoint(feat);
+  var fKab = String(feat.Kabupaten || '').trim().toLowerCase();
+  var fKec = String(feat.Kecamatan || '').trim().toLowerCase();
+  var fDesa = String(feat.Desa_Blok || feat.Desa || '').trim().toLowerCase();
+
+  return activeBinaanPoints.some(function(pt) {
+    var row = pt.row || {};
+    if (fPoint && typeof turf !== 'undefined') {
+      try {
+        var dist = turf.distance(turf.point([fPoint.lng, fPoint.lat]), turf.point([pt.lng, pt.lat]), { units: 'kilometers' });
+        if (dist <= 0.25) return true;
+      } catch (e) {}
+    }
+
+    var bKab = String(getBinaanKabupaten(row) || '').trim().toLowerCase();
+    var bKec = String(getBinaanField(row, 'kecamatan') || '').trim().toLowerCase();
+    var bDesa = String(getBinaanField(row, 'desa') || '').trim().toLowerCase();
+    if (fDesa && bDesa && fDesa === bDesa && (!fKec || !bKec || fKec === bKec)) return true;
+    if (fKec && bKec && fKec === bKec && (!fKab || !bKab || fKab === bKab)) return true;
+    if (fKab && bKab && fKab === bKab && activeBinaanPoints.length === 1) return true;
+    return false;
+  });
+}
+
+function polygonFeaturePassesMapFilters(feat, activeBinaanPoints, hasBinaanScope) {
+  if (!feat) return false;
+  var featCdk = getPolygonFeatureCdk(feat);
+  if (FILTER.cdk && FILTER.cdk.length > 0 && featCdk && FILTER.cdk.indexOf(featCdk) === -1) return false;
+  if (FILTER.kab && FILTER.kab.length > 0 && !filterHasValue(FILTER.kab, feat.Kabupaten || '')) return false;
+
+  var user = typeof getStoredAuthUser === 'function' ? getStoredAuthUser() : null;
+  var group = getRoleGroup(user ? user.role : null);
+  if (user && user.username && group >= 3) {
+    var userCdk = getCDKExtended(getCurrentUserUnit(user));
+    if (userCdk && featCdk && userCdk !== featCdk) return false;
+  }
+
+  if (!hasBinaanScope) return true;
+  if (!activeBinaanPoints.length) return false;
+  if (feat.GeoJSON_FileID || feat.GeoJSON_URL) return true;
+  return polygonFeatureMatchesBinaanMeta(feat, activeBinaanPoints);
+}
+
+function renderPolygonFeatures(features) {
+  // Debug cepat biar bisa cek apakah data polygon memang ter-load dan bisa dirender.
+  // (Tidak mengganggu UX karena hanya tampil toast singkat saat render dipanggil.)
+  try {
+    showToast('Memuat polygon/kegiatan & titik/pohon: ' + (features ? features.length : 0) + ' item...', false);
+  } catch(e) {}
+
+  var renderToken = Date.now();
+  POLYGON_FEATURE_RENDER_TOKEN = renderToken;
+  var activeBinaanPoints = getActiveBinaanSpatialPoints();
+  var hasBinaanScope = hasActiveBinaanSpatialScope();
+
+  POLYGON_AREA_LAYER.clearLayers();
+  POHON_MARKER_LAYER.clearLayers();
+
+  function clearLayersForFeatureId(featId) {
+    try {
+      if (!featId) return;
+      // Hapus marker pohon/overlay polygon yang terkait
+      POLYGON_AREA_LAYER.eachLayer(function(l) {
+        try {
+          if (l && l.featureData && String(l.featureData.ID) === String(featId)) {
+            POLYGON_AREA_LAYER.removeLayer(l);
+          }
+        } catch (e) {}
+      });
+      POHON_MARKER_LAYER.eachLayer(function(l) {
+        try {
+          if (l && l.featureData && String(l.featureData.ID) === String(featId)) {
+            POHON_MARKER_LAYER.removeLayer(l);
+          }
+        } catch (e) {}
+      });
+    } catch (e) {}
+  }
+
+  function detectGeoType(geojson) {
+    try {
+      if (!geojson) return '';
+      if (geojson.type === 'FeatureCollection' && Array.isArray(geojson.features) && geojson.features.length) {
+        for (var i = 0; i < geojson.features.length; i++) {
+          var g = geojson.features[i];
+          if (g && g.geometry && g.geometry.type) return g.geometry.type;
+        }
+        return 'FeatureCollection';
+      }
+      if (geojson.geometry && geojson.geometry.type) return geojson.geometry.type;
+      if (geojson.type) return geojson.type;
+      return '';
+    } catch (e) { return ''; }
+  }
+
+  function addPolygonOrLineLayer(gjGeojson, feat, lat, lng, popHtml) {
+    if (!gjGeojson) return;
+
+    var typeGeo = detectGeoType(gjGeojson);
+    var isLine = (typeGeo === 'LineString' || typeGeo === 'MultiLineString');
+
+    var polyLayer = L.geoJSON(gjGeojson, {
+      style: function(feature) {
+        if (isLine) {
+          return { color: '#388e3c', weight: 4, opacity: 0.95, fillOpacity: 0 };
+        }
+        return { color: '#388e3c', weight: 2, opacity: 0.95, fillColor: '#388e3c', fillOpacity: 0.3 };
+      },
+      pointToLayer: function(feature, latlng) {
+        return L.marker(latlng, { icon: ICON_POHON });
+      }
+    });
+
+    if (popHtml) polyLayer.bindPopup(popHtml);
+    var hoverHtml = buildFeatureHoverTooltip(feat, 'polygon');
+    if (hoverHtml) polyLayer.bindTooltip(hoverHtml, {sticky: true, direction: 'top', opacity: 0.95, className: 'feature-hover-tooltip'});
+    polyLayer.on('click', function() { openDrawer('polygon_kegiatan', feat); });
+    // Tag featureData agar clear bisa tepat
+    polyLayer.getLayers().forEach(function(l) { try { l.featureData = feat; } catch (e) {} });
+
+    polyLayer.addTo(POLYGON_AREA_LAYER);
+  }
+
+  features.forEach(function(feat) {
+    var featId = feat && feat.ID ? String(feat.ID) : '';
+    if (!featId) return;
+    if (!polygonFeaturePassesMapFilters(feat, activeBinaanPoints, hasBinaanScope)) return;
+
+    var lat = toFloat(feat.Latitude);
+    var lng = toFloat(feat.Longitude);
+    if (lat && lng && getRowDplValue(feat) === null) requestDplForRow(feat, lat, lng);
+
+    // Bersihkan layer lama untuk featureId ini (aman bila render dipanggil ulang)
+    clearLayersForFeatureId(featId);
+
+    var hasGeo = !!(feat.GeoJSON_URL || feat.GeoJSON_FileID);
+
+    // Build popup HTML (dipakai utk polygon/line)
+    var pop = '<div style="font-size:12px; line-height:1.4;">' +
+      '<b style="font-size:14px; color:#2e7d32;">' + (feat.Nama || 'Area Kegiatan') + '</b><br>' +
+      '<b>Kegiatan:</b> ' + (feat.Kegiatan || '-') + '<br>' +
+      '<b>Luas:</b> ' + (feat.Luas_Ha || '0') + ' Ha<br>' +
+      '<b>Jenis Bibit:</b> ' + (feat.Jenis_Bibit || '-') + '<br>' +
+      '<button class="btn-apply" style="margin-top:8px; padding:4px 8px; font-size:11px;" onclick="openDrawerFromFeature(\'' + featId + '\', \'polygon_kegiatan\')">Lihat Detail & Foto</button>' +
+      '</div>';
+
+    // Kasus: marker pohon/ titik
+    // Frontend sebelumnya pakai else, tapi untuk kasus 'Type=polygon' yang sebenarnya garis/polygon, kita tetap
+    // render via GeoJSON fetch jika ada.
+    if (!hasGeo || (feat.Type !== 'polygon' && feat.Type !== 'marker')) {
+      if (lat && lng) {
+        var mk = L.marker([lat, lng], { icon: ICON_POHON }).bindPopup(pop);
+        var mkHoverHtml = buildFeatureHoverTooltip(feat, 'point');
+        if (mkHoverHtml) mk.bindTooltip(mkHoverHtml, {sticky: true, direction: 'top', opacity: 0.95, className: 'feature-hover-tooltip'});
+        mk.featureData = feat;
+        mk.on('click', function() { openDrawer('polygon_kegiatan', feat); });
+        POHON_MARKER_LAYER.addLayer(mk);
+      }
+      return;
+    }
+
+    // Jika lat/lng valid, tampilkan marker placeholder dulu agar user lihat titiknya
+    if (lat && lng && (!hasBinaanScope || !hasGeo || polygonFeatureMatchesBinaanMeta(feat, activeBinaanPoints))) {
+      var hoverHtml = buildFeatureHoverTooltip(feat, 'point');
+      var placeholderMarker = L.marker([lat, lng], { icon: ICON_POHON });
+      if (hoverHtml) placeholderMarker.bindTooltip(hoverHtml, {sticky: true, direction: 'top', opacity: 0.95, className: 'feature-hover-tooltip'});
+      placeholderMarker.featureData = feat;
+      placeholderMarker.on('click', function() { openDrawer('polygon_kegiatan', feat); });
+      POLYGON_AREA_LAYER.addLayer(placeholderMarker);
+    }
+
+    // Async fetch GeoJSON (sumber kebenaran bentuk polygon/garis)
+    var fileId = feat.GeoJSON_FileID;
+    if (!fileId) {
+      // fallback: tidak ada fileId, jadi marker placeholder saja
+      return;
+    }
+
+    // Pakai auth yang benar: getSpatialGeoJSON sudah memanggil requireAuth_ di backend.
+    // Di frontend ini token login tersimpan di localStorage key geohutan_auth_token.
+      fetch(GAS_WEB_APP_URL + '?action=getSpatialGeoJSON&fileId=' + encodeURIComponent(fileId) + '&token=' + (localStorage.getItem('geohutan_auth_token') || localStorage.getItem('gh_token') || ''))
+      .then(function(r) { return r.json(); })
+      .then(function(res) {
+        try {
+          if (POLYGON_FEATURE_RENDER_TOKEN !== renderToken) return;
+          if (!res || !res.success || !res.geojson) return;
+
+          var renderGeoJSON = res.geojson;
+          if (hasBinaanScope) {
+            renderGeoJSON = filterSpatialGeoJSONByPoints(res.geojson, activeBinaanPoints);
+            if (!renderGeoJSON.features.length) {
+              clearLayersForFeatureId(featId);
+              return;
+            }
+          }
+
+          // Jika ternyata geojson adalah Point/Multiple points, render jadi marker, bukan polygon/line.
+          var typeGeo = detectGeoType(renderGeoJSON);
+          var isPoint = (typeGeo === 'Point' || typeGeo === 'MultiPoint');
+
+          // Hapus placeholder marker lama utk featureId ini agar tidak dobel
+          clearLayersForFeatureId(featId);
+
+          if (isPoint) {
+            // render point -> marker pohon cluster (atau layer polygon area)
+            var pointLayer = L.geoJSON(renderGeoJSON, {
+              pointToLayer: function(feature, latlng) {
+                var m = L.marker(latlng, { icon: ICON_POHON });
+                var hoverHtml = buildFeatureHoverTooltip(feat, 'point');
+                if (hoverHtml) m.bindTooltip(hoverHtml, {sticky: true, direction: 'top', opacity: 0.95, className: 'feature-hover-tooltip'});
+                m.featureData = feat;
+                m.on('click', function() { openDrawer('polygon_kegiatan', feat); });
+                return m;
+              }
+            });
+            pointLayer.eachLayer(function(l) {
+              try {
+                POHON_MARKER_LAYER.addLayer(l);
+              } catch (e) {}
+            });
+          } else {
+            addPolygonOrLineLayer(renderGeoJSON, feat, lat, lng, pop);
+          }
+
+          // Invalidate size biar layer langsung kelihatan (kasus overlay baru saja)
+          try { mapObj && mapObj.invalidateSize(); } catch (e) {}
+        } catch (e) {}
+      })
+      .catch(function() {
+        // jika gagal fetch, placeholderMarker dibiarkan
+      });
+  });
+
+  // invalidate size sekali setelah render
+  try { mapObj && mapObj.invalidateSize(); } catch (e) {}
+}
+
+
+function openDrawerFromFeature(featId, type) {
+  var feat = null;
+  POHON_MARKER_LAYER.eachLayer(function(l) { if(l.featureData && String(l.featureData.ID) === String(featId)) feat = l.featureData; });
+  if(!feat) POLYGON_AREA_LAYER.eachLayer(function(l) { if(l.featureData && String(l.featureData.ID) === String(featId)) feat = l.featureData; });
+  
+  if(feat) {
+    openDrawer(type, feat);
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function renderUserCalendar() {
+  var existing = document.getElementById('user-weekly-calendar');
+  if (existing) existing.remove();
+}
+
+function checkUserReportedThisWeek() {
+  // Cek jika ada source yang statusnya dilaporkan
+  // atau kalau user spesifik udah melaporkan sesuatu minggu ini
+  // Berdasarkan user saat ini, tapi karena app-features memuat SEMUA data, 
+  // kita cek di DATA.pegawaiBinaan yang pembina == current user.nama
+  var user = getStoredAuthUser();
+  if (!user || !user.nama) return false;
+  
+  var reported = false;
+  var binaanUser = (DATA.pegawaiBinaan || []).filter(function(r) {
+    return getReportRowPerson(r) === user.nama;
+  });
+  
+  binaanUser.forEach(function(r) {
+    if (sourceHasWeeklyReport(r)) reported = true;
+  });
+  return reported;
+}
+
+
+function checkMonthlyReportedNotification() {
+  var user = getStoredAuthUser();
+  if (!user || !user.nama) return;
+  var group = getRoleGroup(user.role);
+  if (group <= 3) return; 
+  
+  setTimeout(function() {
+    var binaanUser = (DATA.pegawaiBinaan || []).filter(function(r) {
+      return getReportRowPerson(r) === user.nama;
+    });
+    if (binaanUser.length === 0) return;
+    
+    var weeklyReported = false;
+    
+    binaanUser.forEach(function(r) {
+      if (sourceHasWeeklyReport(r)) weeklyReported = true;
+    });
+    
+    if (!weeklyReported) {
+      if (typeof Swal !== 'undefined') {
+        Swal.fire({
+          icon: 'error',
+          title: 'Laporan Mingguan Belum Ada',
+          text: 'Silahkan Laporkan',
+          confirmButtonColor: '#e53935'
+        });
+      } else {
+        alert('Laporan Mingguan Belum Ada, Silahkan Laporkan');
+      }
+    } else {
+      if (typeof Swal !== 'undefined') {
+        Swal.fire({
+          icon: 'success',
+          title: 'Laporan Mingguan Sudah dilaporkan',
+          confirmButtonColor: '#43a047'
+        });
+      } else if (typeof showToast === 'function') {
+        showToast('Laporan Mingguan Sudah dilaporkan', 'success');
+      }
+    }
+  }, 2000);
+}
+
+function checkWeeklyGlobalLimit() {
+  var user = getStoredAuthUser();
+  if (!user || !user.nama) return false;
+  
+  var reported = false;
+  var binaanUser = (DATA.pegawaiBinaan || []).filter(function(r) {
+    return getReportRowPerson(r) === user.nama;
+  });
+  
+  binaanUser.forEach(function(r) {
+    if (sourceHasWeeklyReport(r)) reported = true;
+  });
+  return reported;
+}
+
+
+window.getGeoHutanData = function() {
+  // Extract data from DATA global object in app-core.js
+  var mapData = [];
+  var pembinaData = [];
+  
+  if (window.DATA && window.DATA.pegawaiBinaan) {
+    // Generate mapData dynamically or use static mapping if needed
+    // The dashboard already has static fallback for mapData, we can just supply pembinaData
+  }
+  
+  // Actually, we can return the exact structure the dashboard expects
+  return {
+     // Let dashboard use its own static mapData
+    pembinaData: window.DATA && window.DATA.pegawaiBinaan ? window.DATA.pegawaiBinaan.map(function(r, i) {
+      return {
+        no: i + 1,
+        nama: r['Nama Pembina/Pegawai'] || r['Nama'] || 'Anonim',
+        cdk: r['Instansi / Unit Kerja'] || r['Unit'] || 'N/A',
+        lokasi: (r['Desa/Kelurahan'] || r['Desa/ Kelurahan'] || '') + ', ' + (r['Kecamatan'] || ''),
+        luas: r['Luas (Ha)'] || 0,
+        mingguan: sourceHasWeeklyReport(r) ? 1 : 0,
+        linimasa: sourceHasMonthlyPhoto(r) ? 1 : 0
+      };
+    }) : null
+  };
+};
+
+window.closePimpinanDashboard = function() {
+  var container = document.getElementById('pimpinan-dashboard-container');
+  if (container) container.style.display = 'none';
+};
+
+function calculateHaversineDistance(lat1, lon1, lat2, lon2) {
+  if (lat1 == null || lon1 == null || lat2 == null || lon2 == null) return null;
+  var R = 6371; // Radius bumi KM
+  var dLat = (lat2 - lat1) * Math.PI / 180;
+  var dLon = (lon2 - lon1) * Math.PI / 180;
+  var a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+          Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+          Math.sin(dLon/2) * Math.sin(dLon/2);
+  var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+}
+
+
+function openCalendarReminderModal() {
+  var modal = document.getElementById('calendar-reminder-modal');
+  if (!modal) return;
+  var user = getStoredAuthUser();
+  if (!user) {
+    if (typeof showToast === 'function') showToast('Silakan login terlebih dahulu.', 'error');
+    return;
+  }
+  
+  var select = document.getElementById('calendar-binaan-select');
+  select.innerHTML = '';
+  
+  var binaan = DATA.pegawaiBinaan || [];
+  var isPimpinan = getRoleGroup(user.role) <= 3;
+  
+  var optionsHtml = '<option value="">-- Pilih Hutan Binaan --</option>';
+  binaan.forEach(function(r) {
+    if (!isPimpinan && getReportRowPerson(r) !== user.nama) return;
+    
+    var name = r['Nama'] || r['Nama Pembina/Pegawai'] || 'Tanpa Nama';
+    var loc = (r['Desa/Kelurahan'] || r['Desa/ Kelurahan'] || '') + ', ' + (r['Kecamatan'] || '');
+    optionsHtml += '<option value="' + escapeHtml(r.ID || r['ID'] || '') + '">' + escapeHtml(name + ' - ' + loc) + '</option>';
+  });
+  select.innerHTML = optionsHtml;
+  
+  if (select.options.length > 1) {
+    select.value = select.options[1].value;
+    renderCalendarReminder();
+  } else {
+    document.getElementById('calendar-reminder-container').innerHTML = '';
+  var typeSelect = document.getElementById('calendar-type-select');
+  if (typeSelect) typeSelect.value = 'weekly';
+  }
+  
+  modal.classList.add('open');
+}
+
+function closeCalendarReminderModal() {
+  var modal = document.getElementById('calendar-reminder-modal');
+  if (modal) modal.classList.remove('open');
+}
+
+function renderCalendarReminder() {
+  var container = document.getElementById('calendar-reminder-container');
+  var selectBinaan = document.getElementById('calendar-binaan-select');
+  var selectType = document.getElementById('calendar-type-select');
+  var id = selectBinaan ? selectBinaan.value : '';
+  var type = selectType ? selectType.value : 'weekly';
+  
+  if (!id) {
+    container.innerHTML = '';
+    return;
+  }
+  
+  var r = (DATA.pegawaiBinaan || []).find(function(row) { return String(row.ID || row['ID']) === String(id); });
+  if (!r) return;
+  
+  var now = new Date();
+  var currentMonth = now.getMonth();
+  var currentYear = now.getFullYear();
+  var html = '';
+  
+  var formatDt = function(dObj) {
+    var m = dObj.getMonth() + 1;
+    var day = dObj.getDate();
+    return dObj.getFullYear() + '-' + (m < 10 ? '0' + m : m) + '-' + (day < 10 ? '0' + day : day);
+  };
+  
+  if (type === 'weekly') {
+    var weekData = r['Data Mingguan'] || '';
+    var daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+    var firstDayIndex = new Date(currentYear, currentMonth, 1).getDay();
+    var firstDayMondayIndex = firstDayIndex === 0 ? 6 : firstDayIndex - 1;
+    
+    html += '<h3 style="margin-bottom:10px; font-size:14px; text-align:center; color:#333;">Laporan Mingguan (Bulan Ini)</h3>';
+    html += '<div style="display:grid; grid-template-columns:repeat(7, 1fr); gap:4px; text-align:center; font-weight:bold; font-size:12px; margin-bottom:4px; color:#555;">';
+    ['Sn','Sl','Rb','Km','Jm','Sb','Mg'].forEach(function(d) { html += '<div>'+d+'</div>'; });
+    html += '</div>';
+    html += '<div style="display:grid; grid-template-columns:repeat(7, 1fr); gap:4px; text-align:center; font-size:12px;">';
+    
+    for (var i = 0; i < firstDayMondayIndex; i++) {
+      html += '<div style="padding:8px; background:#f0f0f0; border-radius:4px;"></div>';
+    }
+    
+    for (var d = 1; d <= daysInMonth; d++) {
+      var dateObj = new Date(currentYear, currentMonth, d);
+      var isoWeek = '';
+      try {
+        if (typeof getWeekInputRange === 'function') {
+          isoWeek = getWeekInputRange(formatDt(dateObj), false);
+        }
+      } catch(e) {}
+      
+      var reported = weekData.indexOf(isoWeek) !== -1;
+      var isFuture = formatDt(dateObj) > formatDt(now);
+      var bg = '#eee';
+      var color = '#333';
+      
+      if (reported) {
+        bg = '#43a047';
+        color = '#fff';
+      } else if (!isFuture) {
+        bg = '#e53935';
+        color = '#fff';
+      }
+      html += '<div style="padding:8px; background:'+bg+'; color:'+color+'; border-radius:4px;">'+d+'</div>';
+    }
+    html += '</div>';
+  } else {
+    // Monthly (3 Bulanan)
+    var linimasa = r['Data Linimasa'] || '';
+    var hasMonthly = linimasa.indexOf(currentYear.toString()) !== -1;
+    
+    html += '<h3 style="margin-bottom:10px; font-size:14px; text-align:center; color:#333;">Laporan 3 Bulanan ('+currentYear+')</h3>';
+    html += '<div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; text-align:center; font-size:12px;">';
+    
+    var months = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+    var currentQuarter = Math.floor(currentMonth / 3);
+    
+    for (var m = 0; m < 12; m++) {
+      var quarterIndex = Math.floor(m / 3);
+      var isPastQuarter = quarterIndex < currentQuarter;
+      var isCurrentQuarter = quarterIndex === currentQuarter;
+      
+      var bg = '#eee';
+      var color = '#333';
+      
+      if (hasMonthly) {
+        // Assume if they have any report for the year, they are good. 
+        // Ideally we check exact dates if available.
+        if (isPastQuarter || isCurrentQuarter) {
+           bg = '#43a047';
+           color = '#fff';
+        }
+      } else {
+        if (isPastQuarter || isCurrentQuarter) {
+           bg = '#e53935';
+           color = '#fff';
+        }
+      }
+      
+      html += '<div style="padding:12px; background:'+bg+'; color:'+color+'; border-radius:4px; font-weight:bold;">'+months[m]+'</div>';
+    }
+    html += '</div>';
+  }
+  
+  container.innerHTML = html;
+}
+
+}
