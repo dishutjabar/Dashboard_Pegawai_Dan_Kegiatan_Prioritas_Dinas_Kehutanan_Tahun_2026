@@ -39,7 +39,7 @@
 <script src="https://unpkg.com/shpjs@4.0.4/dist/shp.js" defer></script>
 <script src="https://unpkg.com/@tmcw/togeojson@5.8.1/dist/togeojson.umd.js" defer></script>
 <script src="https://unpkg.com/leaflet.vectorgrid@latest/dist/Leaflet.VectorGrid.bundled.js" defer></script>
-<link rel="stylesheet" href="styles.css?v=20260901-report-monitor-v65"/>
+<link rel="stylesheet" href="styles.css?v=20260901-report-monitor-v66"/>
 <link rel="stylesheet" href="css/ai.css"/>
 </head>
 <body>
@@ -974,8 +974,7 @@
       <button type="button" class="btn-close" onclick="closeCredentialModal()">&times;</button>
     </div>
     <form id="credential-form" class="auth-form compact" onsubmit="submitCredentialChange(event)">
-      <label for="old-username">Username lama</label>
-      <input id="old-username" type="text" autocomplete="username" placeholder="Username" disabled style="width: 100%; box-sizing: border-box; padding: 10px; margin-bottom: 12px; border: 1px solid #ccc; border-radius: 6px; background: #f0f0f0;">
+      <input id="old-username" type="hidden" autocomplete="username">
       
       <label for="old-password">Password lama</label>
       <div class="auth-password-field" style="display: flex; gap: 8px; margin-bottom: 12px;">
@@ -1018,8 +1017,8 @@
   </div>
 </div>
 
-<script src="app-core.js?v=20260901-report-monitor-v65" defer></script>
-<script src="app-features.js?v=20260901-report-monitor-v65" defer></script>
+<script src="app-core.js?v=20260901-report-monitor-v66" defer></script>
+<script src="app-features.js?v=20260901-report-monitor-v66" defer></script>
 <script src="js/ai.js" defer></script>
 
 <!-- ===== MODAL UPLOAD SPASIAL ===== -->

@@ -811,6 +811,13 @@ function openCredentialModal() {
     modal.style.display = "flex";
     var form = document.getElementById("credential-form");
     if (form) form.reset();
+    
+    // Auto-fill hidden username
+    var user = typeof getStoredAuthUser === 'function' ? getStoredAuthUser() : null;
+    var uInput = document.getElementById("old-username");
+    if (uInput && user && user.username) {
+      uInput.value = user.username;
+    }
   }
 }
 
