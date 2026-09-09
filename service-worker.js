@@ -1,7 +1,8 @@
-﻿/* GeoHutan Service Worker */
+/* GeoHutan Service Worker */
 
-const CACHE_VERSION = 'geohutan-2026-v66.0.0';
-const CACHE_NAME = `geohutan-static-${CACHE_VERSION}`;
+const CACHE_NAME = 'geohutan-cache';
+const CACHE_VERSION = 'v102.0.0';
+const CURRENT_CACHE = `${CACHE_NAME}-${CACHE_VERSION}`;
 const CACHE_DYNAMIC = `geohutan-dynamic-${CACHE_VERSION}`;
 
 const STATIC_ASSETS = [
@@ -42,15 +43,17 @@ function shouldBypass(req, url) {
   if (url.origin !== self.location.origin) return true;
   if (BYPASS_HOSTS.some(host => url.hostname.includes(host))) return true;
 
-  // Large spatial data should be fetched directly. Caching it in the service
-  // worker can block startup and consume storage on low-end devices.
-  return /\.(geojson|json)$/i.test(url.pathname) && !url.pathname.endsWith('/manifest.json');
+  // Keep user-uploaded spatial files out of the cache. The single boundary
+  // dataset is cached on first use so a cached app shell does not fail while
+  // the local development server is starting.
+  var pathname = decodeURIComponent(url.pathname);
+  return /\.(geojson|json)$/i.test(pathname) && !pathname.endsWith('/manifest.json') && !pathname.endsWith('/Jawa Barattt.geojson');
 }
 
 self.addEventListener('install', event => {
   event.waitUntil((async () => {
-    const cache = await caches.open(CACHE_NAME);
-    await Promise.allSettled(STATIC_ASSETS.map(asset => cache.add(asset)));
+    const cache = await caches.open(CURRENT_CACHE);
+    await Promise.allSettled(STATIC_ASSETS.map(asset => cache.add(new Request(asset, { cache: 'reload' }))));
     await self.skipWaiting();
   })());
 });
@@ -60,7 +63,7 @@ self.addEventListener('activate', event => {
     const keys = await caches.keys();
     await Promise.all(
       keys
-        .filter(key => key !== CACHE_NAME && key !== CACHE_DYNAMIC)
+        .filter(key => key !== CURRENT_CACHE && key !== CACHE_DYNAMIC)
         .map(key => caches.delete(key))
     );
     await self.clients.claim();
@@ -90,7 +93,7 @@ async function networkFirst(req) {
   try {
     const networkRes = await fetch(req);
     if (networkRes && networkRes.status === 200) {
-      const cache = await caches.open(CACHE_NAME);
+      const cache = await caches.open(CURRENT_CACHE);
       cache.put(req, networkRes.clone());
     }
     return networkRes;
@@ -106,7 +109,7 @@ async function networkFirst(req) {
 }
 
 async function staleWhileRevalidate(req) {
-  const cache = await caches.open(CACHE_NAME);
+  const cache = await caches.open(CURRENT_CACHE);
   const cached = await cache.match(req);
 
   const update = fetch(req).then(networkRes => {

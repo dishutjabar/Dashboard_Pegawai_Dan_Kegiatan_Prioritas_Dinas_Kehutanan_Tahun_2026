@@ -39,7 +39,7 @@
 <script src="https://unpkg.com/shpjs@4.0.4/dist/shp.js" defer></script>
 <script src="https://unpkg.com/@tmcw/togeojson@5.8.1/dist/togeojson.umd.js" defer></script>
 <script src="https://unpkg.com/leaflet.vectorgrid@latest/dist/Leaflet.VectorGrid.bundled.js" defer></script>
-<link rel="stylesheet" href="styles.css?v=20260908-dashboard-pimpinan-v69"/>
+<link rel="stylesheet" href="styles.css?v=20260901-report-monitor-v66"/>
 <link rel="stylesheet" href="css/ai.css"/>
 </head>
 <body>
@@ -133,7 +133,7 @@
   <div class="topbar-right">
     <div id="clock">00:00:00</div>
     <button id="btn-spatial" class="btn-icon btn-spatial-upload" onclick="openSpatialModal()" title="Upload File Spasial (SHP, KML, GeoJSON, ZIP, Folder)">&#128205; <span class="d-none-mobile">Upload Spasial</span></button>
-    <button id="btn-table" class="btn-icon" type="button" onclick="openPimpinanDashboard()" title="Dashboard Pimpinan">&#128200; <span class="d-none-mobile">Dashboard</span></button>
+    <button id="btn-table" class="btn-icon" onclick="openTableModal()">&#128203; <span class="d-none-mobile">Tabel Data</span></button>
     <div id="report-menu" class="report-menu">
       <button id="btn-report" class="btn-icon" type="button" onclick="toggleReportMenu(event)">&#128202; <span class="d-none-mobile">Laporan</span></button>
       <div id="report-dropdown" class="report-dropdown">
@@ -1017,8 +1017,8 @@
   </div>
 </div>
 
-<script src="app-core.js?v=20260909-login-priority-v71" defer></script>
-<script src="app-features.js?v=20260909-login-priority-v71" defer></script>
+<script src="app-core.js?v=20260901-report-monitor-v66" defer></script>
+<script src="app-features.js?v=20260901-report-monitor-v66" defer></script>
 <script src="js/ai.js" defer></script>
 
 <!-- ===== MODAL UPLOAD SPASIAL ===== -->
@@ -1088,12 +1088,6 @@
       </div>
     </div>
   </div>
-</div>
-
-<div id="pimpinan-dashboard-overlay" class="pimpinan-dashboard-overlay" aria-hidden="true">
-  <section class="pimpinan-dashboard-shell" role="dialog" aria-modal="true" aria-label="Dashboard Pimpinan">
-    <iframe id="pimpinan-dashboard-frame" title="Dashboard Pimpinan" src="about:blank"></iframe>
-  </section>
 </div>
 
 <script>

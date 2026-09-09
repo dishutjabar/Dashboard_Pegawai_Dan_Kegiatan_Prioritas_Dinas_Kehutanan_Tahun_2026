@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Data Kondisi Hutan</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <style>
+        body {
+            background: #0f141b;
+            color: #f3f4f6;
+            font-family: Inter, Arial, sans-serif;
+        }
+
+        .option-card {
+            transition: 0.2s ease;
+        }
+
+        .option-card:hover {
+            background: #273346;
+        }
+
+        
+    </style>
+</head>
+
+<body>
+
+    <main class="min-h-screen p-6 md:p-8">
+
+        <!-- =========================
+             FILTER
+        ========================== -->
+        <div class="flex flex-col sm:flex-row sm:items-center gap-4 mb-16">
+
+            <label class="text-xl md:text-2xl font-medium">
+                Filter Unit Kerja:
+            </label>
+
+            <select
+                class="w-full sm:w-[385px] bg-[#1C9348] hover:bg-[#26977f]
+                       text-white text-lg md:text-xl
+                       rounded-lg px-5 py-2
+                       outline-none border-none cursor-pointer">
+
+                <option>Semua Wilayah</option>
+                <option>Cabang Dinas Kehutanan Wilayah 1</option>
+                <option>Cabang Dinas Kehutanan Wilayah 2</option>
+                <option>Cabang Dinas Kehutanan Wilayah 3</option>
+                <option>Cabang Dinas Kehutanan Wilayah 4</option>
+                <option>Cabang Dinas Kehutanan Wilayah 5</option>
+                <option>Cabang Dinas Kehutanan Wilayah 6</option>
+                <option>Cabang Dinas Kehutanan Wilayah 7</option>
+                <option>Cabang Dinas Kehutanan Wilayah 8</option>
+                <option>Cabang Dinas Kehutanan Wilayah 9</option>
+                <option>SPTH</option>
+                <option>P2HH</option>
+                <option>Sekre</option>
+                <option>Tahura</option>
+            </select>
+
+        </div>
+
+
+        <!-- =========================
+             MAIN GRID
+        ========================== -->
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-8">
+
+
+            <!-- =====================
+                 COLUMN 1
+            ====================== -->
+            <div class="space-y-9">
+
+                <!-- Kondisi Tutupan Lahan -->
+                <section class="bg-[#121821]">
+
+                    <h2 class="text-center text-lg font-medium py-4">
+                        Kondisi Tutupan Lahan
+                    </h2>
+
+                    <div class="space-y-3">
+
+                        <label class="option-card flex items-center gap-4
+                                      bg-[#202b3b] rounded-lg p-3 cursor-pointer">
+                            <div class="w-[50px] h-[50px] rounded-2xl overflow-hidden flex-shrink-0">
+                                <img
+                                    src="images/pohon.png"
+                                    class="w-full h-full object-cover">
+                            </div>
+                            <span>Baik</span>
+                        </label>
+
+                        <label class="option-card flex items-center gap-4
+                                      bg-[#202b3b] rounded-lg p-3 cursor-pointer">
+                                       <div class="w-[50px] h-[50px] rounded-2xl overflow-hidden flex-shrink-0">
+                                        <img
+                                            src="images/pohon.png"
+                                            class="w-full h-full object-cover">
+                                    </div>
+                            <span>Perlu Perhatian</span>
+                        </label>
+
+                        <label class="option-card flex items-center gap-4
+                                      bg-[#202b3b] rounded-lg p-3 cursor-pointer">
+                             <div class="w-[50px] h-[50px] rounded-2xl overflow-hidden flex-shrink-0">
+                                <img
+                                    src="images/pohon.png"
+                                   
+                                    class="w-full h-full object-cover">
+                            </div>
+                            <span>Gangguan</span>
+                        </label>
+
+                    </div>
+
+                </section>
+
+
+                <!-- Kegiatan Vegetatif -->
+                <section class="bg-[#121821]">
+
+                    <h2 class="text-center text-lg font-medium py-4">
+                        Kegiatan Vegetatif
+                    </h2>
+
+                    <div class="space-y-3">
+
+                        <label class="option-card flex items-center gap-4
+                                      bg-[#202b3b] rounded-lg p-3 cursor-pointer">
+                             <div class="w-[50px] h-[50px] rounded-2xl overflow-hidden flex-shrink-0">
+                                    <img
+                                        src="images/pohon.png"
+                                       
+                                        class="w-full h-full object-cover">
+                                </div>
+                            <span>Penanaman</span>
+                        </label>
+
+                        <label class="option-card flex items-center gap-4
+                                      bg-[#202b3b] rounded-lg p-3 cursor-pointer">
+                             <div class="w-[50px] h-[50px] rounded-2xl overflow-hidden flex-shrink-0">
+                                <img
+                                    src="images/pohon.png"
+                                   
+                                    class="w-full h-full object-cover">
+                            </div>
+                            <span>Pemeliharaan</span>
+                        </label>
+
+                        <label class="option-card flex items-center gap-4
+                                      bg-[#202b3b] rounded-lg p-3 cursor-pointer">
+                             <div class="w-[50px] h-[50px] rounded-2xl overflow-hidden flex-shrink-0">
+                                <img
+                                    src="images/pohon.png"
+                                   
+                                    class="w-full h-full object-cover">
+                            </div>
+                            <span>Pendataan</span>
+                        </label>
+
+                        <label class="option-card flex items-center gap-4
+                                      bg-[#202b3b] rounded-lg p-3 cursor-pointer">
+                             <div class="w-[50px] h-[50px] rounded-2xl overflow-hidden flex-shrink-0">
+                                <img
+                                    src="images/pohon.png"
+                                   
+                                    class="w-full h-full object-cover">
+                            </div>
+                            <span>Tidak ada kegiatan</span>
+                        </label>
+
+                    </div>
+
+                </section>
+
+            </div>
+
+
+            <!-- =====================
+                 COLUMN 2
+            ====================== -->
+            <div class="space-y-9">
+
+                <!-- Kondisi Tanaman -->
+                <section class="bg-[#121821]">
+
+                    <h2 class="text-center text-lg font-medium py-4">
+                        Kondisi Tanaman
+                    </h2>
+
+                    <div class="space-y-3">
+
+                        <label class="option-card flex items-center gap-4
+                                      bg-[#202b3b] rounded-lg p-3 cursor-pointer">
+                             <div class="w-[50px] h-[50px] rounded-2xl overflow-hidden flex-shrink-0">
+                                <img
+                                    src="images/pohon.png"
+                                   
+                                    class="w-full h-full object-cover">
+                            </div>
+                            <span>Sehat</span>
+                        </label>
+
+                        <label class="option-card flex items-center gap-4
+                                      bg-[#202b3b] rounded-lg p-3 cursor-pointer">
+                             <div class="w-[50px] h-[50px] rounded-2xl overflow-hidden flex-shrink-0">
+                                <img
+                                    src="images/pohon.png"
+                                   
+                                    class="w-full h-full object-cover">
+                            </div>
+                            <span>Merana</span>
+                        </label>
+
+                        <label class="option-card flex items-center gap-4
+                                      bg-[#202b3b] rounded-lg p-3 cursor-pointer">
+                             <div class="w-[50px] h-[50px] rounded-2xl overflow-hidden flex-shrink-0">
+                                <img
+                                    src="images/pohon.png"
+                                   
+                                    class="w-full h-full object-cover">
+                            </div>
+                            <span>Mati</span>
+                        </label>
+
+                    </div>
+
+                </section>
+
+
+                <!-- Kegiatan Monitoring -->
+                <section class="bg-[#121821]">
+
+                    <h2 class="text-center text-lg font-medium py-4">
+                        Kegiatan Monitoring
+                    </h2>
+
+                    <div class="space-y-3">
+
+                        <label class="option-card flex items-center gap-4
+                                      bg-[#202b3b] rounded-lg p-3 cursor-pointer">
+                            <div class="w-[50px] h-[50px] rounded-2xl overflow-hidden flex-shrink-0">
+                                <img
+                                    src="images/pohon.png"
+                                   
+                                    class="w-full h-full object-cover">
+                            </div>
+                            <span>Koordinasi</span>
+                        </label>
+
+                        <label class="option-card flex items-center gap-4
+                                      bg-[#202b3b] rounded-lg p-3 cursor-pointer">
+                             <div class="w-[50px] h-[50px] rounded-2xl overflow-hidden flex-shrink-0">
+                                <img
+                                    src="images/pohon.png"
+                                   
+                                    class="w-full h-full object-cover">
+                            </div>
+                            <span>Pembinaan</span>
+                        </label>
+
+                        <label class="option-card flex items-center gap-4
+                                      bg-[#202b3b] rounded-lg p-3 cursor-pointer">
+                            <div class="w-[50px] h-[50px] rounded-2xl overflow-hidden flex-shrink-0">
+                            <img
+                                src="images/pohon.png"
+                               
+                                class="w-full h-full object-cover">
+                        </div>
+                            <span>Perlindungan</span>
+                        </label>
+
+                        <label class="option-card flex items-center gap-4
+                                      bg-[#202b3b] rounded-lg p-3 cursor-pointer">
+                            <div class="w-[50px] h-[50px] rounded-2xl overflow-hidden flex-shrink-0">
+                                <img
+                                    src="images/pohon.png"
+                                   
+                                    class="w-full h-full object-cover">
+                            </div>
+                            <span>Tidak ada kegiatan</span>
+                        </label>
+
+                    </div>
+
+                </section>
+
+            </div>
+
+
+            <!-- =====================
+                 COLUMN 3
+            ====================== -->
+            <div>
+
+                <section class="bg-[#121821]">
+
+                    <h2 class="text-center text-lg font-medium py-4">
+                        Kesiapan Bibit
+                    </h2>
+
+                    <div class="space-y-3">
+
+                        <label class="option-card flex items-center gap-4
+                                      bg-[#202b3b] rounded-lg p-3 cursor-pointer">
+                           <div class="w-[50px] h-[50px] rounded-2xl overflow-hidden flex-shrink-0">
+                            <img
+                                src="images/pohon.png"
+                                
+                                class="w-full h-full object-cover">
+                        </div>
+                            <span>Bibit A</span>
+                        </label>
+
+                        <label class="option-card flex items-center gap-4
+                                      bg-[#202b3b] rounded-lg p-3 cursor-pointer">
+                             <div class="w-[50px] h-[50px] rounded-2xl overflow-hidden flex-shrink-0">
+                            <img
+                                src="images/pohon.png"
+                               
+                                class="w-full h-full object-cover">
+                        </div>
+                            <span>Bibit B</span>
+                        </label>
+
+                        <label class="option-card flex items-center gap-4
+                                      bg-[#202b3b] rounded-lg p-3 cursor-pointer">
+                            <div class="w-[50px] h-[50px] rounded-2xl overflow-hidden flex-shrink-0">
+                                <img
+                                    src="images/pohon.png"
+                                  
+                                    class="w-full h-full object-cover">
+                            </div>
+                            <span>Bibit C</span>
+                        </label>
+
+                        <label class="option-card flex items-center gap-4
+                                      bg-[#202b3b] rounded-lg p-3 cursor-pointer">
+                            <div class="w-[50px] h-[50px] rounded-2xl overflow-hidden flex-shrink-0">
+                                <img
+                                    src="images/pohon.png"
+                                   
+                                    class="w-full h-full object-cover">
+                            </div>
+                            <span>Bibit D</span>
+                        </label>
+
+                        <label class="option-card flex items-center gap-4
+                                      bg-[#202b3b] rounded-lg p-3 cursor-pointer">
+                             <div class="w-[50px] h-[50px] rounded-2xl overflow-hidden flex-shrink-0">
+                                <img
+                                    src="images/pohon.png"
+                                    alt=""
+                                    class="w-full h-full object-cover">
+                            </div>
+                            <span>Bibit E</span>
+                        </label>
+
+                        <label class="option-card flex items-center gap-4
+                                      bg-[#202b3b] rounded-lg p-3 cursor-pointer">
+                             <div class="w-[50px] h-[50px] rounded-2xl overflow-hidden flex-shrink-0">
+                                <img
+                                    src="images/pohon.png"
+                                  
+                                    class="w-full h-full object-cover">
+                            </div>
+                            <span>Bibit F</span>
+                        </label>
+
+                        <label class="option-card flex items-center gap-4
+                                      bg-[#202b3b] rounded-lg p-3 cursor-pointer">
+                            <div class="w-[50px] h-[50px] rounded-2xl overflow-hidden flex-shrink-0">
+                                <img
+                                    src="images/pohon.png"
+                                   
+                                    class="w-full h-full object-cover">
+                            </div>
+                            <span>Bibit G</span>
+                        </label>
+
+                        <label class="option-card flex items-center gap-4
+                                      bg-[#202b3b] rounded-lg p-3 cursor-pointer">
+                             <div class="w-[50px] h-[50px] rounded-2xl overflow-hidden flex-shrink-0">
+                                <img
+                                    src="images/pohon.png"
+                                   
+                                    class="w-full h-full object-cover">
+                            </div>
+                            <span>Bibit H</span>
+                        </label>
+
+                    </div>
+
+                </section>
+
+            </div>
+
+
+            <!-- =====================
+                 COLUMN 4
+            ====================== -->
+            <div class="space-y-9">
+
+                <!-- Total Bibit -->
+                <section class="bg-[#121821]">
+
+                    <h2 class="text-center text-lg font-medium py-4">
+                        Total bibit
+                    </h2>
+
+                    <label class="option-card flex items-center gap-4
+                                  bg-[#202b3b] rounded-lg p-3 cursor-pointer">
+
+                        <div class="w-[50px] h-[50px] rounded-2xl overflow-hidden flex-shrink-0">
+                            <img
+                                src="images/pohon.png"
+                               
+                                class="w-full h-full object-cover">
+                        </div>
+
+                        <span>Sebanyak</span>
+
+                    </label>
+
+                </section>
+
+
+                <!-- Tinggi Tanaman -->
+                <section class="bg-[#121821]">
+
+                    <h2 class="text-center text-lg font-medium py-4">
+                        Tinggi Tanaman Tersedia
+                    </h2>
+
+                    <div class="space-y-3">
+
+                        <label class="option-card flex items-center gap-4
+                                      bg-[#202b3b] rounded-lg p-3 cursor-pointer">
+                             <div class="w-[50px] h-[50px] rounded-2xl overflow-hidden flex-shrink-0">
+                                <img
+                                    src="images/pohon.png"
+                                   
+                                    class="w-full h-full object-cover">
+                            </div>
+                            <span>10-20cm</span>
+                        </label>
+
+                        <label class="option-card flex items-center gap-4
+                                      bg-[#202b3b] rounded-lg p-3 cursor-pointer">
+                             <div class="w-[50px] h-[50px] rounded-2xl overflow-hidden flex-shrink-0">
+                                <img
+                                    src="images/pohon.png"
+                                   
+                                    class="w-full h-full object-cover">
+                            </div>
+                            <span>30-50cm</span>
+                        </label>
+
+                        <label class="option-card flex items-center gap-4
+                                      bg-[#202b3b] rounded-lg p-3 cursor-pointer">
+                             <div class="w-[50px] h-[50px] rounded-2xl overflow-hidden flex-shrink-0">
+                                <img
+                                    src="images/pohon.png"
+                                   
+                                    class="w-full h-full object-cover">
+                            </div>
+                            <span>60-100cm</span>
+                        </label>
+
+                        <label class="option-card flex items-center gap-4
+                                      bg-[#202b3b] rounded-lg p-3 cursor-pointer">
+                            <div class="w-[50px] h-[50px] rounded-2xl overflow-hidden flex-shrink-0">
+                                <img
+                                    src="images/pohon.png"
+                                   
+                                    class="w-full h-full object-cover">
+                            </div>
+                            <span>&gt; 100cm</span>
+                        </label>
+
+                    </div>
+
+                </section>
+
+
+                <!-- Gangguan Ekosistem -->
+                <section class="bg-[#121821]">
+
+                    <h2 class="text-center text-lg font-medium py-4">
+                        Gangguan Ekosistem
+                    </h2>
+
+                    <label class="option-card flex items-center gap-4
+                                  bg-[#202b3b] rounded-lg p-3 cursor-pointer">
+
+                         <div class="w-[50px] h-[50px] rounded-2xl overflow-hidden flex-shrink-0">
+                            <img
+                                src="images/pohon.png"
+                               
+                                class="w-full h-full object-cover">
+                        </div>
+
+                        <span>
+                            Ya : X Laporan<br>
+                            Tidak : X Laporan
+                        </span>
+
+                    </label>
+
+                </section>
+
+            </div>
+
+        </div>
+
+    </main>
+
+</body>
+</html>

@@ -9,58 +9,34 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
         body { background-color: #11161c; color: #ffffff; font-family: 'Inter', sans-serif; margin: 0; overflow-x: hidden; }
-        
-        /* Layout Variables */
-        :root {
-            --bg-dark: #11161c;
-            --bg-card: #141921;
-            --bg-header: #141921;
-            --accent-green: #2d8c33;
-            --accent-yellow: #fcd34d;
-            --text-muted: #8b9bb4;
-            --sidebar-width: 240px;
-        }
-
-        /* Custom Scrollbar */
+        :root { --bg-dark: #11161c; --bg-card: #141921; --bg-header: #141921; --accent-green: #2d8c33; --accent-yellow: #fcd34d; --text-muted: #8b9bb4; --sidebar-width: 240px; }
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { background: var(--bg-dark); }
         ::-webkit-scrollbar-thumb { background: #374151; border-radius: 4px; }
-
-        /* Typography */
         .text-xxs { font-size: 0.65rem; line-height: 1rem; }
-        
-        /* Components */
         .sidebar { background-color: var(--bg-dark); width: var(--sidebar-width); height: 100vh; position: fixed; left: 0; top: 0; padding-top: 20px; z-index: 50; transition: transform 0.3s; border-right: 1px solid #1f2937; }
         .main-content { margin-left: var(--sidebar-width); padding: 0; min-height: 100vh; background-color: var(--bg-dark); }
         .topbar { background-color: var(--bg-header); padding: 12px 24px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #1f2937; position: sticky; top: 0; z-index: 40;}
-        
         .nav-item { padding: 12px 20px; margin: 4px 12px; cursor: pointer; display: flex; align-items: center; gap: 12px; color: var(--text-muted); text-decoration: none; border-radius: 8px; transition: all 0.2s; font-size: 14px;}
         .nav-item:hover { color: #fff; background-color: rgba(255,255,255,0.05); }
         .nav-item.active { background-color: var(--accent-green); color: #fff; font-weight: 500; box-shadow: 0 4px 12px rgba(45,140,51,0.3); }
         .nav-dot { width: 8px; height: 8px; border-radius: 50%; background-color: currentColor; opacity: 0.7; }
         .nav-item.active .nav-dot { background-color: #fff; opacity: 1;}
-
         .card { background-color: var(--bg-card); border-radius: 12px; padding: 16px; border: 1px solid rgba(255,255,255,0.05); }
         .card-title { font-size: 14px; font-weight: 600; color: #fff; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;}
-        
         #map { height: 500px; border-radius: 8px; background: #0a0e14; z-index: 1;}
         .leaflet-container { font-family: 'Inter', sans-serif; }
         .leaflet-popup-content-wrapper { background: var(--bg-card); color: #fff; border-radius: 8px; }
         .leaflet-popup-tip { background: var(--bg-card); }
         .leaflet-tooltip { background: rgba(24, 31, 38, 0.95); color: #fff; border: 1px solid #374151; border-radius: 6px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); font-family: 'Inter', sans-serif;}
-        
-        /* Table */
         table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; }
-        th { background-color: rgba(0,0,0,0.2); font-weight: 500; color: var(--text-muted); padding: 10px 12px; text-align: left; border-bottom: 1px solid #2d3748; }
+        th { background-color: rgba(0,0,0,0.2); font-weight: 500; color: var(--text-muted); padding: 10px 12px; text-align: left; border-bottom: 1px solid #2d3748; cursor: pointer; }
         td { padding: 10px 12px; border-bottom: 1px solid #1f2937; color: #e2e8f0; }
         tr:hover td { background-color: rgba(255,255,255,0.02); }
-        
-        .badge { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; font-size: 11px; font-weight: bold; background: rgba(255,255,255,0.1);}
-
-        /* Mobile */
         .mobile-toggle { display: none; background: none; border: none; color: #fff; font-size: 24px; cursor: pointer; }
         @media (max-width: 1024px) {
             .sidebar { transform: translateX(-100%); }
@@ -68,9 +44,28 @@
             .main-content { margin-left: 0; }
             .mobile-toggle { display: block; }
         }
+        @media (max-width: 700px) {
+            .sidebar { width: min(82vw, 300px); z-index: 100; }
+            .main-content { min-width: 0; }
+            .topbar { padding: 12px 14px; gap: 12px; }
+            .topbar h1 { font-size: 16px; line-height: 1.2; }
+            .topbar > div:last-child { display: none; }
+            .main-content > .p-6 { padding: 14px; }
+            #map { height: 320px; min-height: 320px; }
+            .card { padding: 12px; }
+        }
+        
+        .loader-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(17, 22, 28, 0.9); z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .spinner { border: 4px solid rgba(255, 255, 255, 0.1); border-left-color: var(--accent-green); border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
+
+<div id="loader" class="loader-overlay">
+    <div class="spinner"></div>
+    <div class="mt-4 text-sm text-gray-400" id="loader-text">Memuat Data Kehutanan...</div>
+</div>
 
 <div class="sidebar" id="sidebar">
     <div class="px-6 mb-8 flex items-center gap-3">
@@ -83,19 +78,17 @@
         </div>
     </div>
     <div class="flex flex-col gap-1">
-        <a class="nav-item" onclick="openMainAppAction('peta')"><div class="nav-dot"></div> Dashboard Progress Input Data Kehutanan</a>
-        <a class="nav-item active" onclick="showDashboard()"><div class="nav-dot"></div> Dashboard Monitoring Hutan Binaan</a>
         <a class="nav-item" onclick="openMainAppAction('peta')"><div class="nav-dot"></div> Peta GeoHutan</a>
+        <a class="nav-item active" onclick="applyGlobalFilter()"><div class="nav-dot"></div> Dashboard Pimpinan</a>
         <a class="nav-item" onclick="openMainAppAction('mingguan')"><div class="nav-dot"></div> Aktivitas Mingguan</a>
         <a class="nav-item" onclick="openMainAppAction('bulanan')"><div class="nav-dot"></div> Linimasa 3 Bulanan</a>
-        <a class="nav-item" onclick="scrollToTable()"><div class="nav-dot"></div> Data Hutan Binaan</a>
-        <a class="nav-item"><div class="nav-dot"></div> Karbon</a>
-        <a class="nav-item"><div class="nav-dot"></div> Pengaturan</a>
         <div class="my-3 mx-5 border-t border-gray-800"></div>
-        <a class="nav-item" onclick="openMainAppAction('gantipass')"><div class="nav-dot"></div> Ganti Password</a>
-        <a class="nav-item" onclick="openMainAppAction('lupapass')"><div class="nav-dot"></div> Lupa Password</a>
         <a class="nav-item text-red-400" onclick="openMainAppAction('keluar')"><div class="nav-dot" style="background:#f87171;"></div> Keluar</a>
     </div>
+    <footer class="px-6 py-4 text-xs text-gray-500 border-t border-gray-800 flex flex-wrap justify-between gap-2">
+        <span>GeoHutan Jabar</span>
+        <span>Dashboard Pimpinan tersinkron dengan Peta Utama</span>
+    </footer>
 </div>
 
 <div class="main-content">
@@ -104,43 +97,45 @@
             <button class="mobile-toggle" onclick="document.getElementById('sidebar').classList.toggle('open')">&#9776;</button>
             <div>
                 <h1 class="text-xl font-bold text-white">Dashboard Monitoring Hutan Binaan</h1>
+                <div class="text-xs text-gray-400" id="data-updated-time">Data diperbarui: -</div>
             </div>
         </div>
         <div class="flex items-center gap-6">
-            <div class="text-right hidden sm:block">
-                <div class="text-xs text-gray-400" id="current-datetime"></div>
-            </div>
-            <div class="flex items-center gap-3">
+            <div class="relative flex items-center gap-3 cursor-pointer" id="dashboard-profile" onclick="toggleProfileDropdown(event)">
                 <div class="text-right">
                     <div class="font-semibold text-white text-sm" id="user-role">Pimpinan</div>
                     <div class="text-xs text-gray-400" id="user-name">Admin Utama</div>
                 </div>
                 <div class="w-9 h-9 rounded-full bg-green-800 flex items-center justify-center text-white font-bold">P</div>
+                <div id="profile-dropdown" class="absolute right-0 top-12 hidden w-48 bg-[#141921] border border-gray-700 rounded-lg shadow-xl py-2 z-50">
+                    <button type="button" class="block w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-white/5 hover:text-white" onclick="event.stopPropagation(); openParentAction('password')">Ganti Password</button>
+                    <button type="button" class="block w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-white/5 hover:text-white" onclick="event.stopPropagation(); openParentAction('forgot')">Lupa Password</button>
+                    <div class="h-px bg-gray-700 my-1"></div>
+                    <button type="button" class="block w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-red-500/10" onclick="event.stopPropagation(); openMainAppAction('keluar')">Keluar</button>
+                </div>
             </div>
         </div>
     </div>
 
    <div class="p-6">
-        <!-- Top Section: Map & Feeds -->
+        <!-- Map & Feeds -->
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-            <!-- Map + Filter Area -->
+            <!-- Map Area -->
             <div class="lg:col-span-2">
-                <!-- Map Area -->
-                <div class="card relative">
+                <div class="card relative h-full flex flex-col">
                     <div class="card-title">Peta Sebaran Aktivitas</div>
-                    <div id="map"></div>
+                    <div id="map" class="flex-1 min-h-[400px]"></div>
                 </div>
             </div>
               
             <!-- Activity Feed -->
-            <div class="card flex flex-col">
+            <div class="card flex flex-col h-[500px]">
                 <div class="card-title">
                     <span>Aktivitas Terbaru</span>
                 </div>
-                <div class="flex-1 flex flex-col gap-3 overflow-y-auto" id="activity-feed">
+                <div class="flex-1 flex flex-col gap-3 overflow-y-auto pr-2" id="activity-feed">
                     <!-- Populated by JS -->
                 </div>
-                <!-- Feed Pagination -->
                 <div class="flex justify-center gap-2 mt-4 pt-3 border-t border-gray-800">
                     <button class="w-6 h-6 rounded bg-gray-800 flex items-center justify-center text-xs hover:bg-gray-700" onclick="prevActivity()">&#9664;</button>
                     <span class="text-xs text-gray-400 flex items-center" id="activity-page">1 / 1</span>
@@ -149,110 +144,217 @@
             </div>
         </div>
 
-         <!-- Filter moved below the map -->
-                <div class="mt-4 bg-gray-900 bg-opacity-90 rounded-lg p-3 flex flex-wrap gap-4 items-end border border-gray-700 backdrop-blur">
-                    <div class="flex items-center gap-2">
-                        <div class="w-3 h-3 rounded-full bg-blue-500"></div>
-                        <span class="text-xs text-white">Filter Data</span>
-                    </div>
-                    <div class="flex-1 min-w-[120px]">
-                        <label class="block text-xxs text-gray-400 mb-1">Unit Kerja</label>
-                        <select id="map-filter-cdk" class="w-full bg-gray-800 border-none rounded p-1.5 text-xs text-white" onchange="applyGlobalFilter()">
-                            <option value="all">Semua Wilayah</option>
-                        </select>
-                    </div>
-                    <div class="flex-1 min-w-[120px]">
-                        <label class="block text-xxs text-gray-400 mb-1">Jabatan</label>
-                        <select id="map-filter-jabatan" class="w-full bg-gray-800 border-none rounded p-1.5 text-xs text-white" onchange="applyGlobalFilter()">
-                            <option value="all">Semua</option>
-                        </select>
-                    </div>
-                    <div class="flex-1 min-w-[120px]">
-                        <label class="block text-xxs text-gray-400 mb-1">Filter Tanggal</label>
-                        <input type="month" id="map-filter-tgl" class="w-full bg-gray-800 border-none rounded p-1.5 text-xs text-white" onchange="applyGlobalFilter()">
-                    </div>
-                    <div>
-                        <button onclick="resetGlobalFilter()" class="text-xs text-blue-400 hover:text-blue-300">Terapkan - Reset</button>
-                    </div>
+        <!-- OUTSIDE FILTER -->
+        <div class="mb-6 bg-gray-900 bg-opacity-90 rounded-lg p-4 flex flex-wrap gap-4 items-end border border-gray-700">
+            <div class="flex items-center gap-2">
+                <div class="w-3 h-3 rounded-full bg-blue-500"></div>
+                <span class="text-sm text-white font-semibold">Filter Data</span>
+            </div>
+            <div class="flex-1 min-w-[150px]">
+                <label class="block text-xs text-gray-400 mb-1">Unit Kerja</label>
+                <select id="map-filter-cdk" class="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white focus:outline-none focus:border-green-500" onchange="applyGlobalFilter()">
+                    <option value="all">Semua Unit Kerja</option>
+                </select>
+            </div>
+            <div class="flex-1 min-w-[150px]">
+                <label class="block text-xs text-gray-400 mb-1">Jabatan</label>
+                <select id="map-filter-jabatan" class="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white focus:outline-none focus:border-green-500" onchange="applyGlobalFilter()">
+                    <option value="all">Semua</option>
+                </select>
+            </div>
+            <div class="flex-1 min-w-[150px]">
+                <label class="block text-xs text-gray-400 mb-1">Tanggal Awal</label>
+                <input type="date" id="map-filter-tgl-awal" class="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white focus:outline-none focus:border-green-500" onchange="applyGlobalFilter()">
+            </div>
+            <div class="flex-1 min-w-[150px]">
+                <label class="block text-xs text-gray-400 mb-1">Tanggal Akhir</label>
+                <input type="date" id="map-filter-tgl-akhir" class="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white focus:outline-none focus:border-green-500" onchange="applyGlobalFilter()">
+            </div>
+            <div>
+                <button onclick="resetGlobalFilter()" class="text-sm text-blue-400 hover:text-blue-300 py-2">Terapkan - Reset</button>
+            </div>
+        </div>
+        
+        <!-- NEW PANELS: Mingguan & 3 Bulanan -->
+        <!-- Panel Mingguan -->
+        <div class="card mb-6" id="panel-mingguan">
+            <div class="card-title cursor-pointer" onclick="document.getElementById('mingguan-content').classList.toggle('hidden')">
+                <span class="text-yellow-400">Panel Data Laporan Mingguan (Terbaru per Pembina)</span>
+                <span class="text-xs bg-gray-800 px-2 py-1 rounded hover:bg-gray-700">Hide/Unhide</span>
+            </div>
+            <div id="mingguan-content" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pt-2">
+                <div class="bg-gray-800 p-3 rounded">
+                    <div class="text-xs text-gray-400 mb-2 border-b border-gray-700 pb-1">Kondisi Tutupan Lahan</div>
+                    <div class="flex justify-between text-sm mb-1"><span>Baik</span> <b id="m-tutupan-baik">0</b></div>
+                    <div class="flex justify-between text-sm mb-1"><span>Perlu Perhatian</span> <b id="m-tutupan-perlu">0</b></div>
+                    <div class="flex justify-between text-sm mb-1"><span>Gangguan</span> <b id="m-tutupan-gangguan">0</b></div>
                 </div>
+                <div class="bg-gray-800 p-3 rounded">
+                    <div class="text-xs text-gray-400 mb-2 border-b border-gray-700 pb-1">Kegiatan Vegetatif</div>
+                    <div class="flex justify-between text-sm mb-1"><span>Penanaman</span> <b id="m-veg-tanam">0</b></div>
+                    <div class="flex justify-between text-sm mb-1"><span>Pemeliharaan</span> <b id="m-veg-pelihara">0</b></div>
+                    <div class="flex justify-between text-sm mb-1"><span>Pendataan</span> <b id="m-veg-data">0</b></div>
+                    <div class="flex justify-between text-sm mb-1"><span>Tidak ada Kegiatan</span> <b id="m-veg-none">0</b></div>
+                </div>
+                <div class="bg-gray-800 p-3 rounded">
+                    <div class="text-xs text-gray-400 mb-2 border-b border-gray-700 pb-1">Kondisi Tanaman</div>
+                    <div class="flex justify-between text-sm mb-1"><span>Sehat</span> <b id="m-tanaman-sehat">0</b></div>
+                    <div class="flex justify-between text-sm mb-1"><span>Merana</span> <b id="m-tanaman-merana">0</b></div>
+                    <div class="flex justify-between text-sm mb-1"><span>Mati</span> <b id="m-tanaman-mati">0</b></div>
+                </div>
+                <div class="bg-gray-800 p-3 rounded">
+                    <div class="text-xs text-gray-400 mb-2 border-b border-gray-700 pb-1">Kegiatan Monitoring</div>
+                    <div class="flex justify-between text-sm mb-1"><span>Koordinasi</span> <b id="m-mon-koord">0</b></div>
+                    <div class="flex justify-between text-sm mb-1"><span>Pembinaan</span> <b id="m-mon-bina">0</b></div>
+                    <div class="flex justify-between text-sm mb-1"><span>Perlindungan</span> <b id="m-mon-lindung">0</b></div>
+                    <div class="flex justify-between text-sm mb-1"><span>Tidak ada Kegiatan</span> <b id="m-mon-none">0</b></div>
+                </div>
+                <div class="bg-gray-800 p-3 rounded col-span-1 md:col-span-2">
+                    <div class="text-xs text-gray-400 mb-2 border-b border-gray-700 pb-1 flex justify-between">
+                        <span>Kesiapan Bibit</span>
+                        <span>Total Bibit: <b class="text-green-400" id="m-bibit-total">0</b></span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2" id="m-bibit-list"></div>
+                    <div class="mt-2 text-center"><button class="text-xs bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded transition" onclick="nextBibitPage()">Next >></button></div>
+                </div>
+                <div class="bg-gray-800 p-3 rounded">
+                    <div class="text-xs text-gray-400 mb-2 border-b border-gray-700 pb-1">Tinggi Tanaman Tersedia</div>
+                    <div class="flex justify-between text-sm mb-1"><span>10-20 cm</span> <b id="m-tinggi-1">0</b></div>
+                    <div class="flex justify-between text-sm mb-1"><span>30-50 cm</span> <b id="m-tinggi-2">0</b></div>
+                    <div class="flex justify-between text-sm mb-1"><span>60-100 cm</span> <b id="m-tinggi-3">0</b></div>
+                    <div class="flex justify-between text-sm mb-1"><span>>100 cm</span> <b id="m-tinggi-4">0</b></div>
+                </div>
+                <div class="bg-gray-800 p-3 rounded">
+                    <div class="text-xs text-gray-400 mb-2 border-b border-gray-700 pb-1">Gangguan Ekosistem</div>
+                    <div class="flex justify-between text-sm mb-1"><span>Ya</span> <b id="m-ganggu-ya">0</b></div>
+                    <div class="flex justify-between text-sm mb-1"><span>Tidak</span> <b id="m-ganggu-tidak">0</b></div>
+                </div>
+            </div>
+        </div>
 
-        <!-- KPI Row -->
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 mt-6" id="kpi-container">
-            <!-- Laporan Mingguan -->
-            <div class="card">
+        <!-- Panel 3 Bulanan -->
+        <div class="card mb-6" id="panel-3bulanan">
+            <div class="card-title cursor-pointer" onclick="document.getElementById('bulanan-content').classList.toggle('hidden')">
+                <span class="text-blue-400">Panel Data Laporan 3 Bulanan (Terbaru per Pembina)</span>
+                <span class="text-xs bg-gray-800 px-2 py-1 rounded hover:bg-gray-700">Hide/Unhide</span>
+            </div>
+            <div id="bulanan-content" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pt-2">
+                <div class="bg-gray-800 p-3 rounded">
+                    <div class="text-xs text-gray-400 mb-2 border-b border-gray-700 pb-1">Keragaman Jenis Tanaman</div>
+                    <div class="flex justify-between text-sm mb-1"><span>Homogen</span> <b id="b-ragam-homo">0</b></div>
+                    <div class="flex justify-between text-sm mb-1"><span>Heterogen</span> <b id="b-ragam-hetero">0</b></div>
+                    
+                    <div class="text-xs text-gray-400 mb-2 mt-3 border-b border-gray-700 pb-1">Jenis Tanaman/Pohon</div>
+                    <div class="flex justify-between text-sm mb-1"><span>Kayu-Kayuan</span> <b id="b-jenis-kayu">0</b></div>
+                    <div class="flex justify-between text-sm mb-1"><span>MPTS</span> <b id="b-jenis-mpts">0</b></div>
+                    <div class="flex justify-between text-sm mb-1"><span>Bambu</span> <b id="b-jenis-bambu">0</b></div>
+                    <div class="flex justify-between text-sm mb-1"><span>Lainnya</span> <b id="b-jenis-lain">0</b></div>
+                </div>
+                <div class="bg-gray-800 p-3 rounded">
+                    <div class="text-xs text-gray-400 mb-2 border-b border-gray-700 pb-1">Kerapatan Tanaman</div>
+                    <div class="flex justify-between text-sm mb-1"><span>Sangat Rapat</span> <b id="b-rapat-sangat">0</b></div>
+                    <div class="flex justify-between text-sm mb-1"><span>Rapat</span> <b id="b-rapat-rapat">0</b></div>
+                    <div class="flex justify-between text-sm mb-1"><span>Sedang</span> <b id="b-rapat-sedang">0</b></div>
+                    <div class="flex justify-between text-sm mb-1"><span>Terbuka</span> <b id="b-rapat-buka">0</b></div>
+
+                    <div class="text-xs text-gray-400 mb-2 mt-3 border-b border-gray-700 pb-1">Kondisi Hutan</div>
+                    <div class="flex justify-between text-sm mb-1"><span>Baik</span> <b id="b-hutan-baik">0</b></div>
+                    <div class="flex justify-between text-sm mb-1"><span>Cukup</span> <b id="b-hutan-cukup">0</b></div>
+                    <div class="flex justify-between text-sm mb-1"><span>Kurang</span> <b id="b-hutan-kurang">0</b></div>
+                </div>
+                <div class="bg-gray-800 p-3 rounded">
+                    <div class="text-xs text-gray-400 mb-2 border-b border-gray-700 pb-1">Kelas Lereng</div>
+                    <div class="flex justify-between text-sm mb-1"><span>Datar (0-8%)</span> <b id="b-lereng-1">0</b></div>
+                    <div class="flex justify-between text-sm mb-1"><span>Landai (>8-15%)</span> <b id="b-lereng-2">0</b></div>
+                    <div class="flex justify-between text-sm mb-1"><span>Agak Curam (>15-25%)</span> <b id="b-lereng-3">0</b></div>
+                    <div class="flex justify-between text-sm mb-1"><span>Curam (>25-40%)</span> <b id="b-lereng-4">0</b></div>
+                    <div class="flex justify-between text-sm mb-1"><span>Sangat Curam (>40%)</span> <b id="b-lereng-5">0</b></div>
+                    
+                    <div class="text-xs text-gray-400 mb-2 mt-3 border-b border-gray-700 pb-1">Sumber Air</div>
+                    <div class="flex justify-between text-sm mb-1"><span>Sungai</span> <b id="b-air-1">0</b></div>
+                    <div class="flex justify-between text-sm mb-1"><span>Danau</span> <b id="b-air-2">0</b></div>
+                    <div class="flex justify-between text-sm mb-1"><span>Irigasi</span> <b id="b-air-3">0</b></div>
+                    <div class="flex justify-between text-sm mb-1"><span>Laut</span> <b id="b-air-4">0</b></div>
+                    <div class="flex justify-between text-sm mb-1"><span>Tadah Hujan</span> <b id="b-air-5">0</b></div>
+                </div>
+                <div class="bg-gray-800 p-3 rounded">
+                    <div class="text-xs text-gray-400 mb-2 border-b border-gray-700 pb-1">Usulan Kegiatan Lanjutan</div>
+                    <div class="flex justify-between text-sm mb-1"><span>Penanaman</span> <b id="b-usul-1">0</b></div>
+                    <div class="flex justify-between text-sm mb-1"><span>Penyulaman</span> <b id="b-usul-2">0</b></div>
+                    <div class="flex justify-between text-sm mb-1"><span>Pemupukan</span> <b id="b-usul-3">0</b></div>
+                    <div class="flex justify-between text-sm mb-1"><span>Penyiraman</span> <b id="b-usul-4">0</b></div>
+                    <div class="flex justify-between text-sm mb-1"><span>Pembersihan Gulma</span> <b id="b-usul-5">0</b></div>
+                    <div class="flex justify-between text-sm mb-1"><span>Penambahan Sumber Air</span> <b id="b-usul-6">0</b></div>
+                    <div class="flex justify-between text-sm mb-1"><span>Sipil Teknis</span> <b id="b-usul-7">0</b></div>
+                    
+                    <div class="text-xs text-gray-400 mb-2 mt-3 border-b border-gray-700 pb-1">Karbon</div>
+                    <div class="text-xs text-gray-500 italic" id="b-karbon-status">Data karbon belum tersedia dari sumber.</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 4 KPI Card Segment -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6" id="kpi-container">
+            <div class="card border-t-4 border-t-yellow-400">
                 <div class="text-xs text-gray-400 mb-2">Laporan Aktivitas Mingguan</div>
                 <div class="flex items-end gap-2 mb-2">
                     <span class="text-3xl font-bold text-white" id="kpi-mingguan">0</span>
                     <span class="text-sm text-gray-500 mb-1">laporan</span>
                 </div>
-                <div class="text-xs text-gray-500 mb-3">dari 1763 titik hutan binaan.</div>
-                <div class="text-xxs text-yellow-400">Periode : 24-30 Agustus 2026 Minggu Berjalan ▲ <span id="kpi-p-mingguan">0</span>% dari seluruh titik hutan binaan.</div>
+                <div class="text-xs text-gray-500 mb-3">dari <span id="kpi-total-hb1">0</span> titik hutan binaan.</div>
+                <div class="text-xxs text-yellow-400">Periode: <span id="kpi-period-mingguan">Minggu Berjalan</span></div>
+                <div class="text-xxs text-green-400 mt-1">â–² <span id="kpi-p-mingguan">0</span>% dari seluruh titik hutan binaan.</div>
             </div>
-            <!-- Laporan Bulanan -->
-            <div class="card">
-                <div class="text-xs text-gray-400 mb-2">Laporan Aktivitas Bulanan</div>
+            <div class="card border-t-4 border-t-blue-400">
+                <div class="text-xs text-gray-400 mb-2">Laporan Aktivitas 3 Bulanan</div>
                 <div class="flex items-end gap-2 mb-2">
                     <span class="text-3xl font-bold text-white" id="kpi-bulanan">0</span>
                     <span class="text-sm text-gray-500 mb-1">laporan</span>
                 </div>
-                <div class="text-xs text-gray-500 mb-3">dari 1763 titik hutan binaan.</div>
-                <div class="text-xxs text-yellow-400">Periode : Triwulan Berjalan (Triwulan 1 Jan-Feb-Mar 2026) ▲ <span id="kpi-p-bulanan">0</span>% dari seluruh titik hutan binaan.</div>
+                <div class="text-xs text-gray-500 mb-3">dari <span id="kpi-total-hb2">0</span> titik hutan binaan.</div>
+                <div class="text-xxs text-blue-400">Periode: <span id="kpi-period-bulanan">Triwulan Berjalan</span></div>
+                <div class="text-xxs text-green-400 mt-1">â–² <span id="kpi-p-bulanan">0</span>% dari seluruh titik hutan binaan.</div>
             </div>
-            <!-- Pembina Terbanyak -->
-            <div class="card">
+            <div class="card border-t-4 border-t-green-400">
                 <div class="text-xs text-gray-400 mb-2">Pembina dengan Input Terbanyak</div>
                 <div class="text-2xl font-bold text-white mb-1 truncate" id="kpi-pembina-nama">-</div>
                 <div class="text-xs text-gray-500 mb-3">menginput : <span id="kpi-pembina-val">0</span> laporan</div>
-                <div class="text-xxs text-yellow-400">Periode : <span id="kpi-period-month">Bulan Ini</span> ▲ 8% dari laporan bulan lalu.</div>
+                <div class="text-xxs text-green-400">Periode: <span class="kpi-period-default">Bulan Berjalan</span></div>
             </div>
-            <!-- CDK Terbanyak -->
-            <div class="card">
-                <div class="text-xs text-gray-400 mb-2">CDK dengan Input Terbanyak</div>
+            <div class="card border-t-4 border-t-purple-400">
+                <div class="text-xs text-gray-400 mb-2">Unit Kerja dengan Input Terbanyak</div>
                 <div class="text-2xl font-bold text-white mb-1 truncate" id="kpi-cdk-nama">-</div>
                 <div class="text-xs text-gray-500 mb-3">menginput : <span id="kpi-cdk-val">0</span> laporan</div>
-                <div class="text-xxs text-yellow-400">Periode : <span id="kpi-period-month2">Bulan Ini</span> ▲ <span id="kpi-p-cdk">0</span>% dari total laporan.</div>
+                <div class="text-xxs text-purple-400">Periode: <span class="kpi-period-default">Bulan Berjalan</span></div>
             </div>
         </div>
 
         <!-- Bottom Section: Chart & Stats -->
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-            <!-- Chart -->
             <div class="card lg:col-span-2">
                 <div class="card-title">
-                    <span>Statistik CDK/UPTD Yang sudah Melapor</span>
+                    <span>Unit Kerja yang sudah melapor</span>
                     <div class="flex gap-2">
-                        <button
-                        onclick="setChartPeriod('mingguan')"
-                       class="px-2 py-1 rounded text-xs font-semibold bg-yellow-400 text-wwhite">
-                       Laporan Mingguan
-                    </button>
-                    <button 
-                    onclick="setChartPeriod('3bulanan')"
-                    class="px-2 py-1 rounded text-xs font-semibold bg-blue-500 text-white">
-                    Laporan 3 Bulanan
-                </button>
-            </div>
-        </div>
+                        <button onclick="setChartPeriod('mingguan')" class="px-2 py-1 rounded text-xs font-semibold bg-yellow-400 text-black">Laporan Mingguan</button>
+                        <button onclick="setChartPeriod('3bulanan')" class="px-2 py-1 rounded text-xs font-semibold bg-blue-500 text-white">Laporan 3 Bulanan</button>
+                    </div>
+                </div>
                 <div class="h-64 relative">
                     <canvas id="cdkChart"></canvas>
                 </div>
-                <div class="text-xxs text-gray-500 mt-2 text-center">Statistik Laporan Mingguan dan 3 Bulanan Cabang Dinas Kehutanan dan UPTD</div>
             </div>
 
             <!-- Global Stats List -->
             <div class="card">
                 <div class="card-title">Statistik Data Keseluruhan</div>
-                <div class="flex flex-col justify-between h-64">
+                <div class="flex flex-col justify-center h-64">
                     <div class="space-y-4 mt-2">
-                        <div class="flex justify-between items-center text-sm"><div class="flex items-center gap-2 text-yellow-400"><span>🌿</span> Petugas Jaga Leuweung</div> <span class="font-bold">836 Orang</span></div>
-                        <div class="flex justify-between items-center text-sm"><div class="flex items-center gap-2 text-blue-400"><span>🌱</span> Persemaian</div> <span class="font-bold">755 Lokasi</span></div>
-                        <div class="flex justify-between items-center text-sm"><div class="flex items-center gap-2 text-green-400"><span>👷</span> Pegawai Dinas Kehutanan</div> <span class="font-bold text-green-400">623 Orang</span></div>
-                        <div class="flex justify-between items-center text-sm"><div class="flex items-center gap-2 text-purple-400"><span>⛺</span> Juna Permanen</div> <span class="font-bold">29 Lokasi</span></div>
-                        <div class="flex justify-between items-center text-sm"><div class="flex items-center gap-2 text-orange-400"><span>📍</span> Hutan Binaan</div> <span class="font-bold text-green-400">1763 Titik</span></div>
-                        <div class="flex justify-between items-center text-sm"><div class="flex items-center gap-2 text-orange-400"><span>🗺️</span> Luasan Hektar Hutan Binaan</div> <span class="font-bold text-green-400">5.363,68 Ha</span></div>
-                    </div>
-                    <div class="mt-4 pt-4 border-t border-gray-800 flex justify-between items-center">
-                        
+                        <div class="flex justify-between items-center text-sm"><div class="flex items-center gap-2 text-yellow-400"><span>ðŸŒ¿</span> Petugas Jaga Leuweung</div> <span class="font-bold text-yellow-400" id="stat-jaga">0 Orang</span></div>
+                        <div class="flex justify-between items-center text-sm"><div class="flex items-center gap-2 text-blue-400"><span>ðŸŒ±</span> Persemaian</div> <span class="font-bold text-blue-400" id="stat-semai">0 Lokasi</span></div>
+                        <div class="flex justify-between items-center text-sm"><div class="flex items-center gap-2 text-green-400"><span>ðŸ‘·</span> Pegawai Dinas Kehutanan</div> <span class="font-bold text-green-400" id="stat-pegawai">0 Orang</span></div>
+                        <div class="flex justify-between items-center text-sm"><div class="flex items-center gap-2 text-purple-400"><span>â›º</span> Juna Permanen</div> <span class="font-bold text-purple-400" id="stat-juna">0 Lokasi</span></div>
+                        <div class="flex justify-between items-center text-sm"><div class="flex items-center gap-2 text-orange-400"><span>ðŸ“</span> Hutan Binaan</div> <span class="font-bold text-orange-400" id="stat-hb">0 Titik</span></div>
+                        <div class="flex justify-between items-center text-sm"><div class="flex items-center gap-2 text-orange-400"><span>ðŸ—ºï¸</span> Luasan Hektar Hutan Binaan</div> <span class="font-bold text-orange-400" id="stat-luas">0 Ha</span></div>
                     </div>
                 </div>
             </div>
@@ -264,17 +366,13 @@
                 <div>
                     <h2 class="text-lg font-bold text-white">Statistik Data Pembina Yang sudah Melapor</h2>
                     <div class="flex items-center gap-4 mt-2">
-                        <div class="bg-gray-800 rounded px-3 py-1 flex items-center gap-2"><div class="w-2 h-2 rounded-full bg-yellow-400"></div><span class="text-xs">Total Pembina: <b id="tb-total-pembina">0</b></span></div>
-                        <div class="bg-gray-800 rounded px-3 py-1 flex items-center gap-2"><div class="w-2 h-2 rounded-full bg-blue-400"></div><span class="text-xs">Hutan Binaan: <b id="tb-total-hutan">0</b></span></div>
-                        <div class="bg-gray-800 rounded px-3 py-1 flex items-center gap-2"><div class="w-2 h-2 rounded-full bg-green-400"></div><span class="text-xs">Luasan: <b id="tb-total-luas">0 Ha</b></span></div>
+                        <div class="bg-gray-800 rounded px-3 py-1 flex items-center gap-2"><div class="w-2 h-2 rounded-full bg-yellow-400"></div><span class="text-xs">Total Laporan Mingguan: <b id="tb-total-mingguan">0</b></span></div>
+                        <div class="bg-gray-800 rounded px-3 py-1 flex items-center gap-2"><div class="w-2 h-2 rounded-full bg-blue-400"></div><span class="text-xs">Total Laporan 3 Bulanan: <b id="tb-total-bulanan">0</b></span></div>
                     </div>
                 </div>
                 <div class="flex flex-wrap gap-2">
-                    <select id="table-filter-sort" class="bg-gray-800 border border-gray-700 rounded p-1.5 text-xs text-white" onchange="applyTableFilter()">
-                        <option value="az">A-Z (Nama Pembina)</option>
-                        <option value="za">Z-A (Nama Pembina)</option>
-                        <option value="high">Tertinggi (Laporan)</option>
-                        <option value="low">Terendah (Laporan)</option>
+                    <select id="table-filter-unit" class="bg-gray-800 border border-gray-700 rounded p-1.5 text-xs text-white focus:outline-none" onchange="applyTableFilter()">
+                        <option value="all">Semuanya</option>
                     </select>
                     <button onclick="exportExcel()" class="bg-green-600 hover:bg-green-500 text-white px-3 py-1.5 rounded text-xs transition shadow-lg">Export XLS</button>
                 </div>
@@ -284,13 +382,13 @@
                 <table id="pembinaTable">
                     <thead>
                         <tr>
-                            <th>NO</th>
-                            <th>Nama Pembina</th>
-                            <th>Unit Kerja</th>
-                            <th>Lokasi</th>
-                            <th>Luas Hutan Binaan (Ha)</th>
-                            <th>Total Laporan Mingguan</th>
-                            <th>Total Laporan 3 Bulanan</th>
+                            <th>No</th>
+                            <th onclick="sortTable('nama')">Nama Pembina â†•</th>
+                            <th onclick="sortTable('unit')">Unit Kerja â†•</th>
+                            <th onclick="sortTable('lokasi')">Lokasi â†•</th>
+                            <th onclick="sortTable('luas')">Luas Hutan Binaan (Ha) â†•</th>
+                            <th onclick="sortTable('mingguan')">Total Laporan Mingguan â†•</th>
+                            <th onclick="sortTable('bulanan')">Total Laporan 3 Bulanan â†•</th>
                         </tr>
                     </thead>
                     <tbody id="pembina-tbody">
@@ -304,7 +402,7 @@
                 <div class="text-xs text-gray-500" id="table-info">Menampilkan 0 - 0 dari 0 data</div>
                 <div class="flex gap-2">
                     <button onclick="prevTablePage()" class="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 rounded text-xs transition">Sebelumnya</button>
-                    <div class="px-3 py-1.5 text-xs" id="table-page">1 / 1</div>
+                    <div class="flex gap-1 items-center" id="table-page-dots"></div>
                     <button onclick="nextTablePage()" class="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 rounded text-xs transition">Berikutnya</button>
                 </div>
             </div>
@@ -313,174 +411,572 @@
     </div>
 </div>
 
+<!-- Modal Detail Laporan -->
+<div id="modal-detail" class="fixed inset-0 bg-black bg-opacity-80 z-[100] flex items-center justify-center hidden p-4">
+    <div class="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl relative">
+        <button onclick="document.getElementById('modal-detail').classList.add('hidden')" class="absolute top-4 right-4 text-gray-400 hover:text-white w-8 h-8 flex items-center justify-center bg-gray-800 rounded-full">Ã—</button>
+        <div class="p-5 border-b border-gray-800">
+            <h3 class="text-lg font-bold text-white">Detail Laporan</h3>
+            <div class="text-xs text-gray-400 mt-1" id="mdl-date"></div>
+        </div>
+        <div class="p-5 overflow-y-auto" id="mdl-content">
+            <!-- Populated by JS -->
+        </div>
+    </div>
+</div>
+
 <script>
-    // --- UTILS & CLOCK ---
-    function updateDateTime() {
+    function openMainAppAction(action) {
+        let p = window.parent !== window ? window.parent : window.opener;
+        if(p) {
+            if (typeof p.closePimpinanDashboard === 'function') p.closePimpinanDashboard();
+            p.focus();
+            if (action === 'mingguan' && typeof p.openReportMonitor === 'function') p.openReportMonitor('weekly');
+            if (action === 'bulanan' && typeof p.openReportMonitor === 'function') p.openReportMonitor('monthly');
+            if (action === 'keluar' && typeof p.logoutGeoHutan === 'function') p.logoutGeoHutan();
+        } else if (action === 'peta') {
+            window.location.href = '../index.html';
+        }
+    }
+
+    function openParentAction(action) {
+        let p = window.parent !== window ? window.parent : window.opener;
+        if (!p) return;
+        if (action === 'password' && typeof p.openCredentialModal === 'function') p.openCredentialModal();
+        if (action === 'forgot' && typeof p.openForgotPasswordModal === 'function') p.openForgotPasswordModal();
+    }
+    
+    function updatePeriods() {
         const now = new Date();
-        const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' };
-        document.getElementById('current-datetime').textContent = now.toLocaleDateString('id-ID', options) + ' WIB';
-        
         const m = now.toLocaleString('id-ID', { month: 'long' });
         const y = now.getFullYear();
-        document.getElementById('kpi-period-month').textContent = m + ' ' + y;
-        document.getElementById('kpi-period-month2').textContent = m + ' ' + y;
+        document.querySelectorAll('.kpi-period-default').forEach(e => e.textContent = m + ' ' + y);
+        
+        let startWeek = new Date(now); startWeek.setDate(now.getDate() - now.getDay() + 1);
+        let endWeek = new Date(startWeek); endWeek.setDate(startWeek.getDate() + 6);
+        document.getElementById('kpi-period-mingguan').textContent = startWeek.getDate() + '-' + endWeek.getDate() + ' ' + m + ' ' + y;
+        
+        let month = now.getMonth() + 1;
+        let tri = month <= 3 ? "Triwulan 1 Jan-Feb-Mar" : month <= 6 ? "Triwulan 2 Apr-Mei-Jun" : month <= 9 ? "Triwulan 3 Jul-Ags-Sep" : "Triwulan 4 Okt-Nov-Des";
+        document.getElementById('kpi-period-bulanan').textContent = tri;
     }
-    updateDateTime(); setInterval(updateDateTime, 60000);
+    updatePeriods();
 
-    // --- PARENT COMMUNICATION ---
-    const parentWin = window.parent !== window ? window.parent : window.opener;
-    function openMainAppAction(action) {
-        if (parentWin) {
-            if (typeof parentWin.closePimpinanDashboard === 'function') parentWin.closePimpinanDashboard();
-            parentWin.focus();
-            if (action === 'mingguan' && typeof parentWin.openReportMonitor === 'function') parentWin.openReportMonitor('weekly');
-            if (action === 'bulanan' && typeof parentWin.openReportMonitor === 'function') parentWin.openReportMonitor('monthly');
-            if (action === 'gantipass' && typeof parentWin.openCredentialModal === 'function') parentWin.openCredentialModal();
-            if (action === 'lupapass' && typeof parentWin.openForgotPasswordModal === 'function') parentWin.openForgotPasswordModal();
-            if (action === 'keluar' && typeof parentWin.logoutGeoHutan === 'function') parentWin.logoutGeoHutan();
-        } else {
-            alert("Aksi ini membutuhkan aplikasi utama GeoHutan.");
-        }
+    // Data Load
+    const SHEET_URLS = {
+        hutanBinaan: "https://docs.google.com/spreadsheets/d/1xrl3W7DZs8SsYZIWiLgHYvi_89V7NismK-G9YDu9NdM/export?format=csv&gid=1475147460",
+        pegawai: "https://docs.google.com/spreadsheets/d/1K_rijLYh_sdVmNzSgs7TIdjVslBYeQ31/export?format=csv&gid=738073883",
+        persemaian: "https://docs.google.com/spreadsheets/d/1Q4kzpbXWkpDRfzvUeVa2RYnwSba0BMOcv3jAUDh_9lE/export?format=csv&gid=703202406",
+        jagaLeuweung: "https://docs.google.com/spreadsheets/d/14jmMYMOY6vl2nIdbZdO-wahixn1yN3LTLqwI-19RNtY/export?format=csv&gid=1198498280",
+        junaPermanen: "https://docs.google.com/spreadsheets/d/1p7-7pSKtNCc58eC-tXJsXNKk3QSSswI68Gl6fNsZhSE/export?format=csv&gid=2039375183"
+    };
+
+    let rawDataStore = { hb: [], peg: [], persem: [], jaga: [], juna: [] };
+    let normalizedHb = [];
+    let latestReportPerPembina = {};
+    let filteredData = [];
+    let dashboardFiltersInitialized = false;
+    let totalStats = { peg: 0, persem: 0, jaga: 0, juna: 0, hb: 0, luas: 0 };
+
+    function parseDashboardDate(value) {
+        if (!value) return null;
+        if (value instanceof Date && !isNaN(value.getTime())) return value;
+        const raw = String(value).trim();
+        const indo = raw.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})(?:[ ,T]+(\d{1,2}):(\d{2}))?$/);
+        if (indo) return new Date(+indo[3], +indo[2] - 1, +indo[1], +(indo[4] || 0), +(indo[5] || 0));
+        const parsed = new Date(raw);
+        return isNaN(parsed.getTime()) ? null : parsed;
+    }
+
+    function repairDashboardText() {
+        if (!window.TextDecoder) return;
+        const decode = value => {
+            let output = value;
+            for (let i = 0; i < 2 && /[\u00c3\u00c2\u00e2]/.test(output); i++) {
+                try {
+                    output = new TextDecoder('utf-8').decode(Uint8Array.from(output, char => char.charCodeAt(0)));
+                } catch (_) { break; }
+            }
+            return output;
+        };
+        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+        const nodes = [];
+        while (walker.nextNode()) nodes.push(walker.currentNode);
+        nodes.forEach(node => { node.nodeValue = decode(node.nodeValue); });
     }
     
-    function scrollToTable() {
-        document.getElementById('tabel-pembina-section').scrollIntoView({behavior: 'smooth'});
-        if(window.innerWidth <= 1024) document.getElementById('sidebar').classList.remove('open');
+    const ROLE_UNIT_MAPPING = {
+        "kepala tahura": "TAHURA",
+        "kepala spth": "SPTH",
+        "kepala pphh": "PPPH / PPHH",
+        "kepala cdk 1": "CDK Wilayah 1", "kepala cdk 2": "CDK Wilayah 2", "kepala cdk 3": "CDK Wilayah 3",
+        "kepala cdk 4": "CDK Wilayah 4", "kepala cdk 5": "CDK Wilayah 5", "kepala cdk 6": "CDK Wilayah 6",
+        "kepala cdk 7": "CDK Wilayah 7", "kepala cdk 8": "CDK Wilayah 8", "kepala cdk 9": "CDK Wilayah 9"
+    };
+    let currentUserRole = "admin";
+    let currentUserUnit = null;
+
+    function normalizeUnitKerja(raw) {
+        if(!raw) return "Lainnya";
+        raw = raw.toLowerCase().trim();
+        if(raw.includes("cdk") || raw.includes("cabang dinas")) {
+            let num = raw.match(/\d+/);
+            if(num) return "CDK Wilayah " + num[0];
+        }
+        if(raw.includes("tahura")) return "TAHURA";
+        if(raw.includes("spth")) return "SPTH";
+        if(raw.includes("pphh") || raw.includes("ppph")) return "PPPH / PPHH";
+        if(raw.includes("bupm")) return "Bidang BUPM";
+        if(raw.includes("pdas")) return "Bidang PDAS";
+        if(raw.includes("pksdae")) return "Bidang PKSDAE";
+        if(raw.includes("ppkh")) return "Bidang PPKH";
+        if(raw.includes("sekretaris") || raw.includes("sekre")) return "Sekretariat";
+        return "Lainnya";
     }
 
-    // --- DATA FETCH & STATE ---
-    const cdkCoords = [
-        { id: "Cabang Dinas Kehutanan Wilayah 1", lat: -6.603102, lng: 106.806561 }, { id: "Cabang Dinas Kehutanan Wilayah 2", lat: -6.560615, lng: 107.447188 },
-        { id: "Cabang Dinas Kehutanan Wilayah 3", lat: -6.905681, lng: 106.983354 }, { id: "Cabang Dinas Kehutanan Wilayah 4", lat: -6.744432, lng: 107.062124 },
-        { id: "Cabang Dinas Kehutanan Wilayah 5", lat: -7.214439, lng: 107.901382 }, { id: "Cabang Dinas Kehutanan Wilayah 6", lat: -7.370324, lng: 108.220195 },
-        { id: "Cabang Dinas Kehutanan Wilayah 7", lat: -6.969359, lng: 108.518847 }, { id: "Cabang Dinas Kehutanan Wilayah 8", lat: -6.969401, lng: 108.518727 },
-        { id: "Cabang Dinas Kehutanan Wilayah 9", lat: -6.835586, lng: 107.907709 }, { id: "SPTH", lat: -6.932772, lng: 107.771134 },
-        { id: "P2HH", lat: -6.783905, lng: 108.625826 }, { id: "Tahura", lat: -6.858743, lng: 107.630705 },
-        { id: "Sekre", lat: -6.938027, lng: 107.671926 }
-    ];
-
-    let globalData = [];
-    let mapDataAggr = [];
-
-    function initData() {
-        if(parentWin && typeof parentWin.getGeoHutanData === 'function') {
-            const ext = parentWin.getGeoHutanData();
-            if(ext && ext.pembinaData) globalData = ext.pembinaData;
-            
-            // Set User Info
-            if(parentWin.getStoredAuthUser) {
-                const usr = parentWin.getStoredAuthUser();
-                if(usr) {
-                    document.getElementById('user-role').textContent = usr.role || 'Pimpinan';
-                    document.getElementById('user-name').textContent = usr.nama || 'Admin';
-                }
+    function initAuth() {
+        let p = window.parent !== window ? window.parent : window.opener;
+        if(p && p.getStoredAuthUser) {
+            const usr = p.getStoredAuthUser();
+            if(usr) {
+                document.getElementById('user-role').textContent = usr.role || 'Pimpinan';
+                document.getElementById('user-name').textContent = usr.nama || 'Admin';
+                currentUserRole = (usr.role || "").toLowerCase();
             }
         }
-        
-        // Generate Dummy if empty
-        if(globalData.length === 0) {
-            globalData = Array.from({length: 450}).map((_, i) => {
-                const c = cdkCoords[Math.floor(Math.random()*cdkCoords.length)].id;
-                return {
-                    no: i+1, nama: 'Pegawai ' + i, cdk: c, jabatan: 'Penyuluh',
-                    lokasi: 'Desa ' + i, luas: parseFloat((Math.random()*5+0.1).toFixed(2)),
-                    mingguan: Math.floor(Math.random()*3), linimasa: Math.floor(Math.random()*2),
-                    timestamp: new Date(Date.now() - Math.floor(Math.random()*1000000000))
-                }
+        if(ROLE_UNIT_MAPPING[currentUserRole]) currentUserUnit = ROLE_UNIT_MAPPING[currentUserRole];
+    }
+
+    async function fetchCSV(url) {
+        return new Promise(resolve => {
+            let done = false;
+            const finish = data => { if (!done) { done = true; resolve(data || []); } };
+            const timeout = setTimeout(() => finish([]), 12000);
+            Papa.parse(url + '&t=' + new Date().getTime(), { download: true, header: true, skipEmptyLines: true,
+                complete: (results) => { clearTimeout(timeout); finish(results.data); },
+                error: (err) => { clearTimeout(timeout); console.error("Error loading CSV:", err); finish([]); }
             });
+        });
+    }
+
+    function loadMainMapSnapshot(snapshot) {
+        const sources = snapshot && snapshot.sources ? snapshot.sources : [];
+        rawDataStore.hb = sources;
+        const totals = snapshot.totals || {};
+        totalStats = { peg: Number(totals.pegawai) || 0, persem: Number(totals.persemaian) || 0, jaga: Number(totals.jaga) || 0, juna: Number(totals.juna) || 0, hb: sources.length, luas: 0 };
+        latestReportPerPembina = {};
+        normalizedHb = sources.map((source, index) => {
+            const luas = Number(source.luas) || 0;
+            const weekly = source.laporanMingguan || {};
+            totalStats.luas += luas;
+            const item = {
+                id: source.id || index + 1,
+                unitKerja: source.unit || 'Lainnya',
+                jabatan: source.jabatan || 'Lainnya',
+                pembina: source.pembina || 'Belum ditetapkan',
+                lokasi: source.lokasi || '-',
+                tanggalMingguan: source.mingguan ? (source.tanggalMingguan || source.tanggalFoto || snapshot.generatedAt) : '',
+                tanggalBulanan: source.bulanan ? (source.tanggalFoto || snapshot.generatedAt) : '',
+                luasHektar: luas,
+                lat: Number(source.lat) || 0,
+                lng: Number(source.lng) || 0,
+                isMingguan: source.mingguan ? 1 : 0,
+                isBulanan: source.bulanan ? 1 : 0,
+                foto: source.foto || '',
+                kategoriLaporan: source.kegiatan || 'Hutan Binaan',
+                tutupan: weekly.tutupan || source.tutupan || '',
+                veg: weekly.kegiatanVegetatif || weekly.vegetatif || '',
+                bibitTeks: weekly.jenisJumlahBibit || '',
+                bibitTotal: Number(weekly.totalBibit) || 0,
+                kondisiTanaman: weekly.kondisiTanaman || '',
+                monitoring: weekly.kegiatanMonitoring || weekly.monitoring || '',
+                gangguan: weekly.adaGangguan || '',
+                tinggi: weekly.tinggiTanaman || '',
+                bKeragaman: source.jenis || '',
+                bKerapatan: source.kerapatan || '',
+                bLereng: source.lereng || '',
+                bKondisiHutan: source.tutupan || '',
+                bAir: source.ekosistem || '',
+                bUsulan: source.usulan || '',
+                bKarbon: source.karbon || ''
+            };
+            const name = item.pembina;
+            const previous = latestReportPerPembina[name];
+            const currentDate = parseDashboardDate(item.tanggalMingguan || item.tanggalBulanan);
+            const previousDate = previous ? parseDashboardDate(previous.tanggalMingguan || previous.tanggalBulanan) : null;
+            if (!previous || (currentDate && (!previousDate || currentDate >= previousDate))) latestReportPerPembina[name] = item;
+            return item;
+        });
+        if (snapshot.user) {
+            document.getElementById('user-role').textContent = snapshot.user.role || 'Pimpinan';
+            document.getElementById('user-name').textContent = snapshot.user.nama || 'Admin';
+        }
+        document.getElementById('data-updated-time').textContent = 'Sinkron dengan Peta Utama: ' + new Date(snapshot.generatedAt || Date.now()).toLocaleString('id-ID', { day:'2-digit', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit' }) + ' WIB';
+        if (!dashboardFiltersInitialized) {
+            setupFilters();
+            dashboardFiltersInitialized = true;
+        }
+        applyGlobalFilter();
+        document.getElementById('loader').style.display = 'none';
+        requestAnimationFrame(() => { if (map) map.invalidateSize(); });
+    }
+
+    async function loadData() {
+        initAuth();
+        try {
+            const parentApp = window.parent !== window ? window.parent : null;
+            if (parentApp && typeof parentApp.getPimpinanDashboardSnapshot === 'function') {
+                loadMainMapSnapshot(parentApp.getPimpinanDashboardSnapshot());
+                return;
+            }
+            const [hb, peg, persem, jaga, juna] = await Promise.all([
+                fetchCSV(SHEET_URLS.hutanBinaan), fetchCSV(SHEET_URLS.pegawai), fetchCSV(SHEET_URLS.persemaian),
+                fetchCSV(SHEET_URLS.jagaLeuweung), fetchCSV(SHEET_URLS.junaPermanen)
+            ]);
+            
+            rawDataStore.hb = hb; rawDataStore.peg = peg; rawDataStore.persem = persem; rawDataStore.jaga = jaga; rawDataStore.juna = juna;
+            
+            totalStats.peg = peg.filter(r=>r['No']||r['Nama']).length;
+            totalStats.persem = persem.filter(r=>(r['Unit Kerja']||r['CDK IV/Bandung Barat'])).length;
+            totalStats.jaga = jaga.filter(r=>r['FileID']||r['Nama']).length;
+            totalStats.juna = juna.filter(r=>r['No']||r['Kecamatan']).length;
+            
+            let validHb = 0; let totalHbArea = 0;
+            normalizedHb = hb.map((row, i) => {
+                let unit = normalizeUnitKerja(row['Unit Kerja']);
+                let luas = parseFloat((row[' Luas (Ha) '] || "0").replace(',','.')) || 0;
+                if(row['No']) { validHb++; totalHbArea += luas; }
+                
+                let isM = row['LM_Waktu'] && row['LM_Waktu'].trim() !== "";
+                let isB = row['Tanggal_2026'] && row['Tanggal_2026'].trim() !== "";
+                
+                return {
+                    id: row['No'] || i, unitKerja: unit, jabatan: row['Jabatan'] || 'Lainnya',
+                    pembina: row['Pembina/Pengampu'] || 'Anonim',
+                    lokasi: (row['Desa'] || '') + (row['Kecamatan'] ? ', ' + row['Kecamatan'] : ''),
+                    tanggalMingguan: row['LM_Waktu'], tanggalBulanan: row['Tanggal_2026'],
+                    luasHektar: luas,
+                    lat: parseFloat((row['Latitude'] || "0").replace(',','.')), lng: parseFloat((row['Longitude'] || "0").replace(',','.')),
+                    isMingguan: isM ? 1 : 0, isBulanan: isB ? 1 : 0,
+                    tutupan: row['LM_Tutupan'], veg: row['LM_Kegiatan_Vegetatif'], bibitTeks: row['LM_Jenis_Jumlah_Bibit'],
+                    bibitTotal: parseInt(row['LM_Total_Bibit']) || 0, kondisiTanaman: row['LM_Kondisi_Tanaman'],
+                    monitoring: row['LM_Kegiatan_Monitoring'], gangguan: row['LM_Ada_Gangguan'], tinggi: row['LM_Tinggi_Tanaman_CM'],
+                    foto: row['LM_Foto_URL'], kategoriLaporan: row['LM_Kategori'] || 'Laporan Mingguan',
+                    bKeragaman: row['Jenis_2026'], bKerapatan: row['Kerapatan_2026'], bLereng: row['Lereng_2026'],
+                    bKondisiHutan: row['Tutupan_2026'], bAir: row['Ekosistem_2026'], bUsulan: row['Usulan_2026'], bKarbon: row['CO2e_2026']
+                };
+            }).filter(d => d.unitKerja !== 'Lainnya' || d.pembina !== 'Anonim');
+            
+            totalStats.hb = validHb; totalStats.luas = totalHbArea;
+            
+            normalizedHb.forEach(d => {
+                let name = d.pembina;
+                if(!latestReportPerPembina[name]) { latestReportPerPembina[name] = d; } 
+                else if(d.isMingguan && !latestReportPerPembina[name].isMingguan) { latestReportPerPembina[name] = d; }
+            });
+            
+            document.getElementById('data-updated-time').textContent = 'Data diperbarui: ' + new Date().toLocaleString('id-ID', {day:'2-digit',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'}) + ' WIB';
+            
+            setupFilters(); applyGlobalFilter();
+            document.getElementById('loader').style.display = 'none';
+        } catch(e) {
+            console.error(e);
+            document.getElementById('loader-text').textContent = 'Gagal memuat data.';
+            document.getElementById('loader').style.display = 'none';
+        }
+    }
+
+    function setupFilters() {
+        let units = new Set(); let jabatans = new Set();
+        normalizedHb.forEach(d => { if(d.unitKerja) units.add(d.unitKerja); if(d.jabatan) jabatans.add(d.jabatan); });
+        
+        const uSelect = document.getElementById('map-filter-cdk'); const tSelect = document.getElementById('table-filter-unit');
+        [...units].sort().forEach(u => { uSelect.add(new Option(u, u)); tSelect.add(new Option(u, u)); });
+        
+        if(currentUserUnit) {
+            uSelect.value = currentUserUnit; uSelect.disabled = true;
+            tSelect.value = currentUserUnit; tSelect.disabled = true;
         }
         
-        processAggr();
-        populateFilters();
-        initMap();
-        initChart();
-        renderKPI();
-        renderTable();
-        renderFeed();
+        const jSelect = document.getElementById('map-filter-jabatan');
+        [...jabatans].sort().forEach(j => { jSelect.add(new Option(j, j)); });
     }
 
-    function processAggr(filteredData = globalData) {
-        mapDataAggr = cdkCoords.map(c => {
-            const list = filteredData.filter(d => d.cdk.toLowerCase().includes(c.id.toLowerCase()));
-            return {
-                ...c,
-                total: list.length,
-                mingguan: list.reduce((a,b)=>a+(b.mingguan||0),0),
-                bulanan: list.reduce((a,b)=>a+(b.linimasa||0),0)
-            };
-        });
-    }
-
-    // --- MAP ---
-    let map;
-    function initMap() {
-        map = L.map('map', { zoomControl: false }).setView([-6.9204, 107.6046], 8);
-        L.control.zoom({ position: 'topright' }).addTo(map);
-        // Dark basemap
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 18 }).addTo(map);
-        drawMarkers();
+    function applyGlobalFilter() {
+        let uFilter = document.getElementById('map-filter-cdk').value;
+        let jFilter = document.getElementById('map-filter-jabatan').value;
+        let dStart = document.getElementById('map-filter-tgl-awal').value;
+        let dEnd = document.getElementById('map-filter-tgl-akhir').value;
+        
+        if(currentUserUnit) uFilter = currentUserUnit;
+        
+        let fd = normalizedHb;
+        if(uFilter !== 'all') fd = fd.filter(d => d.unitKerja === uFilter);
+        if(jFilter !== 'all') fd = fd.filter(d => d.jabatan === jFilter);
+        
+        let tTotalHb = fd.length; 
+        
+        if(dStart || dEnd) {
+            document.getElementById('kpi-total-hb1').textContent = '-';
+            document.getElementById('kpi-total-hb2').textContent = '-';
+            
+            fd = fd.map(d => {
+                let dtM = parseDashboardDate(d.tanggalMingguan);
+                let dtB = parseDashboardDate(d.tanggalBulanan);
+                let validM = true, validB = true;
+                if(dStart) { let s = new Date(dStart); if(dtM && dtM < s) validM = false; if(dtB && dtB < s) validB = false; }
+                if(dEnd) { let e = new Date(dEnd); if(dtM && dtM > e) validM = false; if(dtB && dtB > e) validB = false; }
+                
+                return { ...d, isMingguan: validM ? d.isMingguan : 0, isBulanan: validB ? d.isBulanan : 0 };
+            });
+        } else {
+            document.getElementById('kpi-total-hb1').textContent = totalStats.hb;
+            document.getElementById('kpi-total-hb2').textContent = totalStats.hb;
+        }
+        
+        filteredData = fd;
+        renderCards(fd, tTotalHb, (dStart||dEnd));
+        renderPanels(fd);
+        renderGlobalStats();
+        renderMap(fd);
+        renderChart(fd);
+        renderFeed(fd);
+        applyTableFilter();
     }
     
-    let markerLayer = L.layerGroup();
-    function drawMarkers() {
-        if(map.hasLayer(markerLayer)) map.removeLayer(markerLayer);
-        markerLayer = L.layerGroup().addTo(map);
+    function resetGlobalFilter() {
+        if(!currentUserUnit) document.getElementById('map-filter-cdk').value = 'all';
+        document.getElementById('map-filter-jabatan').value = 'all';
+        document.getElementById('map-filter-tgl-awal').value = '';
+        document.getElementById('map-filter-tgl-akhir').value = '';
+        applyGlobalFilter();
+    }
+
+    function renderCards(data, totalHb, isDateFiltered) {
+        let mCount = 0, bCount = 0;
+        let pMap = {}; let cMap = {};
+        
+        data.forEach(d => {
+            mCount += d.isMingguan;
+            bCount += d.isBulanan;
+            let tot = d.isMingguan + d.isBulanan;
+            if(tot > 0) {
+                pMap[d.pembina] = (pMap[d.pembina] || 0) + tot;
+                cMap[d.unitKerja] = (cMap[d.unitKerja] || 0) + tot;
+            }
+        });
+        
+        document.getElementById('kpi-mingguan').textContent = mCount;
+        document.getElementById('kpi-bulanan').textContent = bCount;
+        
+        if(isDateFiltered) {
+            document.getElementById('kpi-p-mingguan').textContent = '-'; document.getElementById('kpi-p-bulanan').textContent = '-';
+        } else {
+            document.getElementById('kpi-p-mingguan').textContent = totalHb > 0 ? ((mCount / totalHb) * 100).toFixed(1) : '0';
+            document.getElementById('kpi-p-bulanan').textContent = totalHb > 0 ? ((bCount / totalHb) * 100).toFixed(1) : '0';
+        }
+        
+        let topP = Object.entries(pMap).sort((a,b)=>b[1]-a[1])[0];
+        let topC = Object.entries(cMap).sort((a,b)=>b[1]-a[1])[0];
+        
+        document.getElementById('kpi-pembina-nama').textContent = topP ? topP[0] : '-';
+        document.getElementById('kpi-pembina-val').textContent = topP ? topP[1] : '0';
+        document.getElementById('kpi-cdk-nama').textContent = topC ? topC[0] : '-';
+        document.getElementById('kpi-cdk-val').textContent = topC ? topC[1] : '0';
+    }
+
+    let bibitGlobal = [];
+    let bibitPage = 1;
+    function renderPanels(data) {
+        let pSet = new Set(); let latestData = [];
+        data.forEach(d => {
+            if(!pSet.has(d.pembina)) { latestData.push(latestReportPerPembina[d.pembina] || d); pSet.add(d.pembina); }
+        });
+
+        let m = { tB:0, tP:0, tG:0, vT:0, vP:0, vD:0, vN:0, ts:0, tm:0, tmt:0, mk:0, mb:0, ml:0, mn:0, tg1:0, tg2:0, tg3:0, tg4:0, gy:0, gt:0 };
+        let bMap = {}; let bTot = 0;
+        let b = { rHo:0, rHe:0, jK:0, jM:0, jB:0, jL:0, krSR:0, krR:0, krS:0, krT:0, l1:0, l2:0, l3:0, l4:0, l5:0, hB:0, hC:0, hK:0, a1:0, a2:0, a3:0, a4:0, a5:0, u1:0, u2:0, u3:0, u4:0, u5:0, u6:0, u7:0 };
+
+        latestData.forEach(d => {
+            if(d.isMingguan) {
+                let tut = (d.tutupan||"").toLowerCase(); if(tut.includes('baik')) m.tB++; else if(tut.includes('perhatian')) m.tP++; else if(tut.includes('ganggu')) m.tG++;
+                let veg = (d.veg||"").toLowerCase(); if(veg.includes('tanam')) m.vT++; else if(veg.includes('pelihara')) m.vP++; else if(veg.includes('data')) m.vD++; else m.vN++;
+                let kon = (d.kondisiTanaman||"").toLowerCase(); if(kon.includes('sehat')) m.ts++; else if(kon.includes('merana')) m.tm++; else if(kon.includes('mati')) m.tmt++;
+                let mon = (d.monitoring||"").toLowerCase(); if(mon.includes('koordinasi')) m.mk++; else if(mon.includes('bina')) m.mb++; else if(mon.includes('lindung')) m.ml++; else m.mn++;
+                let tgi = (d.tinggi||"").toLowerCase(); if(tgi.includes('10-20')) m.tg1++; else if(tgi.includes('30-50')) m.tg2++; else if(tgi.includes('60-100')) m.tg3++; else if(tgi.includes('>100')) m.tg4++;
+                let g = (d.gangguan||"").toLowerCase(); if(g.includes('ya') || g === 'y') m.gy++; else m.gt++;
+                
+                bTot += d.bibitTotal;
+                if(d.bibitTeks) {
+                    d.bibitTeks.split(',').forEach(p => {
+                        let r = p.trim().split(/\s+/);
+                        if(r.length > 1) {
+                            let val = parseInt(r.pop().replace(/\D/g,'')) || 0; let name = r.join(' ');
+                            if(name && val) bMap[name] = (bMap[name]||0) + val;
+                        }
+                    });
+                }
+            }
+            if(d.isBulanan) {
+                let rg = (d.bKeragaman||"").toLowerCase(); if(rg.includes('hetero')) b.rHe++; else b.rHo++;
+                let jn = (d.bKeragaman||"").toLowerCase(); if(jn.includes('kayu')) b.jK++; else if(jn.includes('mpts')) b.jM++; else if(jn.includes('bambu')) b.jB++; else b.jL++;
+                let kr = (d.bKerapatan||"").toLowerCase(); if(kr.includes('sangat')) b.krSR++; else if(kr.includes('sedang')) b.krS++; else if(kr.includes('terbuka')) b.krT++; else if(kr.includes('rapat')) b.krR++;
+                let lr = (d.bLereng||"").toLowerCase(); if(lr.includes('sangat curam') || lr.includes('>40')) b.l5++; else if(lr.includes('agak curam') || lr.includes('15')) b.l3++; else if(lr.includes('curam') || lr.includes('25')) b.l4++; else if(lr.includes('landai') || lr.includes('8')) b.l2++; else b.l1++;
+                let ht = (d.bKondisiHutan||"").toLowerCase(); if(ht.includes('baik')) b.hB++; else if(ht.includes('kurang')) b.hK++; else b.hC++;
+                let ar = (d.bAir||"").toLowerCase(); if(ar.includes('sungai')) b.a1++; else if(ar.includes('danau')) b.a2++; else if(ar.includes('irigasi')) b.a3++; else if(ar.includes('laut')) b.a4++; else b.a5++;
+                let us = (d.bUsulan||"").toLowerCase(); if(us.includes('tanam')) b.u1++; if(us.includes('sulam')) b.u2++; if(us.includes('pupuk')) b.u3++; if(us.includes('siram')) b.u4++; if(us.includes('gulma')) b.u5++; if(us.includes('air')) b.u6++; if(us.includes('sipil')) b.u7++;
+            }
+        });
+
+        document.getElementById('m-tutupan-baik').textContent = m.tB; document.getElementById('m-tutupan-perlu').textContent = m.tP; document.getElementById('m-tutupan-gangguan').textContent = m.tG;
+        document.getElementById('m-veg-tanam').textContent = m.vT; document.getElementById('m-veg-pelihara').textContent = m.vP; document.getElementById('m-veg-data').textContent = m.vD; document.getElementById('m-veg-none').textContent = m.vN;
+        document.getElementById('m-tanaman-sehat').textContent = m.ts; document.getElementById('m-tanaman-merana').textContent = m.tm; document.getElementById('m-tanaman-mati').textContent = m.tmt;
+        document.getElementById('m-mon-koord').textContent = m.mk; document.getElementById('m-mon-bina').textContent = m.mb; document.getElementById('m-mon-lindung').textContent = m.ml; document.getElementById('m-mon-none').textContent = m.mn;
+        document.getElementById('m-tinggi-1').textContent = m.tg1; document.getElementById('m-tinggi-2').textContent = m.tg2; document.getElementById('m-tinggi-3').textContent = m.tg3; document.getElementById('m-tinggi-4').textContent = m.tg4;
+        document.getElementById('m-ganggu-ya').textContent = m.gy; document.getElementById('m-ganggu-tidak').textContent = m.gt;
+        
+        bibitGlobal = Object.entries(bMap).sort((a,b)=>b[1]-a[1]);
+        document.getElementById('m-bibit-total').textContent = bTot.toLocaleString();
+        bibitPage = 1; renderBibitPage();
+        
+        document.getElementById('b-ragam-homo').textContent = b.rHo; document.getElementById('b-ragam-hetero').textContent = b.rHe;
+        document.getElementById('b-jenis-kayu').textContent = b.jK; document.getElementById('b-jenis-mpts').textContent = b.jM; document.getElementById('b-jenis-bambu').textContent = b.jB; document.getElementById('b-jenis-lain').textContent = b.jL;
+        document.getElementById('b-rapat-sangat').textContent = b.krSR; document.getElementById('b-rapat-rapat').textContent = b.krR; document.getElementById('b-rapat-sedang').textContent = b.krS; document.getElementById('b-rapat-buka').textContent = b.krT;
+        document.getElementById('b-lereng-1').textContent = b.l1; document.getElementById('b-lereng-2').textContent = b.l2; document.getElementById('b-lereng-3').textContent = b.l3; document.getElementById('b-lereng-4').textContent = b.l4; document.getElementById('b-lereng-5').textContent = b.l5;
+        document.getElementById('b-hutan-baik').textContent = b.hB; document.getElementById('b-hutan-cukup').textContent = b.hC; document.getElementById('b-hutan-kurang').textContent = b.hK;
+        document.getElementById('b-air-1').textContent = b.a1; document.getElementById('b-air-2').textContent = b.a2; document.getElementById('b-air-3').textContent = b.a3; document.getElementById('b-air-4').textContent = b.a4; document.getElementById('b-air-5').textContent = b.a5;
+        document.getElementById('b-usul-1').textContent = b.u1; document.getElementById('b-usul-2').textContent = b.u2; document.getElementById('b-usul-3').textContent = b.u3; document.getElementById('b-usul-4').textContent = b.u4; document.getElementById('b-usul-5').textContent = b.u5; document.getElementById('b-usul-6').textContent = b.u6; document.getElementById('b-usul-7').textContent = b.u7;
+    }
+    
+    function renderBibitPage() {
+        let box = document.getElementById('m-bibit-list'); box.innerHTML = '';
+        let s = (bibitPage-1)*8; let p = bibitGlobal.slice(s, s+8);
+        p.forEach(x => { box.innerHTML += `<div class="flex justify-between text-xs bg-gray-900 p-1.5 rounded border border-gray-700"><span class="truncate pr-2">${x[0]}</span> <b class="text-green-400">${x[1]}</b></div>`; });
+        if(p.length===0) box.innerHTML = '<div class="text-xs text-gray-500 col-span-2">Tidak ada data</div>';
+    }
+    function nextBibitPage() { if(bibitPage * 8 < bibitGlobal.length) bibitPage++; else bibitPage = 1; renderBibitPage(); }
+
+    function renderGlobalStats() {
+        document.getElementById('stat-jaga').textContent = totalStats.jaga + ' Orang';
+        document.getElementById('stat-semai').textContent = totalStats.persem + ' Lokasi';
+        document.getElementById('stat-pegawai').textContent = totalStats.peg + ' Orang';
+        document.getElementById('stat-juna').textContent = totalStats.juna + ' Lokasi';
+        document.getElementById('stat-hb').textContent = totalStats.hb + ' Titik';
+        document.getElementById('stat-luas').textContent = totalStats.luas.toFixed(2) + ' Ha';
+    }
+
+    let map, markerLayer, geoJsonLayer;
+    let mapDataAggr = [];
+    const cdkCoords = {
+        "CDK Wilayah 1": { lat: -6.6031, lng: 106.8065 }, "CDK Wilayah 2": { lat: -6.5606, lng: 107.4471 },
+        "CDK Wilayah 3": { lat: -6.9056, lng: 106.9833 }, "CDK Wilayah 4": { lat: -6.7444, lng: 107.0621 },
+        "CDK Wilayah 5": { lat: -7.2144, lng: 107.9013 }, "CDK Wilayah 6": { lat: -7.3703, lng: 108.2201 },
+        "CDK Wilayah 7": { lat: -6.9693, lng: 108.5188 }, "CDK Wilayah 8": { lat: -6.9694, lng: 108.5187 },
+        "CDK Wilayah 9": { lat: -6.8355, lng: 107.9077 }, "SPTH": { lat: -6.9327, lng: 107.7711 },
+        "PPPH / PPHH": { lat: -6.7839, lng: 108.6258 }, "TAHURA": { lat: -6.8587, lng: 107.6307 },
+        "Sekretariat": { lat: -6.9380, lng: 107.6719 }
+    };
+    const cdkKabKotaMap = {
+        "CDK Wilayah 1": ["BOGOR", "DEPOK"], "CDK Wilayah 2": ["PURWAKARTA", "SUBANG", "KARAWANG", "BEKASI"],
+        "CDK Wilayah 3": ["SUKABUMI"], "CDK Wilayah 4": ["CIANJUR", "BANDUNG BARAT", "CIMAHI"],
+        "CDK Wilayah 5": ["GARUT", "BANDUNG"], "CDK Wilayah 6": ["TASIKMALAYA"],
+        "CDK Wilayah 7": ["CIAMIS", "BANJAR", "PANGANDARAN"], "CDK Wilayah 8": ["CIREBON", "KUNINGAN", "MAJALENGKA", "INDRAMAYU"],
+        "CDK Wilayah 9": ["SUMEDANG"]
+    };
+
+    function renderMap(data) {
+        if(!map) {
+            map = L.map('map', { zoomControl: false }).setView([-6.9204, 107.6046], 8);
+            L.control.zoom({ position: 'topright' }).addTo(map);
+            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: '&copy; Esri' }).addTo(map);
+            geoJsonLayer = L.layerGroup().addTo(map);
+            markerLayer = L.layerGroup().addTo(map);
+            
+            fetch('../Jawa Barattt.geojson').then(r=>r.json()).then(geo => {
+                let gl = L.geoJSON(geo, {
+                    style: { color: '#1e3a8a', weight: 1, opacity: 0.3, fillOpacity: 0 }
+                }).addTo(geoJsonLayer);
+                geoJsonLayer.gl = gl;
+            }).catch(e => console.log('GeoJSON not found'));
+        }
+        
+        markerLayer.clearLayers();
+        let aggr = {};
+        Object.keys(cdkCoords).forEach(k => {
+            aggr[k] = { id: k, mingguan: 0, bulanan: 0, luas: 0, jaga: 0, persem: 0, peg: 0, juna: 0, hb: 0 };
+        });
+        
+        data.forEach(d => {
+            let k = d.unitKerja;
+            if(aggr[k]) { aggr[k].mingguan += d.isMingguan; aggr[k].bulanan += d.isBulanan; aggr[k].luas += d.luasHektar; aggr[k].hb++; }
+        });
+        
+        rawDataStore.jaga.forEach(r => { let u=normalizeUnitKerja(r['CDK_Tag']); if(aggr[u]) aggr[u].jaga++; });
+        rawDataStore.peg.forEach(r => { let u=normalizeUnitKerja(r['Unit Kerja']); if(aggr[u]) aggr[u].peg++; });
+        rawDataStore.persem.forEach(r => { let u=normalizeUnitKerja(r['Unit Kerja']||r['CDK IV/Bandung Barat']); if(aggr[u]) aggr[u].persem++; });
+        rawDataStore.juna.forEach(r => { let u=normalizeUnitKerja(r['Unit Kerja']); if(aggr[u]) aggr[u].juna++; });
+        
+        mapDataAggr = Object.values(aggr);
         
         mapDataAggr.forEach(loc => {
-            // Circle markers like Figma
-            const marker = L.circleMarker([loc.lat, loc.lng], {
-                radius: 7, fillColor: '#3b82f6', color: '#1e3a8a', weight: 2, opacity: 1, fillOpacity: 0.9
+            if(!cdkCoords[loc.id]) return;
+            const c = cdkCoords[loc.id];
+            const marker = L.circleMarker([c.lat, c.lng], {
+                radius: 8, fillColor: '#3b82f6', color: '#fff', weight: 2, opacity: 1, fillOpacity: 0.9
             }).addTo(markerLayer);
             
-            const tip = `<div style="text-align:center;"><b>${loc.id}</b></div>
-            <div style="font-size:11px; margin-top:4px;">
-            Jumlah_Jaga_Leuweung: ${loc.total}<br>Jumlah_Persemaian: ${loc.mingguan}<br>Data_Pegawai: ${loc.bulanan}<br>Jumlah_Juna_Permanen:${loc.total}<br>Jumlah_Hutan_Binaan:${loc.total}<br>Luasan_Hutan_Binaan:${loc.total}.
+            const tip = `<div style="text-align:center; border-bottom:1px solid #374151; padding-bottom:4px; margin-bottom:4px;"><b>${loc.id}</b></div>
+            <div style="font-size:11px; line-height:1.4;">
+            Jumlah Jaga Leuweung: <b class="text-yellow-400">${loc.jaga}</b><br>
+            Jumlah Persemaian: <b class="text-blue-400">${loc.persem}</b><br>
+            Jumlah Pegawai: <b class="text-green-400">${loc.peg}</b><br>
+            Jumlah Juna Permanen: <b class="text-purple-400">${loc.juna}</b><br>
+            Jumlah Hutan Binaan: <b class="text-orange-400">${loc.hb}</b><br>
+            Luasan Hutan Binaan: <b class="text-orange-400">${loc.luas.toFixed(2)} Ha</b>
             </div>`;
-            marker.bindTooltip(tip, {className: 'bg-gray-800 text-white p-2 rounded shadow-lg'});
+            marker.bindTooltip(tip, {className: 'bg-gray-900 text-white p-3 rounded-lg shadow-xl border border-gray-700'});
             
-            marker.on('click', () => {
-                if(parentWin && typeof parentWin.flyToLocation === 'function') {
-                    if (typeof parentWin.closePimpinanDashboard === 'function') parentWin.closePimpinanDashboard();
-                    parentWin.focus();
-                    parentWin.flyToLocation(loc.lat, loc.lng, loc.id);
+            marker.on('mouseover', () => {
+                if(geoJsonLayer.gl) {
+                    geoJsonLayer.gl.eachLayer(l => {
+                        let kab = (l.feature.properties.KAB_KOTA||"").toUpperCase();
+                        let targets = cdkKabKotaMap[loc.id] || [];
+                        if(targets.some(t => kab.includes(t))) {
+                            l.setStyle({fillOpacity: 0.3, color: '#3b82f6', weight: 2, fillColor: '#3b82f6'});
+                        }
+                    });
+                }
+            });
+            marker.on('mouseout', () => {
+                if(geoJsonLayer.gl) {
+                    geoJsonLayer.gl.eachLayer(l => {
+                        l.setStyle({fillOpacity: 0, color: '#1e3a8a', weight: 1});
+                    });
                 }
             });
         });
     }
 
-    // --- CHART ---
-    let myChart;
-    function initChart() {
+    let cdkChartInst;
+    let currentChartMode = 'mingguan';
+    function setChartPeriod(m) { currentChartMode = m; renderChart(filteredData); }
+    function renderChart(data) {
+        let labels = mapDataAggr.map(d => d.id);
+        let vals = mapDataAggr.map(d => currentChartMode==='mingguan' ? d.mingguan : d.bulanan);
+        let color = currentChartMode==='mingguan' ? '#fcd34d' : '#3b82f6';
+        
+        if(cdkChartInst) cdkChartInst.destroy();
         const ctx = document.getElementById('cdkChart').getContext('2d');
-        const labels = mapDataAggr.map(d => d.id);
-        const dataMingguan = mapDataAggr.map(d => d.mingguan);
-        const dataBulanan = mapDataAggr.map(d => d.bulanan);
-
-        myChart = new Chart(ctx, {
+        cdkChartInst = new Chart(ctx, {
             type: 'bar',
             data: {
                 labels: labels,
-                datasets: [
-                    {
-                        type: 'bar',
-                        label: 'Mingguan',
-                        data: dataMingguan,
-                        backgroundColor: '#fcd34d', // Yellow
-                        borderRadius: 2,
-                        barPercentage: 0.6
-                    },
-                    {
-                        type: 'line',
-                        label: '3 Bulanan',
-                        data: dataBulanan,
-                        borderColor: '#3b82f6', // Blue
-                        backgroundColor: '#3b82f6',
-                        borderWidth: 2,
-                        tension: 0.4,
-                        pointBackgroundColor: '#3b82f6',
-                        pointRadius: 4
-                    }
-                ]
+                datasets: [{
+                    data: vals,
+                    backgroundColor: color,
+                    borderRadius: 4,
+                    barPercentage: 0.6
+                }]
             },
             options: {
                 responsive: true, maintainAspectRatio: false,
@@ -488,70 +984,30 @@
                     y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8b9bb4', font: {size: 10} } },
                     x: { grid: { display: false }, ticks: { color: '#8b9bb4', font: {size: 10}, maxRotation: 45, minRotation: 45 } }
                 },
-                plugins: { legend: { display: false } } // Custom legend in HTML
+                plugins: { legend: { display: false } }
             }
         });
     }
-    
-    function updateChart() {
-        myChart.data.datasets[0].data = mapDataAggr.map(d => d.mingguan);
-        myChart.data.datasets[1].data = mapDataAggr.map(d => d.bulanan);
-        myChart.update();
-    }
 
-    // --- KPI & GLOBALS ---
-    function renderKPI(data = globalData) {
-        let tMingguan = 0, tBulanan = 0, tLuas = 0;
-        let pMap = {}; let cMap = {};
-        
-        data.forEach(d => {
-            tMingguan += d.mingguan;
-            tBulanan += d.linimasa;
-            tLuas += (parseFloat(d.luas) || 0);
-            
-            if(d.mingguan > 0 || d.linimasa > 0) {
-                pMap[d.nama] = (pMap[d.nama] || 0) + d.mingguan + d.linimasa;
-                cMap[d.cdk] = (cMap[d.cdk] || 0) + d.mingguan + d.linimasa;
-            }
-        });
-
-        document.getElementById('kpi-mingguan').textContent = tMingguan;
-        document.getElementById('kpi-bulanan').textContent = tBulanan;
-        
-        document.getElementById('kpi-p-mingguan').textContent = (tMingguan / 1763 * 100).toFixed(1);
-        document.getElementById('kpi-p-bulanan').textContent = (tBulanan / 1763 * 100).toFixed(1);
-        
-        document.getElementById('tb-total-pembina').textContent = data.length;
-        document.getElementById('tb-total-hutan').textContent = data.length; // 1 titik per pembina asumsi
-        document.getElementById('tb-total-luas').textContent = tLuas.toFixed(2) + ' Ha';
-
-        let topP = Object.entries(pMap).sort((a,b)=>b[1]-a[1])[0];
-        let topC = Object.entries(cMap).sort((a,b)=>b[1]-a[1])[0];
-        
-        document.getElementById('kpi-pembina-nama').textContent = topP ? topP[0] : '-';
-        document.getElementById('kpi-pembina-val').textContent = topP ? topP[1] : '0';
-        
-        document.getElementById('kpi-cdk-nama').textContent = topC ? topC[0] : '-';
-        document.getElementById('kpi-cdk-val').textContent = topC ? topC[1] : '0';
-        
-        let tLap = tMingguan + tBulanan;
-        document.getElementById('kpi-p-cdk').textContent = tLap > 0 ? ( (topC ? topC[1] : 0) / tLap * 100 ).toFixed(1) : '0';
-    }
-
-    // --- ACTIVITY FEED (Pagination) ---
     let feedData = [];
     let feedPage = 1;
-    const feedLimit = 5;
-    
-    function renderFeed() {
-        // Sort by mingguan/bulanan presence, simulated timestamp
-        feedData = [...globalData].sort((a,b) => (b.timestamp || 0) - (a.timestamp || 0)).filter(d => d.mingguan > 0 || d.linimasa > 0);
+    const feedLimit = 10;
+    function renderFeed(data) {
+        feedData = [...data].sort((a,b) => {
+            let da = parseDashboardDate(a.tanggalMingguan || a.tanggalBulanan);
+            let db = parseDashboardDate(b.tanggalMingguan || b.tanggalBulanan);
+            return (db ? db.getTime() : 0) - (da ? da.getTime() : 0);
+        }).filter(d => d.isMingguan > 0 || d.isBulanan > 0);
         
+        feedPage = 1;
+        drawFeed();
+    }
+    
+    function drawFeed() {
         const box = document.getElementById('activity-feed');
         box.innerHTML = '';
-        
         if(feedData.length === 0) {
-            box.innerHTML = '<div class="text-xs text-gray-500 p-2">Belum ada aktivitas.</div>';
+            box.innerHTML = '<div class="text-xs text-gray-500 p-4 text-center">Belum ada aktivitas.</div>';
             return;
         }
 
@@ -560,139 +1016,204 @@
         
         for(let i=start; i<end; i++) {
             const d = feedData[i];
-            const type = d.mingguan > 0 ? 'Laporan Mingguan' : 'Laporan Bulanan';
-            const now = new Date();
-            const tanggalSekarang = now.toLocaleDateString('id-ID', {
-                day: '2-digit',
-                month: 'long',
-                year: 'numeric',
-                }) 
-                const jam= now.toLocaleTimeString('id-ID', {
-                hour: '2-digit',
-                minute: '2-digit'
-            });
-            const html = `
-                <div class="flex gap-3 bg-gray-800 p-3 rounded-lg border-l-4 border-green-500">
-                    <div class="w-10 h-10 rounded overflow-hidden bg-gray-700 flex-shrink-0">${d.foto? `<img src="${d.foto}" class="w-full h-full object-cover" alt="${d.nama}">`: `<div class="w-full h-full flex items-center justify-center text-green-400 font-bold">${d.nama.charAt(0)}</div>`}</div>
-                    <div class="flex-1">
-                    <div class="flex justify-between items-start">
-                    <div class="text-sm font-semibold">${d.nama}</div>
-                    <div class="flex items-center gap-2">
-                        <span class="text-[9px] text-gray-400">${tanggalSekarang}</span>
-                        <span class="text-[9px] text-green-400">${jam}</span>
+            let dateStr = "Tdk diketahui"; let timeStr = "";
+            let rawDt = d.tanggalMingguan || d.tanggalBulanan;
+            if(rawDt) {
+                let dt = parseDashboardDate(rawDt);
+                if (dt) {
+                    dateStr = dt.toLocaleDateString('id-ID', {day:'2-digit', month:'long', year:'numeric'});
+                    timeStr = dt.toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'});
+                }
+            }
+            let type = d.isMingguan ? 'Laporan Mingguan' : 'Laporan 3 Bulanan';
+            
+            box.innerHTML += `
+                <div class="flex gap-3 bg-gray-800 p-3 rounded border-l-4 border-green-500 hover:bg-gray-700 transition">
+                    <div class="w-12 h-12 rounded overflow-hidden bg-gray-900 flex-shrink-0">
+                        ${d.foto && d.foto.startsWith('http') ? `<img src="${d.foto}" class="w-full h-full object-cover" onerror="this.remove()">` : `<div class="w-full h-full flex items-center justify-center text-green-400 font-bold text-lg">${d.pembina.charAt(0)}</div>`}
                     </div>
-                </div>
-                        <div class="text-xs text-green-400 font-medium">${type}</div>
-                       <div class="flex justify-between items-center gap-2">
-                <div class="text-xxs text-gray-400 truncate">
-                    ${d.cdk} - ${d.lokasi}
-                </div>
-                <button
-                    type="button"
-                    class="flex-shrink-0 text-[9px] text-white bg-green-600 hover:bg-green-500 rounded-md px-3 py-1">
-                    Lihat Selengkapnya
-                        </button>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex justify-between items-start mb-1">
+                            <div class="text-sm font-semibold truncate text-white" title="${d.pembina}">${d.pembina}</div>
+                            <div class="flex items-center gap-2 whitespace-nowrap">
+                                <span class="text-[10px] text-gray-400">${dateStr}</span>
+                                <span class="text-[10px] text-green-400">${timeStr}</span>
+                            </div>
+                        </div>
+                        <div class="text-[11px] text-green-400 font-medium mb-1">${type}</div>
+                        <div class="flex justify-between items-end gap-2">
+                            <div class="text-xxs text-gray-400 flex flex-col truncate">
+                                <span class="truncate">${d.lokasi}</span>
+                                <span class="text-blue-300 font-medium mt-0.5">${d.unitKerja}</span>
+                            </div>
+                            <button onclick="showDetail(${d.id})" class="flex-shrink-0 text-[10px] text-white bg-green-600 hover:bg-green-500 rounded px-2 py-1 shadow">Lihat Selengkapnya</button>
+                        </div>
                     </div>
-                </div>
-            </div>`;
-            box.innerHTML += html;
+                </div>`;
         }
-        
         document.getElementById('activity-page').textContent = `${feedPage} / ${Math.max(1, Math.ceil(feedData.length/feedLimit))}`;
     }
-    
-    function prevActivity() { if(feedPage > 1) { feedPage--; renderFeed(); } }
-    function nextActivity() { if(feedPage < Math.ceil(feedData.length/feedLimit)) { feedPage++; renderFeed(); } }
+    function prevActivity() { if(feedPage > 1) { feedPage--; drawFeed(); } }
+    function nextActivity() { if(feedPage < Math.ceil(feedData.length/feedLimit)) { feedPage++; drawFeed(); } }
 
-    // --- TABLE (Pagination & Filters) ---
-    let tableData = [];
-    let tablePage = 1;
-    const tableLimit = 50;
-
-    function populateFilters() {
-        const cdkF = document.getElementById('map-filter-cdk');
-        cdkCoords.forEach(c => {
-            const o = document.createElement('option'); o.value = c.id; o.textContent = c.id; cdkF.appendChild(o);
-        });
-        tableData = [...globalData];
-    }
-    
-    function applyGlobalFilter() {
-        const cdk = document.getElementById('map-filter-cdk').value;
-        let filtered = globalData;
-        if(cdk !== 'all') filtered = filtered.filter(d => d.cdk.toLowerCase().includes(cdk.toLowerCase()));
+    function showDetail(id) {
+        let d = normalizedHb.find(x => x.id === id);
+        if(!d) return;
         
-        tableData = [...filtered];
-        applyTableFilter(); // also applies sort
+        let c = document.getElementById('mdl-content');
+        let rawDt = d.tanggalMingguan || d.tanggalBulanan || '';
+        const detailDate = parseDashboardDate(rawDt);
+        document.getElementById('mdl-date').textContent = detailDate ? detailDate.toLocaleString('id-ID') : 'Tanggal tidak tersedia';
         
-        processAggr(filtered);
-        drawMarkers();
-        updateChart();
-        renderKPI(filtered);
-    }
-    
-    function resetGlobalFilter() {
-        document.getElementById('map-filter-cdk').value = 'all';
-        document.getElementById('map-filter-jabatan').value = 'all';
-        document.getElementById('map-filter-tgl').value = '';
-        applyGlobalFilter();
+        c.innerHTML = `
+            <div class="grid grid-cols-2 gap-4 text-sm mb-4">
+                <div><label class="text-xs text-gray-500">Nama Pembina</label><div class="font-medium text-white">${d.pembina}</div></div>
+                <div><label class="text-xs text-gray-500">Unit Kerja</label><div class="font-medium text-white">${d.unitKerja}</div></div>
+                <div><label class="text-xs text-gray-500">Jabatan</label><div class="font-medium text-white">${d.jabatan}</div></div>
+                <div><label class="text-xs text-gray-500">Lokasi</label><div class="font-medium text-white">${d.lokasi}</div></div>
+                <div><label class="text-xs text-gray-500">Luas Hutan Binaan</label><div class="font-medium text-white">${d.luasHektar} Ha</div></div>
+            </div>
+            
+            <div class="border-t border-gray-800 pt-4 mt-4">
+                <h4 class="font-semibold text-green-400 mb-2">Data Laporan Mingguan</h4>
+                <div class="grid grid-cols-2 gap-4 text-xs">
+                    <div><label class="text-gray-500">Tutupan Lahan</label><div>${d.tutupan||'Tidak tersedia'}</div></div>
+                    <div><label class="text-gray-500">Kegiatan Vegetatif</label><div>${d.veg||'Tidak tersedia'}</div></div>
+                    <div><label class="text-gray-500">Kondisi Tanaman</label><div>${d.kondisiTanaman||'Tidak tersedia'}</div></div>
+                    <div><label class="text-gray-500">Monitoring</label><div>${d.monitoring||'Tidak tersedia'}</div></div>
+                    <div><label class="text-gray-500">Ada Gangguan</label><div>${d.gangguan||'Tidak tersedia'}</div></div>
+                    <div><label class="text-gray-500">Total Bibit</label><div>${d.bibitTotal||'0'}</div></div>
+                </div>
+                ${d.foto && d.foto.startsWith('http') ? `<img src="${d.foto}" class="mt-4 rounded max-h-48 object-cover border border-gray-700">` : ''}
+            </div>
+            
+            <div class="border-t border-gray-800 pt-4 mt-4">
+                <h4 class="font-semibold text-blue-400 mb-2">Data Laporan 3 Bulanan</h4>
+                <div class="grid grid-cols-2 gap-4 text-xs">
+                    <div><label class="text-gray-500">Keragaman Tanaman</label><div>${d.bKeragaman||'Tidak tersedia'}</div></div>
+                    <div><label class="text-gray-500">Kerapatan</label><div>${d.bKerapatan||'Tidak tersedia'}</div></div>
+                    <div><label class="text-gray-500">Kondisi Hutan</label><div>${d.bKondisiHutan||'Tidak tersedia'}</div></div>
+                    <div><label class="text-gray-500">Kelas Lereng</label><div>${d.bLereng||'Tidak tersedia'}</div></div>
+                    <div><label class="text-gray-500">Sumber Air</label><div>${d.bAir||'Tidak tersedia'}</div></div>
+                    <div><label class="text-gray-500">Usulan Lanjutan</label><div>${d.bUsulan||'Tidak tersedia'}</div></div>
+                </div>
+            </div>
+        `;
+        document.getElementById('modal-detail').classList.remove('hidden');
     }
 
+    let tableData = []; let tablePage = 1; const tableLimit = 20; let sortCol = 'mingguan'; let sortDesc = true;
     function applyTableFilter() {
-        const sort = document.getElementById('table-filter-sort').value;
-        if(sort === 'az') tableData.sort((a,b) => a.nama.localeCompare(b.nama));
-        if(sort === 'za') tableData.sort((a,b) => b.nama.localeCompare(a.nama));
-        if(sort === 'high') tableData.sort((a,b) => (b.mingguan+b.linimasa) - (a.mingguan+a.linimasa));
-        if(sort === 'low') tableData.sort((a,b) => (a.mingguan+a.linimasa) - (b.mingguan+b.linimasa));
+        let uFilter = document.getElementById('table-filter-unit').value;
+        if(currentUserUnit) uFilter = currentUserUnit;
         
-        tablePage = 1;
-        renderTable();
+        let tData = normalizedHb;
+        if(uFilter !== 'all') tData = tData.filter(d => d.unitKerja === uFilter);
+        
+        let groups = {};
+        tData.forEach(d => {
+            if(!groups[d.pembina]) groups[d.pembina] = { nama: d.pembina, unit: d.unitKerja, lokasi: d.lokasi, luas: 0, m: 0, b: 0 };
+            groups[d.pembina].m += d.isMingguan; groups[d.pembina].b += d.isBulanan; groups[d.pembina].luas += d.luasHektar;
+        });
+        tableData = Object.values(groups);
+        
+        let tM = 0, tB = 0;
+        tableData.forEach(g => { tM += g.m; tB += g.b; });
+        document.getElementById('tb-total-mingguan').textContent = tM; document.getElementById('tb-total-bulanan').textContent = tB;
+        
+        doSort();
     }
-
-    function renderTable() {
-        const tbody = document.getElementById('pembina-tbody');
-        let html = '';
-        
-        const start = (tablePage - 1) * tableLimit;
-        const end = Math.min(start + tableLimit, tableData.length);
+    
+    function sortTable(col) {
+        if(sortCol === col) sortDesc = !sortDesc; else { sortCol = col; sortDesc = true; }
+        doSort();
+    }
+    
+    function doSort() {
+        tableData.sort((A, B) => {
+            let res = 0;
+            if(sortCol === 'nama') res = A.nama.localeCompare(B.nama);
+            else if(sortCol === 'unit') res = A.unit.localeCompare(B.unit);
+            else if(sortCol === 'lokasi') res = A.lokasi.localeCompare(B.lokasi);
+            else if(sortCol === 'luas') res = A.luas - B.luas;
+            else if(sortCol === 'mingguan' || sortCol === 'bulanan') {
+                let vA = sortCol==='mingguan' ? A.m : A.b; let vB = sortCol==='mingguan' ? B.m : B.b;
+                res = vA - vB; if(res === 0) res = A.luas - B.luas;
+            }
+            return sortDesc ? -res : res;
+        });
+        tablePage = 1; drawTable();
+    }
+    
+    function drawTable() {
+        const tbody = document.getElementById('pembina-tbody'); let html = '';
+        const start = (tablePage - 1) * tableLimit; const end = Math.min(start + tableLimit, tableData.length);
         
         for (let i = start; i < end; i++) {
             let p = tableData[i];
-            p.no = i + 1; // fix number
-            html += `
-                <tr>
-                    <td>${p.no}</td>
-                    <td class="font-medium">${p.nama || '-'}</td>
-                    <td>${p.cdk || '-'}</td>
-                    <td>${p.lokasi || '-'}</td>
-                    <td>${p.luas || '0'}</td>
-                    <td class="text-green-400 font-bold">${p.mingguan || '0'}</td>
-                    <td class="text-blue-400 font-bold">${p.linimasa || '0'}</td>
-                </tr>
-            `;
+            html += `<tr><td>${i+1}</td><td class="font-medium">${p.nama}</td><td>${p.unit}</td><td><span class="truncate block max-w-[150px]" title="${p.lokasi}">${p.lokasi}</span></td><td class="text-right pr-4">${p.luas.toFixed(2)}</td><td class="text-green-400 font-bold text-center">${p.m}</td><td class="text-blue-400 font-bold text-center">${p.b}</td></tr>`;
         }
         if(tableData.length === 0) html = '<tr><td colspan="7" class="text-center text-gray-500 py-4">Tidak ada data.</td></tr>';
         
         tbody.innerHTML = html;
-        document.getElementById('table-info').textContent = tableData.length ? `Menampilkan ${start+1} - ${end} dari total ${tableData.length} data` : `Menampilkan 0 - 0 dari 0 data`;
-        document.getElementById('table-page').textContent = `${tablePage} / ${Math.max(1, Math.ceil(tableData.length/tableLimit))}`;
+        document.getElementById('table-info').textContent = `Menampilkan ${tableData.length>0?start+1:0} - ${end} dari ${tableData.length} data`;
+        
+        let tp = Math.max(1, Math.ceil(tableData.length/tableLimit)); let dots = '';
+        if(tp <= 5) { for(let k=1;k<=tp;k++) dots += `<button onclick="tablePage=${k};drawTable()" class="px-2 py-1 rounded ${k===tablePage?'bg-green-600':'bg-gray-800'} text-xs">${k}</button>`; } 
+        else { dots = `<span class="px-2 py-1 text-xs">${tablePage} / ${tp}</span>`; }
+        document.getElementById('table-page-dots').innerHTML = dots;
     }
-
-    function prevTablePage() { if(tablePage > 1) { tablePage--; renderTable(); } }
-    function nextTablePage() { if(tablePage < Math.ceil(tableData.length/tableLimit)) { tablePage++; renderTable(); } }
+    function prevTablePage() { if(tablePage > 1) { tablePage--; drawTable(); } }
+    function nextTablePage() { if(tablePage < Math.ceil(tableData.length/tableLimit)) { tablePage++; drawTable(); } }
 
     function exportExcel() {
         if(typeof XLSX === 'undefined') return alert("Library SheetJS (XLSX) gagal dimuat.");
-        const ws = XLSX.utils.json_to_sheet(tableData.map(t => ({
-            "NO": t.no, "Nama Pembina": t.nama, "CDK/Instansi": t.cdk, "Lokasi": t.lokasi, "Luas (Ha)": t.luas, "Laporan Mingguan": t.mingguan, "Laporan Linimasa": t.linimasa
+        const ws = XLSX.utils.json_to_sheet(tableData.map((t,i) => ({
+            "No": i+1, "Nama Pembina": t.nama, "Unit Kerja": t.unit, "Lokasi": t.lokasi, "Luas Hutan Binaan (Ha)": t.luas, "Total Laporan Mingguan": t.m, "Total Laporan 3 Bulanan": t.b
         })));
+        const kpi = XLSX.utils.json_to_sheet([
+            { "Indikator": "Total Titik Hutan Binaan", "Nilai": totalStats.hb },
+            { "Indikator": "Total Luas Hutan Binaan (Ha)", "Nilai": totalStats.luas },
+            { "Indikator": "Titik dengan Laporan Mingguan", "Nilai": filteredData.filter(d => d.isMingguan).length },
+            { "Indikator": "Titik dengan Laporan 3 Bulanan", "Nilai": filteredData.filter(d => d.isBulanan).length },
+            { "Indikator": "Waktu Sinkronisasi", "Nilai": new Date().toLocaleString('id-ID') }
+        ]);
         const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, kpi, "KPI Dashboard");
         XLSX.utils.book_append_sheet(wb, ws, "Data Pembina");
-        XLSX.writeFile(wb, 'Rekap_Data_Pembina_GeoHutan.xlsx');
+        XLSX.writeFile(wb, 'Rekap_KPI_dan_Pembina_GeoHutan.xlsx');
     }
 
-    // BOOTSTRAP
-    window.onload = initData;
+    window.onload = function() {
+        repairDashboardText();
+        loadData();
+    };
 </script>
-</body>
+
+    <script>
+        function toggleProfileDropdown(event) {
+            if (event) event.stopPropagation();
+            var drop = document.getElementById('profile-dropdown');
+            if (drop) { drop.classList.toggle('hidden'); }
+        }
+        document.addEventListener('click', function(e) {
+            var profileDiv = document.getElementById('dashboard-profile');
+            if (profileDiv && !profileDiv.contains(e.target)) {
+                var drop = document.getElementById('profile-dropdown');
+                if (drop && !drop.classList.contains('hidden')) {
+                    drop.classList.add('hidden');
+                }
+            }
+        });
+        function toggleSidebar() {
+            var sb = document.getElementById('sidebar');
+        if (sb) sb.classList.toggle('open');
+        }
+        window.addEventListener('message', function(event) {
+            if (event.origin !== window.location.origin || !event.data || event.data.type !== 'geohutan-dashboard-refresh') return;
+            loadData();
+        });
+        if (window.parent !== window) setInterval(loadData, 60000);
+    </script>
+    </body>
 </html>

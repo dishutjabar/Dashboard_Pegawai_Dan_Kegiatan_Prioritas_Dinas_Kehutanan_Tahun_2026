@@ -658,9 +658,17 @@ function unlockDashboard(user) {
   if (portal) portal.classList.add("hidden");
   document.body.classList.add("auth-unlocked");
   updateAuthUserUI(user);
-  if (typeof fetchSpatialFileList === "function") fetchSpatialFileList();
-  ensureBackendDplColumns();
-  if (typeof checkMonthlyReportedNotification === "function") checkMonthlyReportedNotification();
+  // Give the authenticated map one frame to paint, then start independent data
+  // requests together. This makes uploaded polygons and the reminder available
+  // immediately without holding the login transition hostage.
+  var loadSessionData = function() {
+    if (typeof fetchSpatialFileList === "function") fetchSpatialFileList({ immediate: true });
+    if (typeof fetchPolygonFeatures === "function") fetchPolygonFeatures();
+    if (typeof checkMonthlyReportedNotification === "function") checkMonthlyReportedNotification();
+    ensureBackendDplColumns();
+  };
+  if (window.requestAnimationFrame) window.requestAnimationFrame(loadSessionData);
+  else setTimeout(loadSessionData, 0);
 }
 
 function lockDashboard(message) {
@@ -755,6 +763,124 @@ function toggleReportMenu(event) {
 function closeReportMenu() {
   var menu = document.getElementById("report-menu");
   if (menu) menu.classList.remove("open");
+}
+
+function openPimpinanDashboard() {
+  closeProfileMenu();
+  closeReportMenu();
+  var overlay = document.getElementById('pimpinan-dashboard-overlay');
+  var frame = document.getElementById('pimpinan-dashboard-frame');
+  if (!overlay || !frame) return;
+  overlay.classList.add('open');
+  overlay.setAttribute('aria-hidden', 'false');
+  if (frame.getAttribute('src') === 'about:blank') {
+    frame.setAttribute('src', 'dashboard/dashboard-pimpinan.html?embedded=1');
+  } else if (frame.contentWindow) {
+    frame.contentWindow.postMessage({ type: 'geohutan-dashboard-refresh' }, window.location.origin);
+  }
+  refreshPimpinanDashboardWeeklyReports();
+}
+
+function closePimpinanDashboard() {
+  var overlay = document.getElementById('pimpinan-dashboard-overlay');
+  if (!overlay) return;
+  overlay.classList.remove('open');
+  overlay.setAttribute('aria-hidden', 'true');
+}
+
+function getPimpinanDashboardMedia(row) {
+  var best = { foto: '', tanggal: '', year: String(new Date().getFullYear()), timestamp: 0 };
+  (PHOTO_YEARS || []).forEach(function(year) {
+    var photos = getRowPhotos(row, year);
+    var dates = getRowDates(row, year);
+    photos.forEach(function(photo, index) {
+      var timestamp = parseExifDate(dates[index] || '') || 0;
+      if (!best.foto || timestamp >= best.timestamp) {
+        best = { foto: photo, tanggal: dates[index] || '', year: String(year), timestamp: timestamp };
+      }
+    });
+  });
+  return best;
+}
+
+function getPimpinanDashboardSnapshot() {
+  var sources = (DATA && DATA.pegawaiBinaan ? DATA.pegawaiBinaan : []);
+  var weeklyReports = (window.WEEKLY_REPORT_STATE && WEEKLY_REPORT_STATE.monitorRows ? WEEKLY_REPORT_STATE.monitorRows : []);
+  if (!weeklyReports.length && typeof buildWeeklyReportRowsFromLocalData === 'function') weeklyReports = buildWeeklyReportRowsFromLocalData();
+  var weeklyBySource = {};
+  weeklyReports.forEach(function(report) {
+    if (String((report || {}).category || '').toLowerCase() !== 'pegawaibinaanformatsistem') return;
+    var source = report._sourceRow || null;
+    var key = source ? getBinaanSourceKey(source) : '';
+    if (!key) return;
+    var current = weeklyBySource[key];
+    var stamp = parseExifDate(report.waktu || report.updatedAt || report.fotoTanggal || '') || 0;
+    var currentStamp = current ? (parseExifDate(current.waktu || current.updatedAt || current.fotoTanggal || '') || 0) : -1;
+    if (!current || stamp >= currentStamp) weeklyBySource[key] = report;
+  });
+  var currentUser = typeof getStoredAuthUser === 'function' ? getStoredAuthUser() : null;
+  return {
+    generatedAt: new Date().toISOString(),
+    user: currentUser || {},
+    totals: {
+      jaga: (DATA.pjl || []).length,
+      persemaian: (DATA.persemaian || []).length,
+      pegawai: (DATA.pegawai || []).length,
+      juna: (DATA.jumat || []).length
+    },
+    sources: sources.map(function(row, index) {
+      var coords = typeof getPhotoCoords === 'function' ? getPhotoCoords(row) : {};
+      var sourceKey = typeof getBinaanSourceKey === 'function' ? getBinaanSourceKey(row) : '';
+      var media = getPimpinanDashboardMedia(row);
+      var year = media.year;
+      var weeklyReport = weeklyBySource[sourceKey] || null;
+      return {
+        id: row.ID || row.featureId || row._row_idx || index + 1,
+        unit: typeof getReportRowUnit === 'function' ? getReportRowUnit(row) : '',
+        jabatan: typeof getBinaanField === 'function' ? getBinaanField(row, 'jabatan') : (row.Jabatan || ''),
+        pembina: typeof getReportRowPerson === 'function' ? getReportRowPerson(row) : '',
+        kegiatan: typeof getReportRowKegiatan === 'function' ? getReportRowKegiatan(row) : '',
+        lokasi: typeof getWeeklyLocationLabel === 'function' ? getWeeklyLocationLabel(row, 'pegawaiBinaan') : '',
+        luas: typeof getBinaanLuas === 'function' ? getBinaanLuas(row) : 0,
+        lat: coords && coords.lat,
+        lng: coords && coords.lng,
+        mingguan: !!weeklyReport || (typeof sourceHasWeeklyReport === 'function' && sourceHasWeeklyReport(row)),
+        bulanan: typeof sourceHasMonthlyPhoto === 'function' && sourceHasMonthlyPhoto(row),
+        foto: (weeklyReport && weeklyReport.fotoUrl ? normalizeImageUrl(weeklyReport.fotoUrl) : media.foto) || '',
+        tanggalFoto: media.tanggal || '',
+        tanggalMingguan: weeklyReport ? (weeklyReport.waktu || weeklyReport.updatedAt || weeklyReport.fotoTanggal || '') : '',
+        laporanMingguan: weeklyReport || {},
+        tutupan: getYearlyBinaanField(row, 'Tutupan', year),
+        jenis: getYearlyBinaanField(row, 'Jenis', year),
+        kerapatan: getYearlyBinaanField(row, 'Kerapatan', year),
+        lereng: getYearlyBinaanField(row, 'Lereng', year),
+        ekosistem: getYearlyBinaanField(row, 'Ekosistem', year),
+        usulan: getYearlyBinaanField(row, 'Usulan', year),
+        karbon: getYearlyBinaanField(row, 'CO2e', year)
+      };
+    })
+  };
+}
+
+function refreshPimpinanDashboardWeeklyReports() {
+  if (!window.GAS_WEB_APP_URL || !window.WEEKLY_REPORT_STATE || WEEKLY_REPORT_STATE.pimpinanRefreshLoading) return;
+  WEEKLY_REPORT_STATE.pimpinanRefreshLoading = true;
+  var url = GAS_WEB_APP_URL + '?action=getAllWeeklyReports&refresh=1';
+  fetch(appendAuthParam(url)).then(function(res) { return res.json(); }).then(function(data) {
+    if (!data.success) throw new Error(data.error || 'Gagal memuat laporan mingguan.');
+    return enrichWeeklyMonitorRowsAsync(data.reports || []);
+  }).then(function(rows) {
+    WEEKLY_REPORT_STATE.monitorRows = rows;
+    WEEKLY_REPORT_STATE.monitorRowsType = 'weekly';
+    WEEKLY_REPORT_STATE.weeklyMonitorFetchedAt = Date.now();
+    invalidateReportComplianceCache();
+    var frame = document.getElementById('pimpinan-dashboard-frame');
+    if (frame && frame.contentWindow) frame.contentWindow.postMessage({ type: 'geohutan-dashboard-refresh' }, window.location.origin);
+  }).catch(function(err) {
+    console.warn('Sinkronisasi laporan mingguan dashboard:', err);
+  }).finally(function() {
+    WEEKLY_REPORT_STATE.pimpinanRefreshLoading = false;
+  });
 }
 
 function submitLogin(event) {
@@ -1155,6 +1281,7 @@ var SPATIAL_LIST_PAGE_SIZE = 10;
 var SPATIAL_LIST_QUERY = '';
 var SPATIAL_FETCH_CONCURRENCY = 4;
 var SPATIAL_LOAD_QUEUE = null;
+var SPATIAL_FILES_REQUEST = null;
 var SPATIAL_MAP_MOVE_BOUND = false;
 var SPATIAL_GEOJSON_MEM = {}; // fileId -> geojson (session cache)
 var SHP_SIDECAR_EXTS = ['shp','shx','dbf','prj','cpg','sbn','sbx','qix','xml'];
@@ -1783,7 +1910,7 @@ function scheduleSpatialPolygonLoad(delay) {
   clearTimeout(SPATIAL_LOAD_QUEUE);
   SPATIAL_LOAD_QUEUE = setTimeout(function() {
     if (SPATIAL_ENABLED) renderSpatialPolygons();
-  }, delay || 200);
+  }, typeof delay === 'number' ? delay : 200);
 }
 
 function bindSpatialMapEvents() {
@@ -2147,19 +2274,21 @@ function spatialFileListSearch(val) {
   updateSpatialFileCount();
 }
 
-function fetchSpatialFileList() {
+function fetchSpatialFileList(options) {
+  options = options || {};
   var listEl = document.getElementById('spatial-file-list');
   var countEl = document.getElementById('sp-file-count');
   if (!getAuthToken()) {
     if (listEl) listEl.innerHTML = '<div class="sp-file-list-empty">Login diperlukan untuk memuat daftar polygon.</div>';
     if (countEl) countEl.textContent = '';
-    return;
+    return Promise.resolve([]);
   }
   if (!GAS_WEB_APP_URL || GAS_WEB_APP_URL.indexOf('script.google.com') === -1) {
     if (listEl) listEl.innerHTML = '<div class="sp-file-list-error">Backend GAS belum dikonfigurasi.</div>';
-    return;
+    return Promise.resolve([]);
   }
-  fetch(appendAuthParam(GAS_WEB_APP_URL + '?action=getSpatialFiles'))
+  if (SPATIAL_FILES_REQUEST) return SPATIAL_FILES_REQUEST;
+  var request = fetch(appendAuthParam(GAS_WEB_APP_URL + '?action=getSpatialFiles'))
     .then(function(r) { return r.json(); })
     .then(function(res) {
       if (!res.success) { if (listEl) listEl.innerHTML = '<div class="sp-file-list-error">Gagal memuat: ' + (res.error||'') + '</div>'; return; }
@@ -2180,9 +2309,29 @@ function fetchSpatialFileList() {
       SPATIAL_FILES_CACHE = files;
       renderSpatialFileList(files);
       updateSpatialFileCount();
-      scheduleSpatialPolygonLoad(150);
+      if (files.length) {
+        var spatialToggle = document.getElementById('toggle-spatial');
+        if (spatialToggle && !spatialToggle.checked) {
+          spatialToggle.checked = true;
+          SPATIAL_ENABLED = true;
+        }
+      }
+      bindSpatialMapEvents();
+      scheduleSpatialPolygonLoad(options.immediate ? 0 : 150);
+      return files;
     })
-    .catch(function(err) { if (listEl) listEl.innerHTML = '<div class="sp-file-list-error">Gagal terhubung ke backend.</div>'; });
+    .catch(function(err) {
+      if (listEl) listEl.innerHTML = '<div class="sp-file-list-error">Gagal terhubung ke backend.</div>';
+      return [];
+    });
+  SPATIAL_FILES_REQUEST = request.then(function(files) {
+    SPATIAL_FILES_REQUEST = null;
+    return files || [];
+  }, function(err) {
+    SPATIAL_FILES_REQUEST = null;
+    throw err;
+  });
+  return SPATIAL_FILES_REQUEST;
 }
 
 /* Render daftar file di modal (scroll + pagination) */
@@ -2426,24 +2575,7 @@ function hideSpatialProgress() {
 /* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Auto-fetch saat halaman selesai dimuat ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */
 function initSpatialUploadSystem_() {
   if (!getAuthToken()) return;
-  if (GAS_WEB_APP_URL && GAS_WEB_APP_URL.indexOf('script.google.com') !== -1) {
-    fetch(appendAuthParam(GAS_WEB_APP_URL + '?action=getSpatialFiles'))
-      .then(function(r) { return r.json(); })
-      .then(function(res) {
-        if (res.success && res.files) {
-          res.files.forEach(function(f) {
-            f.bbox = normalizeSpatialBBox(f.bbox) || getSpatialBBoxFromLS(f.fileId);
-          });
-          SPATIAL_FILES_CACHE = res.files;
-          if (res.files.length) {
-            var toggle = document.getElementById('toggle-spatial');
-            if (toggle && !toggle.checked) { toggle.checked = true; SPATIAL_ENABLED = true; }
-          }
-          bindSpatialMapEvents();
-          scheduleSpatialPolygonLoad(800);
-        }
-      }).catch(function() {});
-  }
+  if (typeof fetchSpatialFileList === 'function') fetchSpatialFileList();
 }
 
 
@@ -3011,6 +3143,16 @@ function getBinaanField(row, field) {
     nip: ['NIP', 'Nip']
   };
   return getSheetValue(row, aliases[field] || [field]);
+}
+
+function getYearlyBinaanField(row, base, year) {
+  return getSheetValue(row, [
+    base + '_' + year,
+    base + ' ' + year,
+    base + '-' + year,
+    base,
+    String(base).toLowerCase() + '_' + year
+  ]);
 }
 
 function normalizeBinaanRow(row) {
@@ -3919,6 +4061,7 @@ function finishLoadingSequence() {
   if (loaderText) loaderText.textContent = 'Memuat GeoHutan Jabar... 100%';
   fillDropdown(); schedRender();
   applyCurrentUserRoleDefaults(getCurrentAuthUser());
+  if (typeof checkMonthlyReportedNotification === 'function') checkMonthlyReportedNotification();
   hydrateDplForVisibleRows();
   updateMapDplReadout();
   setTimeout(function() {
@@ -7297,54 +7440,99 @@ function buildDetailKV(label, value) {
 }
 
 function openWeeklyDetailModal(rep) {
-  var modal = document.getElementById('weekly-detail-modal');
-  var body = document.getElementById('weekly-detail-body');
-  if (!modal || !body || !rep) return;
-  WEEKLY_REPORT_STATE.currentDetailReport = rep;
-  var coords = getPhotoCoords(WEEKLY_REPORT_STATE.row || PHOTO_GALLERY.row || {});
-  var coordLabel = rep.koordinat || ((coords.lat && coords.lng) ? coordText(coords.lat, coords.lng) : '-');
-  var photoHtml = rep.fotoUrl ? '<button type="button" class="weekly-detail-photo" onclick="previewCurrentWeeklyDetailPhoto()"><img src="' + normalizeImageUrl(rep.fotoUrl) + '" alt="Foto laporan mingguan" onerror="handleDriveImageError(this)"><span>Lihat Foto</span></button>' :
-    '<div class="weekly-detail-no-photo">Foto belum tersedia</div>';
-  body.innerHTML = '<div class="weekly-detail-hero">' +
-      '<div><span>Laporan Mingguan</span><h3>' + escapeHtml(rep.kategoriLabel || rep.category || 'Kegiatan') + '</h3><p>' + escapeHtml(rep.lokasi || rep.nama || '-') + '</p></div>' +
-      '<div class="weekly-detail-date">' + escapeHtml(formatDateIndo(rep.waktu) || '-') + '</div>' +
-    '</div>' +
-    '<div class="weekly-detail-layout">' +
-      '<div class="weekly-detail-main">' +
-        '<div class="weekly-detail-grid">' +
-          buildDetailKV('Nama Pegawai/Pembina', rep.pelaksana || rep.pembina || rep.namaPegawai || '-') +
-          buildDetailKV('Jabatan Pegawai', rep.jabatan || '-') +
-          buildDetailKV('Unit CDK/UPTD', rep.unit || '-') +
-          buildDetailKV('Luas Wilayah Binaan', rep.luas || rep.luasHa || '-') +
-          buildDetailKV('Koordinat', coordLabel) +
-          buildDetailKV('Waktu Foto', formatDateIndo(rep.fotoTanggal) || '-') +
-        '</div>' +
-        '<h4>Isi Laporan</h4>' +
-        '<div class="weekly-detail-grid">' +
-          buildDetailKV('Kondisi Tutupan Lahan', rep.tutupan || '-') +
-          buildDetailKV('Kegiatan Vegetatif', rep.kegiatanVegetatif || '-') +
-          buildDetailKV('Kondisi Tanaman', rep.kondisiTanaman || '-') +
-          buildDetailKV('Kegiatan Monitoring', rep.kegiatanMonitoring || '-') +
-          buildDetailKV('Jenis/Jumlah Bibit', rep.jenisJumlahBibit || '-') +
-          buildDetailKV('Total Bibit', rep.totalBibit || '0') +
-          buildDetailKV('Tinggi Tanaman (cm)', rep.tinggiTanaman || '-') +
-          buildDetailKV('Sumber Bibit', rep.sumberBibit || '-') +
-          buildDetailKV('Kebutuhan Bibit Mencukupi', rep.kebutuhanBibitCukup || '-') +
-          buildDetailKV('Kekurangan Jenis/Jumlah Bibit', String(rep.kebutuhanBibitCukup || '').toLowerCase() === 'tidak' ? (rep.kekuranganJenisJumlahBibit || '-') : '-') +
-          buildDetailKV('Kekurangan Total Bibit', String(rep.kebutuhanBibitCukup || '').toLowerCase() === 'tidak' ? (rep.kekuranganTotalBibit || '0') : '-') +
-          buildDetailKV('Kekurangan Tinggi Tanaman (cm)', String(rep.kebutuhanBibitCukup || '').toLowerCase() === 'tidak' ? (rep.kekuranganTinggiTanaman || '-') : '-') +
-          buildDetailKV('Kekurangan Sumber Bibit', String(rep.kebutuhanBibitCukup || '').toLowerCase() === 'tidak' ? (rep.kekuranganSumberBibit || '-') : '-') +
-          buildDetailKV('Ada Gangguan', rep.adaGangguan || '-') +
-          buildDetailKV('Jenis Gangguan', String(rep.adaGangguan || '').toLowerCase() === 'tidak' ? '-' : (rep.jenisGangguan || '-')) +
-        '</div>' +
-        '<div class="weekly-detail-text"><span>Uraian Hasil Kegiatan</span><p>' + escapeHtml(rep.uraian || '-') + '</p></div>' +
-        '<div class="weekly-detail-text"><span>Tindak Lanjut</span><p>' + escapeHtml(String(rep.adaGangguan || '').toLowerCase() === 'tidak' ? '-' : (rep.tindakLanjut || '-')) + '</p></div>' +
+    var modal = document.getElementById('weekly-detail-modal');
+    var body = document.getElementById('weekly-detail-body');
+    if (!modal || !body || !rep) return;
+    WEEKLY_REPORT_STATE.currentDetailReport = rep;
+    var coords = getPhotoCoords(WEEKLY_REPORT_STATE.row || PHOTO_GALLERY.row || {});
+    var coordLabel = rep.koordinat || ((coords.lat && coords.lng) ? coordText(coords.lat, coords.lng) : '-');
+    var photoHtml = rep.fotoUrl ? '<button type="button" class="weekly-detail-photo" onclick="previewCurrentWeeklyDetailPhoto()"><img src="' + normalizeImageUrl(rep.fotoUrl) + '" alt="Foto laporan mingguan" onerror="handleDriveImageError(this)"><span>Lihat Foto</span></button>' :
+      '<div class="weekly-detail-no-photo">Foto belum tersedia</div>';
+      
+    // Sumber Bibit Table Builder with Pagination
+    var sumberHtml = '-';
+    if (rep.sumberBibit && rep.sumberBibit.trim() !== '' && rep.sumberBibit.toLowerCase() !== 'tidak ada') {
+        var sbList = rep.sumberBibit.split(',').filter(function(x) { return x.trim() !== ''; });
+        
+        // Expose sbList globally for pagination logic
+        window.currentWeeklySumberList = sbList;
+        
+        // Container for dynamic pagination
+        sumberHtml = '<div id="weekly-sumber-table-container"></div>';
+        
+        // Define pagination renderer
+        window.renderWeeklySumberPage = function(page) {
+            var itemsPerPage = 5;
+            var totalPages = Math.ceil(window.currentWeeklySumberList.length / itemsPerPage);
+            if (page < 1) page = 1;
+            if (page > totalPages) page = totalPages;
+            
+            var startIdx = (page - 1) * itemsPerPage;
+            var endIdx = startIdx + itemsPerPage;
+            var pageItems = window.currentWeeklySumberList.slice(startIdx, endIdx);
+            
+            var html = '<div style="border:1px solid #ddd;border-radius:6px;margin-top:5px;">';
+            html += '<table style="width:100%;font-size:12px;border-collapse:collapse;">';
+            html += '<tr style="background:#f1f1f1;"><th style="padding:6px;text-align:left;border-bottom:1px solid #ddd;width:30px;">No</th><th style="padding:6px;text-align:left;border-bottom:1px solid #ddd;">Sumber Bibit</th></tr>';
+            
+            if (pageItems.length === 0) {
+               html += '<tr><td colspan="2" style="padding:6px;text-align:center;">Tidak ada data</td></tr>';
+            } else {
+               pageItems.forEach(function(item, i) {
+                   html += '<tr><td style="padding:6px;border-bottom:1px solid #ddd;">'+(startIdx + i + 1)+'</td><td style="padding:6px;border-bottom:1px solid #ddd;">'+escapeHtml(item.trim())+'</td></tr>';
+               });
+            }
+            html += '</table></div>';
+            
+            // Pagination controls
+            if (totalPages > 1) {
+                html += '<div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; font-size:11px;">';
+                html += '<button onclick="renderWeeklySumberPage(' + (page - 1) + ')" ' + (page === 1 ? 'disabled style="opacity:0.5;border:1px solid #ccc;background:#f9f9f9;padding:4px 8px;border-radius:4px;"' : 'style="cursor:pointer;background:#2e7d32;color:#fff;border:none;padding:4px 8px;border-radius:4px;"') + '>Sebelumnya</button>';
+                html += '<span>Hal ' + page + ' / ' + totalPages + '</span>';
+                html += '<button onclick="renderWeeklySumberPage(' + (page + 1) + ')" ' + (page === totalPages ? 'disabled style="opacity:0.5;border:1px solid #ccc;background:#f9f9f9;padding:4px 8px;border-radius:4px;"' : 'style="cursor:pointer;background:#2e7d32;color:#fff;border:none;padding:4px 8px;border-radius:4px;"') + '>Selanjutnya</button>';
+                html += '</div>';
+            }
+            
+            var container = document.getElementById('weekly-sumber-table-container');
+            if (container) container.innerHTML = html;
+        };
+        
+        // Auto-render first page after modal opens
+        setTimeout(function() { window.renderWeeklySumberPage(1); }, 50);
+    }
+
+    body.innerHTML = '<div class="weekly-detail-hero">' +
+        '<div><span>Detail Laporan</span><h3>' + escapeHtml(rep.kategoriLabel || rep.category || 'Kegiatan') + '</h3><p>' + escapeHtml(rep.lokasi || rep.nama || '-') + '</p></div>' +
+        '<div class="weekly-detail-date">' + escapeHtml(formatDateIndo(rep.waktu) || '-') + '</div>' +
       '</div>' +
-      '<aside class="weekly-detail-side">' + photoHtml +
-        '<button type="button" class="weekly-detail-map" onclick="focusCurrentWeeklyDetailMap()">Buka Titik di Peta</button>' +
-      '</aside>' +
-    '</div>';
-  modal.classList.add('open');
+      '<div class="weekly-detail-layout">' +
+        '<div class="weekly-detail-main">' +
+          '<div class="weekly-detail-grid">' +
+            '<div class="weekly-detail-item"><strong>Pelaksana/Kelompok</strong><span>' + escapeHtml(rep.pelaksana || rep.nama || '-') + '</span></div>' +
+            '<div class="weekly-detail-item"><strong>Unit Pelaksana</strong><span>' + escapeHtml(rep.unit || '-') + '</span></div>' +
+            '<div class="weekly-detail-item"><strong>Pembina/Pendamping</strong><span>' + escapeHtml(rep.pembina || rep.petugas || '-') + '</span></div>' +
+            '<div class="weekly-detail-item"><strong>Kabupaten/Kota</strong><span>' + escapeHtml(rep.kabupaten || '-') + '</span></div>' +
+            '<div class="weekly-detail-item"><strong>Kapan</strong><span>' + escapeHtml(rep.waktu || '-') + '</span></div>' +
+            '<div class="weekly-detail-item"><strong>Tingkat Gangguan</strong><span>' + escapeHtml(rep.gangguan || '-') + '</span></div>' +
+            '<div class="weekly-detail-item"><strong>Koordinat Lokasi</strong><span>' + escapeHtml(coordLabel) + '</span></div>' +
+            '<div class="weekly-detail-item"><strong>Catatan Kegiatan</strong><span>' + escapeHtml(rep.ringkasan || rep.kendala || '-') + '</span></div>' +
+            '<div class="weekly-detail-item"><strong>Jenis & Jumlah Bibit</strong><span>' + escapeHtml(rep.jenisJumlahBibit || '-') + '</span></div>' +
+            '<div class="weekly-detail-item"><strong>Kekurangan Bibit (Btg)</strong><span>' + escapeHtml(rep.kekuranganTotalBibit || '-') + '</span></div>' +
+            '<div class="weekly-detail-item"><strong>Kebutuhan Bibit Tercukupi?</strong><span>' + escapeHtml(rep.kebutuhanBibitCukup || '-') + '</span></div>' +
+            '<div class="weekly-detail-item"><strong>Sumber Bibit</strong><span>' + sumberHtml + '</span></div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="weekly-detail-side">' +
+          photoHtml +
+          '<div class="weekly-detail-stats">' +
+            '<div class="stat-box"><strong>Luasan (Ha)</strong><span>' + escapeHtml(rep.luasan || rep.luas || '-') + '</span></div>' +
+            '<div class="stat-box"><strong>Persentase Tutupan</strong><span>' + escapeHtml(rep.tutupan || '-') + '%</span></div>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    modal.style.display = 'flex';
+    void modal.offsetWidth;
+    modal.classList.add('show');
 }
 
 function previewCurrentWeeklyDetailPhoto() {
@@ -8582,16 +8770,217 @@ function renderReportMonitorTable() {
   if (kpi) {
     var cats = {};
     rows.forEach(function(r) { cats[r.category || r.kategoriLabel || '-'] = true; });
-    var totalLuas = rows.reduce(function(sum, r) { return sum + (getReportRowLuas(r) || 0); }, 0);
+    var totalLuasNum = rows.reduce(function(sum, r) { return sum + (getReportRowLuas(r) || 0); }, 0);
     var compliance = getBinaanComplianceKpi(type);
     var pembinaStats = getReportPembinaStats(getReportPembinaStatsRows());
-    kpi.innerHTML = '<div><strong>' + rows.length + '</strong><span>Total Laporan</span></div>' +
+    var luasStr = totalLuasNum > 0 ? totalLuasNum.toFixed(2) + ' Ha' : '-';
+
+    // ---- Bibit stats (weekly) ----
+    var bibitMap = {};
+    var totalBibitAll = 0;
+    var totalKekuranganBibit = 0;
+    var tinggiList = [];
+    var kekuranganTinggiList = [];
+    var sumberSet = {};
+    var kebutuhanCukup = 0; var kebutuhanTidak = 0;
+
+    function parseBibitString(str) {
+      if (!str) return;
+      var strVal = String(str);
+      var parts = strVal.split(/[|,;\n]+/);
+      var stopWords = /\b(bibit|jenis|pohon|tanaman|sebanyak|kebutuhan|ada|di|persemaian|batang|nya|yang|dan|kondisi|lokasi|agro|belum|tanam|sudah|tersedia|total|semua|campuran|masih)\b/gi;
+      parts.forEach(function(part) {
+        part = part.trim();
+        if (!part) return;
+        var tokenRe = /([A-Za-z][A-Za-z ]{0,40}?)\s*[\(\[]?\s*(\d+(?:[.,]\d+)?)\s*[\)\]]?\s*(?:btg|batang|pcs|buah)?(?=\s|$|[A-Z\(\[])/g;
+        var matched = false;
+        var m;
+        while ((m = tokenRe.exec(part)) !== null) {
+          var jenis = m[1].replace(stopWords, '').trim().replace(/\s+/g, ' ');
+          if (jenis.length < 2 || jenis.length > 20) continue;
+          var jKey = jenis.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
+          if (!jKey || jKey.split(' ').length > 3) continue;
+          var count = parseFloat(m[2].replace(',', '.'));
+          if (isNaN(count)) continue;
+          matched = true;
+          if (!bibitMap[jKey]) bibitMap[jKey] = { display: jenis, total: 0 };
+          else if (jenis.charAt(0) >= 'A' && jenis.charAt(0) <= 'Z') bibitMap[jKey].display = jenis;
+          bibitMap[jKey].total += count;
+          totalBibitAll += count;
+        }
+        if (!matched) {
+          var mf = part.match(/^(.+?)\s*[\(\[]?\s*(\d+(?:[.,]\d+)?)\s*[\)\]]?\s*(?:btg|batang|pcs|buah)?\s*$/i);
+          if (mf) {
+            var j2 = mf[1].replace(stopWords, '').trim().replace(/\s+/g, ' ');
+            if (j2.length < 2 || j2.length > 20) return;
+            var jk2 = j2.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
+            if (!jk2 || jk2.split(' ').length > 3) return;
+            var cnt2 = parseFloat(mf[2].replace(',', '.'));
+            if (!isNaN(cnt2)) {
+              if (!bibitMap[jk2]) bibitMap[jk2] = { display: j2, total: 0 };
+              bibitMap[jk2].total += cnt2;
+              totalBibitAll += cnt2;
+            }
+          }
+        }
+      });
+    }
+
+    // Accumulate bibit stats from all reported rows
+    rows.forEach(function(r) {
+      if (r._reportStatus === 'missing') return;
+      var src = r._sourceRow || {};
+      var bibitStr = r.jenisJumlahBibit || src.jenisJumlahBibit || r['Jenis Jumlah Bibit'] || src['Jenis Jumlah Bibit'] || '';
+      parseBibitString(bibitStr);
+      var kekBibitStr = r.kekuranganTotalBibit || src.kekuranganTotalBibit || r['Kekurangan Total Bibit'] || '';
+      var kbNum = parseFloat(String(kekBibitStr).replace(/[^0-9.]/g, ''));
+      if (!isNaN(kbNum) && kbNum > 0) totalKekuranganBibit += kbNum;
+      var tinggi = r.tinggiTanaman || src.tinggiTanaman || r['Tinggi Tanaman'] || '';
+      if (tinggi) tinggiList.push(String(tinggi));
+      var kekTinggi = r.kekuranganTinggiTanaman || src.kekuranganTinggiTanaman || '';
+      if (kekTinggi) kekuranganTinggiList.push(String(kekTinggi));
+      var sumber = r.sumberBibit || src.sumberBibit || r['Sumber Bibit'] || '';
+      if (sumber) {
+        String(sumber).split(/[;,\n]+/).forEach(function(s) {
+          s = s.replace(/\b\d+\b/g, '').replace(/[^a-zA-Z0-9 ]/g, '').trim();
+          if (s.length > 3 && s.length < 50 && isNaN(s)) {
+            sumberSet[s] = (sumberSet[s] || 0) + 1;
+          }
+        });
+      }
+      var kb2 = String(r.kebutuhanBibitCukup || src.kebutuhanBibitCukup || r['Kebutuhan Bibit Cukup'] || '').toLowerCase();
+      if (kb2 === 'ya' || kb2 === 'yes' || kb2 === 'cukup') kebutuhanCukup++;
+      else if (kb2 === 'tidak' || kb2 === 'no' || kb2 === 'kurang') kebutuhanTidak++;
+    });
+
+    // ---- Carbon stats (monthly) ----
+    var totalCarbon = 0;
+    var carbonSources = 0;
+    var carbonByKab = {};
+    var carbonByPembina = {};
+    if (type === 'monthly') {
+      getBinaanComplianceSources('monthly').forEach(function(item) {
+        var c = typeof getRowCarbon === 'function' ? parseFloat(getRowCarbon(item.row)) : 0;
+        if (!isNaN(c) && c > 0) {
+          totalCarbon += c;
+          carbonSources++;
+          var kab = getReportRowKabupaten(item.row) || '-';
+          var pem = getReportRowPerson(item.row) || '-';
+          carbonByKab[kab] = (carbonByKab[kab] || 0) + c;
+          carbonByPembina[pem] = (carbonByPembina[pem] || 0) + c;
+        }
+      });
+    }
+
+    var kpiHtml = '<div><strong>' + rows.length + '</strong><span>Total Laporan</span></div>' +
       '<div><strong>' + compliance.reported + '</strong><span>Hutan Binaan Sudah Input</span></div>' +
       '<div><strong>' + compliance.missing + '</strong><span>Hutan Binaan Belum Input</span></div>' +
       '<div><strong>' + escapeHtml(pembinaStats.topName) + '</strong><span>Pembina Terbanyak (' + pembinaStats.topCount + ')</span></div>';
+
+    if (type === 'weekly') {
+      var bibitKeys = Object.keys(bibitMap);
+      kpiHtml +=
+        '<div style="grid-column:1/-1;background:#e8f5e9;border-radius:6px;padding:10px 14px;margin-top:4px;">' +
+          '<div style="font-weight:700;color:#2e7d32;margin-bottom:6px;font-size:12px;">\uD83D\uDCE6 STATISTIK KESIAPAN BIBIT</div>' +
+          '<div style="display:flex;flex-wrap:wrap;gap:8px;">' +
+            '<div style="background:#fff;border-radius:4px;padding:6px 10px;min-width:120px;border:1px solid #c8e6c9;">' +
+              '<div style="font-size:18px;font-weight:700;color:#1b5e20;">' + totalBibitAll.toLocaleString('id') + '</div>' +
+              '<div style="font-size:10px;color:#555;">Total Ketersediaan Bibit (Btg)</div>' +
+            '</div>' +
+            '<div style="background:#fff;border-radius:4px;padding:6px 10px;min-width:120px;border:1px solid #c8e6c9;">' +
+              '<div style="font-size:18px;font-weight:700;color:#e65100;">' + totalKekuranganBibit.toLocaleString('id') + '</div>' +
+              '<div style="font-size:10px;color:#555;">Total Kekurangan Bibit (Btg)</div>' +
+            '</div>' +
+            '<div style="background:#fff;border-radius:4px;padding:6px 10px;min-width:80px;border:1px solid #c8e6c9;">' +
+              '<div style="font-size:18px;font-weight:700;color:#1565c0;">' + kebutuhanCukup + '</div>' +
+              '<div style="font-size:10px;color:#555;">Kebutuhan Cukup</div>' +
+            '</div>' +
+            '<div style="background:#fff;border-radius:4px;padding:6px 10px;min-width:80px;border:1px solid #c8e6c9;">' +
+              '<div style="font-size:18px;font-weight:700;color:#b71c1c;">' + kebutuhanTidak + '</div>' +
+              '<div style="font-size:10px;color:#555;">Kebutuhan Tidak Cukup</div>' +
+            '</div>' +
+            '<div style="background:#fff;border-radius:4px;padding:6px 10px;min-width:80px;border:1px solid #c8e6c9;">' +
+              '<div style="font-size:18px;font-weight:700;color:#1565c0;">' + Object.keys(sumberSet).length + '</div>' +
+              '<div style="font-size:10px;color:#555;">Jumlah Sumber Bibit</div>' +
+            '</div>' +
+          '</div>' +
+          (bibitKeys.length > 0
+            ? '<div style="margin-top:8px;font-size:11px;color:#333;background:#f1f8e9;padding:6px 8px;border-radius:4px;border-left:3px solid #4caf50;">' +
+                '<strong>Per Jenis Bibit (urut terbanyak):</strong><br>' +
+                '<div class="horizontal-scroll" style="margin-top:8px;display:flex;flex-wrap:nowrap;overflow-x:auto;padding-bottom:12px;gap:8px;-webkit-overflow-scrolling:touch;">' +
+                Object.keys(bibitMap).sort(function(a,b){return bibitMap[b].total - bibitMap[a].total;}).map(function(k){
+                  return '<div style="background:#fff;border:1px solid #c8e6c9;border-radius:8px;padding:8px 16px;white-space:nowrap;box-shadow:0 2px 4px rgba(0,0,0,0.04);width:max-content;display:flex;flex-direction:column;justify-content:center;">' +
+                    '<div style="font-size:11px;color:#555;margin-bottom:4px;text-transform:capitalize;">' + escapeHtml(bibitMap[k].display) + '</div>' +
+                    '<div style="font-size:15px;font-weight:700;color:#2e7d32;">' + Math.round(bibitMap[k].total).toLocaleString('id') + ' <span style="font-size:10px;font-weight:normal;">btg</span></div>' +
+                  '</div>';
+                }).join('') +
+                '</div>' +
+              '</div>'
+            : '') +
+          (tinggiList.length > 0
+            ? '<div style="margin-top:6px;font-size:11px;color:#555;">\uD83C\uDF31 <strong>Tinggi Tanaman:</strong> ' + tinggiList.slice(0,5).join(', ') + (tinggiList.length > 5 ? '... (+' + (tinggiList.length-5) + ' lainnya)' : '') + '</div>'
+            : '') +
+          (kekuranganTinggiList.length > 0
+            ? '<div style="margin-top:4px;font-size:11px;color:#c62828;">\u26A0\uFE0F <strong>Kekurangan Tinggi Tanaman:</strong> ' + kekuranganTinggiList.slice(0,5).join(', ') + (kekuranganTinggiList.length > 5 ? '...' : '') + '</div>'
+            : '') +
+          (Object.keys(sumberSet).length > 0
+            ? '<div style="margin-top:8px;font-size:11px;color:#333;background:#fdfbf7;padding:6px 8px;border-radius:4px;border-left:3px solid #ffb300;">' +
+              '<strong>Daftar Sumber Bibit:</strong><br>' +
+              '<div style="max-height:120px;overflow-y:auto;margin-top:4px;border:1px solid #eee;border-radius:4px;background:#fff;">' +
+              '<table style="width:100%;border-collapse:collapse;font-size:11px;">' +
+              Object.keys(sumberSet).map(function(s, idx){ return '<tr style="border-bottom:1px solid #eee;"><td style="padding:4px 8px;width:20px;color:#777;">'+(idx+1)+'.</td><td style="padding:4px 8px;">'+s+'</td></tr>'; }).join('') +
+              '</table></div></div>'
+            : '') +
+        '</div>';
+    }
+
+    if (type === 'monthly') {
+      var topKabList = Object.keys(carbonByKab).sort(function(a,b){return carbonByKab[b]-carbonByKab[a];}).slice(0,3);
+      var topPemList = Object.keys(carbonByPembina).sort(function(a,b){return carbonByPembina[b]-carbonByPembina[a];}).slice(0,3);
+      kpiHtml +=
+        '<div style="grid-column:1/-1;background:#e3f2fd;border-radius:6px;padding:10px 14px;margin-top:4px;">' +
+          '<div style="font-weight:700;color:#1565c0;margin-bottom:8px;font-size:12px;">\uD83C\uDF3F STATISTIK KARBON (CO\u2082e)</div>' +
+          '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">' +
+            '<div style="background:#fff;border-radius:4px;padding:6px 10px;min-width:150px;border:1px solid #90caf9;">' +
+              '<div style="font-size:18px;font-weight:700;color:#1565c0;">' + totalCarbon.toLocaleString('id-ID', {maximumFractionDigits:3}) + '</div>' +
+              '<div style="font-size:10px;color:#555;">Total Simpanan Karbon (ton CO\u2082e)</div>' +
+            '</div>' +
+            '<div style="background:#fff;border-radius:4px;padding:6px 10px;min-width:100px;border:1px solid #90caf9;">' +
+              '<div style="font-size:18px;font-weight:700;color:#0277bd;">' + carbonSources + '</div>' +
+              '<div style="font-size:10px;color:#555;">Titik dgn Data Karbon</div>' +
+            '</div>' +
+            '<div style="background:#fff;border-radius:4px;padding:6px 10px;min-width:130px;border:1px solid #90caf9;">' +
+              '<div style="font-size:18px;font-weight:700;color:#00796b;">' + (carbonSources > 0 ? (totalCarbon / carbonSources).toLocaleString('id-ID', {maximumFractionDigits:3}) : '0.000') + '</div>' +
+              '<div style="font-size:10px;color:#555;">Rata-rata per Titik (ton CO\u2082e)</div>' +
+            '</div>' +
+          '</div>' +
+          (topKabList.length > 0 ?
+            '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px;">' +
+              '<div style="width:100%;font-size:11px;font-weight:700;color:#1565c0;margin-bottom:2px;">\uD83C\uDFC6 Kabupaten Serapan Karbon Terbanyak:</div>' +
+              topKabList.map(function(k, i) {
+                return '<span style="background:#bbdefb;border-radius:10px;padding:3px 10px;font-size:11px;white-space:nowrap;">' +
+                  (i+1) + '. ' + escapeHtml(k) + ' \u2014 <strong>' + carbonByKab[k].toLocaleString('id-ID', {maximumFractionDigits:3}) + '</strong> ton CO\u2082e' +
+                '</span>';
+              }).join('') +
+            '</div>'
+          : '') +
+          (topPemList.length > 0 ?
+            '<div style="display:flex;flex-wrap:wrap;gap:8px;">' +
+              '<div style="width:100%;font-size:11px;font-weight:700;color:#1565c0;margin-bottom:2px;">\uD83D\uDC64 Pembina/Wilayah Karbon Terbanyak:</div>' +
+              topPemList.map(function(k, i) {
+                return '<span style="background:#e1f5fe;border-radius:10px;padding:3px 10px;font-size:11px;white-space:nowrap;">' +
+                  (i+1) + '. ' + escapeHtml(k) + ' \u2014 <strong>' + carbonByPembina[k].toLocaleString('id-ID', {maximumFractionDigits:3}) + '</strong> ton CO\u2082e' +
+                '</span>';
+              }).join('') +
+            '</div>'
+          : '') +
+        '</div>';
+    }
+
+    kpi.innerHTML = kpiHtml;
   }
   if (type === 'monthly') {
-    head.innerHTML = '<tr><th>Status</th><th>Kegiatan</th><th>Lokasi & Administratif</th><th>Unit</th><th>Pembina/Pegawai</th><th>Luas</th><th>Foto</th><th>Tanggal</th><th>Aksi</th></tr>';
+    head.innerHTML = '<tr><th>Status</th><th>Kegiatan</th><th>Lokasi &amp; Administratif</th><th>Unit</th><th>Pembina/Pegawai</th><th>Luas</th><th>Foto</th><th>Tanggal</th><th>Aksi</th></tr>';
     body.innerHTML = pageRows.length ? pageRows.map(function(r, localIdx) {
       var idx = start + localIdx;
       var statusBadge = '<span class="report-status-badge ' + (r._reportStatus === 'missing' ? 'missing' : 'reported') + '">' + escapeHtml(r.statusLabel || (r._reportStatus === 'missing' ? 'Belum Input' : 'Sudah Input')) + '</span>';
@@ -8655,214 +9044,369 @@ function getReportFilterLabel(id, fallback) {
   return el.value || fallback || '';
 }
 
-function appendReportKpiSheet(wb, type, exportItems) {
-  var items = exportItems || [];
-  var rows = items.map(function(item) { return item && item.row ? item.row : item; }).filter(Boolean);
-  var cats = {};
-  rows.forEach(function(r, idx) {
-    var item = items[idx] || {};
-    cats[r.category || item.category || 'pegawaibinaanformatsistem'] = true;
+function exportWeeklyBinaanReports() {
+  if ((WEEKLY_REPORT_STATE.monitorType || 'weekly') !== 'weekly') {
+    showToast('Export ini khusus Laporan Mingguan.', 'error');
+    return;
+  }
+  var rows = getFilteredReportMonitorRows().filter(function(r) {
+    return String(r.category || '').toLowerCase() === 'pegawaibinaanformatsistem';
   });
-  var totalLuas = rows.reduce(function(sum, r) { return sum + (getReportRowLuas(r) || 0); }, 0);
-  var compliance = getBinaanComplianceKpi(type);
-  var pembinaStats = getReportPembinaStats(getReportPembinaStatsRows());
-  var aoa = [
-    ['Ringkasan KPI', type === 'monthly' ? 'Laporan 3 Bulanan' : 'Laporan Mingguan'],
-    ['Filter Kegiatan', getReportFilterLabel('report-category-filter', 'Semua Kegiatan')],
-    ['Filter Status Input', getReportFilterLabel('report-status-filter', 'Semua Status Input')],
-    ['Filter Unit', getReportFilterLabel('report-unit-filter', 'Semua Unit')],
-    ['Filter Pembina/Pegawai', getReportFilterLabel('report-person-filter', 'Semua Pembina/Pegawai')],
-    ['Filter Kabupaten', getReportFilterLabel('report-kab-filter', 'Semua Kabupaten')],
-    ['Filter Kegiatan Detail', getReportFilterLabel('report-kegiatan-filter', 'Semua Kegiatan')],
-    ['Filter Tahun', getReportFilterLabel('report-year-filter', 'Semua Tahun')],
-    ['Tanggal Mulai', getReportFilterLabel('report-start-filter', '-') || '-'],
-    ['Tanggal Sampai', getReportFilterLabel('report-end-filter', '-') || '-']
+  if (!rows.length) {
+    showToast('Tidak ada data hutan binaan pada filter laporan mingguan saat ini.', 'warning');
+    return;
+  }
+  var header = [
+    'No', 'Status Input', 'Kabupaten', 'Kecamatan', 'Desa', 'Longitude', 'Latitude',
+    'Kegiatan', 'Tahun Kegiatan', 'Luas', 'Pembina/Pengampu',
+    'Unit Kerja', 'Jabatan', 'DPL',
+    'LM_ID', 'LM_Kategori', 'LM_Pelaksana', 'LM_Lokasi', 'LM_Waktu',
+    'LM_Tutupan', 'LM_Kegiatan_Vegetatif', 'LM_Jenis_Jumlah_Bibit', 'LM_Total_Bibit',
+    'LM_Tinggi_Tanaman_CM', 'LM_Sumber_Bibit', 'LM_Kebutuhan_Bibit_Cukup',
+    'LM_Kekurangan_Jenis_Jumlah_Bibit', 'LM_Kekurangan_Total_Bibit',
+    'LM_Kekurangan_Tinggi_Tanaman_CM', 'LM_Kekurangan_Sumber_Bibit',
+    'LM_Kondisi_Tanaman', 'LM_Kegiatan_Monitoring', 'LM_Uraian',
+    'LM_Ada_Gangguan', 'LM_Jenis_Gangguan', 'LM_Tindak_Lanjut',
+    'LM_Foto_URL', 'LM_Foto_Tanggal', 'LM_Foto_Latitude', 'LM_Foto_Longitude',
+    'LM_Foto_FileID', 'LM_UpdatedAt', 'LM_UpdatedBy'
   ];
-  if (type === 'weekly') {
-    var sourceKey = typeof getBinaanSourceKey === 'function' ? getBinaanSourceKey(r) : '';
-    
-    // Auto-fetch if not loaded yet
-    if (!r._weeklyCalendarFetched && window.CURRENT_DRAWER_ROW) {
-       r._weeklyCalendarFetched = true;
-       var coords = getPhotoCoords(r);
-       var url = GAS_WEB_APP_URL + '?action=getWeeklyReports&category=pegawaibinaanformatsistem&lat=' + encodeURIComponent(coords.lat) + '&lng=' + encodeURIComponent(coords.lng) + '&rowIndex=' + encodeURIComponent(r._row_idx || '') + '&sheetGid=' + encodeURIComponent(r._source_gid || '') + '&featureId=' + encodeURIComponent(r['ID'] || r.featureId || '') + '&_ts=' + Date.now();
-       fetch(appendAuthParam(url)).then(function(res){return res.json();}).then(function(data){
-          if(data.reports) {
-             if (!window.WEEKLY_REPORT_STATE) window.WEEKLY_REPORT_STATE = {};
-             window.WEEKLY_REPORT_STATE.reports = data.reports;
-             renderCalendarReminder(); // Re-render!
-          }
-       }).catch(function(){});
-    }
+  var aoa = [header];
+  rows.forEach(function(r, idx) {
+    var lat = weeklyExportValue(r, 'lat') || weeklyExportValue(r, 'latitude');
+    var lng = weeklyExportValue(r, 'lng') || weeklyExportValue(r, 'longitude');
+    aoa.push([
+      idx + 1,
+      r._reportStatus === 'missing' ? 'Belum Input' : 'Sudah Input',
+      getReportRowKabupaten(r),
+      weeklyExportValue(r, 'kecamatan') || getBinaanField(r._sourceRow, 'kecamatan'),
+      weeklyExportValue(r, 'desa') || getBinaanField(r._sourceRow, 'desa'),
+      lng,
+      lat,
+      getReportRowKegiatan(r),
+      getReportRowTahun(r),
+      weeklyExportValue(r, 'luas') ? parseFloat(String(weeklyExportValue(r, 'luas')).replace(/[^0-9.]/g, '')) || weeklyExportValue(r, 'luas') : (getReportRowLuas(r) || ''),
+      getReportRowPerson(r),
+      getReportRowUnit(r),
+      weeklyExportValue(r, 'jabatan') || getBinaanField(r._sourceRow, 'jabatan'),
+      weeklyExportValue(r, 'dpl') || weeklyExportValue(r, 'DPL'),
+      r.id || '',
+      r.kategoriLabel || r.category || '',
+      r.pelaksana || '',
+      r.lokasi || '',
+      normalizeExportDateIndo(r.waktu),
+      r.tutupan || '',
+      r.kegiatanVegetatif || '',
+      r.jenisJumlahBibit || '',
+      r.totalBibit || '',
+      r.tinggiTanaman || '',
+      r.sumberBibit || '',
+      r.kebutuhanBibitCukup || '',
+      r.kekuranganJenisJumlahBibit || '',
+      r.kekuranganTotalBibit || '',
+      r.kekuranganTinggiTanaman || '',
+      r.kekuranganSumberBibit || '',
+      r.kondisiTanaman || '',
+      r.kegiatanMonitoring || '',
+      r.uraian || '',
+      r.adaGangguan || '',
+      r.jenisGangguan || '',
+      r.tindakLanjut || '',
+      r.fotoUrl || '',
+      normalizeExportDateIndo(r.fotoTanggal),
+      r.fotoLat || '',
+      r.fotoLng || '',
+      r.fotoFileId || '',
+      normalizeExportDateIndo(r.updatedAt),
+      r.updatedBy || ''
+    ]);
+  });
+  var ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = header.map(function(h) {
+    var w = Math.max(10, Math.min(34, String(h).length + 4));
+    return { wch: w };
+  });
+  ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: aoa.length - 1, c: header.length - 1 } }) };
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Laporan Mingguan');
+  appendReportKpiSheet(wb, 'weekly', rows);
+  XLSX.writeFile(wb, 'Export_Laporan_Mingguan_Hutan_Binaan.xlsx');
+  showToast('Export laporan mingguan hutan binaan berhasil dibuat.', 'success');
+}
 
-    var weekReports = [];
-    if (window.WEEKLY_REPORT_STATE && window.WEEKLY_REPORT_STATE.monitorRows && window.WEEKLY_REPORT_STATE.monitorRows.length > 0) {
-        weekReports = window.WEEKLY_REPORT_STATE.monitorRows.filter(function(row) { 
-           return typeof getReportBinaanSourceKey === 'function' && getReportBinaanSourceKey(row) === sourceKey; 
-        });
-    } else if (window.WEEKLY_REPORT_STATE && window.WEEKLY_REPORT_STATE.reports && window.WEEKLY_REPORT_STATE.reports.length > 0) {
-        weekReports = window.WEEKLY_REPORT_STATE.reports;
+function exportMonthlyBinaanReports() {
+  if ((WEEKLY_REPORT_STATE.monitorType || 'weekly') !== 'monthly') {
+    showToast('Export ini khusus Laporan 3 Bulanan.', 'error');
+    return;
+  }
+  var sources = getBinaanComplianceSources('monthly');
+  if (!sources.length) {
+    showToast('Tidak ada data hutan binaan pada filter laporan 3 bulanan saat ini.', 'warning');
+    return;
+  }
+  var header = [
+    'No', 'Status Input', 'Kabupaten', 'Kecamatan', 'Desa', 'Longitude', 'Latitude',
+    'Kegiatan', 'Tahun Kegiatan', 'Luas', 'Pembina/Pengampu',
+    'Unit Kerja', 'Jabatan', 'DPL'
+  ];
+  PHOTO_YEARS.forEach(function(year) {
+    header.push('Foto_' + year, 'Tanggal_' + year);
+  });
+  header.push('Keterangan');
+  PHOTO_YEARS.forEach(function(year) {
+    ['Tutupan', 'Jenis', 'Kerapatan', 'Lereng', 'Diam_h', 'Diam_i', 'Diam_j', 'Diam_k', 'Diam_l', 'Diam_m', 'CO2e', 'Pengelolaan', 'Ekosistem', 'Usulan'].forEach(function(base) {
+      header.push(base + '_' + year);
+    });
+  });
+
+  var aoa = [header];
+  sources.forEach(function(item, idx) {
+    var r = item.row;
+    var coords = getPhotoCoords(r);
+    var baseRow = [
+      idx + 1,
+      item.status === 'missing' ? 'Belum Input' : 'Sudah Input',
+      getReportRowKabupaten(r),
+      getBinaanField(r, 'kecamatan') || r['Kecamatan'] || '',
+      getBinaanField(r, 'desa') || r['Desa/Kelurahan'] || r['Desa/ Kelurahan'] || r['Desa'] || '',
+      coords.lng || '',
+      coords.lat || '',
+      getReportRowKegiatan(r),
+      getReportRowTahun(r),
+      getReportRowLuas(r) || '',
+      getReportRowPerson(r),
+      getReportRowUnit(r),
+      getBinaanField(r, 'jabatan'),
+      r.DPL || r.MDPL || ''
+    ];
+    PHOTO_YEARS.forEach(function(year) {
+      baseRow.push(r['Foto_' + year] || '', r['Tanggal_' + year] || '');
+    });
+    baseRow.push(r.Keterangan || r.keterangan || r['Keterangan Lokasi'] || '');
+    PHOTO_YEARS.forEach(function(year) {
+      ['Tutupan', 'Jenis', 'Kerapatan', 'Lereng', 'Diam_h', 'Diam_i', 'Diam_j', 'Diam_k', 'Diam_l', 'Diam_m', 'CO2e', 'Pengelolaan', 'Ekosistem', 'Usulan'].forEach(function(base) {
+        baseRow.push(getYearlyBinaanField(r, base, year));
+      });
+    });
+    aoa.push(baseRow);
+  });
+
+  var ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = header.map(function(h) {
+    return { wch: Math.max(10, Math.min(32, String(h).length + 3)) };
+  });
+  ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: aoa.length - 1, c: header.length - 1 } }) };
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Hutan Binaan 3 Bulanan');
+  appendReportKpiSheet(wb, 'monthly', sources);
+  XLSX.writeFile(wb, 'Export_Laporan_3_Bulanan_Hutan_Binaan.xlsx');
+  showToast('Export laporan 3 bulanan hutan binaan berhasil dibuat.', 'success');
+}
+
+function appendReportKpiSheet(wb, type, exportItems) {
+    var items = exportItems || [];
+    var rows = items.map(function(item) { return item && item.row ? item.row : item; }).filter(Boolean);
+    var cats = {};
+    rows.forEach(function(r, idx) {
+      var item = items[idx] || {};
+      cats[r.category || item.category || 'pegawaibinaanformatsistem'] = true;
+    });
+    var totalLuas = rows.reduce(function(sum, r) { return sum + (getReportRowLuas(r) || 0); }, 0);
+    var compliance = getBinaanComplianceKpi(type);
+    var pembinaStats = getReportPembinaStats(getReportPembinaStatsRows());
+    var aoa = [
+      ['Ringkasan KPI', type === 'monthly' ? 'Laporan 3 Bulanan' : 'Laporan Mingguan'],
+      ['Filter Kegiatan', getReportFilterLabel('report-category-filter', 'Semua Kegiatan')],
+      ['Filter Status Input', getReportFilterLabel('report-status-filter', 'Semua Status Input')],
+      ['Filter Unit', getReportFilterLabel('report-unit-filter', 'Semua Unit')],
+      ['Filter Pembina/Pegawai', getReportFilterLabel('report-person-filter', 'Semua Pembina/Pegawai')],
+      ['Filter Kabupaten', getReportFilterLabel('report-kab-filter', 'Semua Kabupaten')],
+      ['Filter Kegiatan Detail', getReportFilterLabel('report-kegiatan-filter', 'Semua Kegiatan')],
+      ['Filter Tahun', getReportFilterLabel('report-year-filter', 'Semua Tahun')],
+      ['Tanggal Mulai', getReportFilterLabel('report-start-filter', '-') || '-'],
+      ['Tanggal Sampai', getReportFilterLabel('report-end-filter', '-') || '-']
+    ];
+    if (type === 'weekly') {
+      aoa.push(['Minggu Mulai', getReportFilterLabel('report-week-start-filter', '-') || '-']);
+      aoa.push(['Minggu Sampai', getReportFilterLabel('report-week-end-filter', '-') || '-']);
     }
+  // ---- Bibit aggregation for KPI sheet ----
+  var bibitMapKpi = {};
+  var totalBibitKpi = 0;
+  var totalKekuranganBibitKpi = 0;
+  var kebutuhanCukupKpi = 0;
+  var kebutuhanTidakKpi = 0;
+  var lokasiCukup = [];
+  var lokasiTidakCukup = [];
+  
+  function parseBibitKpi(str) {
+    if (!str) return;
+    var parts = String(str).split(/[|,;\n]+/);
+    var stopWords = /\b(bibit|jenis|pohon|tanaman|sebanyak|kebutuhan|ada|di|persemaian|batang|nya|yang|dan|kondisi|lokasi|agro|belum|tanam|sudah|tersedia|total|semua|campuran|masih)\b/gi;
+    parts.forEach(function(part) {
+      part = part.trim();
+      if (!part) return;
+      var tokenRe = /([A-Za-z][A-Za-z ]{0,40}?)\s*[\(\[]?\s*(\d+(?:[.,]\d+)?)\s*[\)\]]?\s*(?:btg|batang|pcs|buah)?(?=\s|$|[A-Z\(\[])/g;
+      var matched = false;
+      var m;
+      while ((m = tokenRe.exec(part)) !== null) {
+        var jenis = m[1].replace(stopWords, '').trim().replace(/\s+/g, ' ');
+        if (jenis.length < 2 || jenis.length > 20) continue;
+        var jKey = jenis.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
+        if (!jKey || jKey.split(' ').length > 3) continue;
+        var count = parseFloat(m[2].replace(',', '.'));
+        if (isNaN(count)) continue;
+        matched = true;
+        if (!bibitMapKpi[jKey]) bibitMapKpi[jKey] = { display: jenis, total: 0 };
+        else if (jenis.charAt(0) >= 'A' && jenis.charAt(0) <= 'Z') bibitMapKpi[jKey].display = jenis;
+        bibitMapKpi[jKey].total += count;
+        totalBibitKpi += count;
+      }
+      if (!matched) {
+        var mf = part.match(/^(.+?)\s*[\(\[]?\s*(\d+(?:[.,]\d+)?)\s*[\)\]]?\s*(?:btg|batang|pcs|buah)?\s*$/i);
+        if (mf) {
+          var j2 = mf[1].replace(stopWords, '').trim().replace(/\s+/g, ' ');
+          if (j2.length < 2 || j2.length > 20) return;
+          var jk2 = j2.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
+          if (!jk2 || jk2.split(' ').length > 3) return;
+          var cnt2 = parseFloat(mf[2].replace(',', '.'));
+          if (!isNaN(cnt2)) {
+            if (!bibitMapKpi[jk2]) bibitMapKpi[jk2] = { display: j2, total: 0 };
+            bibitMapKpi[jk2].total += cnt2;
+            totalBibitKpi += cnt2;
+          }
+        }
+      }
+    });
+  }
+  var sumberSetKpi = {};
+  rows.forEach(function(r) {
+    if (r._reportStatus === 'missing') return;
+    var srcKpi = r._sourceRow || {};
+    parseBibitKpi(r.jenisJumlahBibit || srcKpi.jenisJumlahBibit || r['Jenis Jumlah Bibit'] || srcKpi['Jenis Jumlah Bibit'] || '');
+    var sumber = r.sumberBibit || srcKpi.sumberBibit || r['Sumber Bibit'] || srcKpi['Sumber Bibit'] || '';
+    if (sumber) {
+      String(sumber).split(/[;,\n]+/).forEach(function(s) {
+        var clean = s.replace(/\b\d+(?:[.,]\d+)?\b/g, '').replace(/[^a-zA-Z0-9 ]/g, '').trim();
+        if (clean.length > 3 && isNaN(clean) && clean.toLowerCase() !== 'tidak' && clean.toLowerCase() !== 'ada') {
+          sumberSetKpi[clean] = true;
+        }
+      });
+    }
+    var kb = parseFloat(String(r.kekuranganTotalBibit || '').replace(/[^0-9.]/g,''));
+    if (!isNaN(kb)) totalKekuranganBibitKpi += kb;
+    var kb2 = String(r.kebutuhanBibitCukup || '').toLowerCase();
     
-    var reportedWeeks = {};
-    
-    // Parse monitorRows
-    weekReports.forEach(function(row) { 
-      var t = row.waktu || row.waktu_kegiatan || row.timestamp || '';
-      if (typeof getWeekInputRange === 'function' && t) {
-         try { 
-            var ts = getWeekInputRange(t.split('T')[0].split(' ')[0], false);
-            if (ts) reportedWeeks[ts] = true;
-         } catch(e) {}
+    var locName = (r.lokasi || r.nama || r.Desa || r['Nama Lokasi'] || 'Lokasi Tidak Diketahui') + ' (' + (r.pembina || r.pelaksana || r['Pembina/Pengampu'] || 'Anonim') + ')';
+    if (kb2 === 'ya' || kb2 === 'yes' || kb2 === 'cukup') {
+       kebutuhanCukupKpi++;
+       if (lokasiCukup.length < 100) lokasiCukup.push(locName);
+    }
+    else if (kb2 === 'tidak' || kb2 === 'no' || kb2 === 'kurang') {
+       kebutuhanTidakKpi++;
+       if (lokasiTidakCukup.length < 100) lokasiTidakCukup.push(locName);
+    }
+  });
+  
+  // ---- Carbon for monthly ----
+  var totalCarbonKpi = 0;
+  var carbonSourcesKpi = 0;
+  var topKarbonLokasi = [];
+  var topKarbonPembinaMap = {};
+  
+  if (type === 'monthly') {
+    getBinaanComplianceSources('monthly').forEach(function(item) {
+      var c = typeof getRowCarbon === 'function' ? parseFloat(getRowCarbon(item.row)) : 0;
+      if (!isNaN(c) && c > 0) { 
+          totalCarbonKpi += c; 
+          carbonSourcesKpi++; 
+          
+          var loc = (item.row.Desa || '') + (item.row.Kecamatan ? ', ' + item.row.Kecamatan : '') + (getBinaanKabupaten(item.row) ? ', ' + getBinaanKabupaten(item.row) : '');
+          loc = loc.replace(/^, | , | ,$/g, '').trim();
+          if (!loc) loc = item.row.nama || item.row.lokasi || 'Lokasi Anonim';
+          
+          var p = item.row['Pembina/Pengampu'] || item.row.pembina || 'Anonim';
+          
+          topKarbonLokasi.push({ nama: loc, karbon: c, pembina: p });
+          
+          if (!topKarbonPembinaMap[p]) topKarbonPembinaMap[p] = 0;
+          topKarbonPembinaMap[p] += c;
       }
     });
     
-    // Parse Data Mingguan from Google Sheets
-    var rawMingguan = parsePipeField(r['Data Mingguan']);
-    rawMingguan.forEach(function(dStr) {
-       var t = typeof parseExifDate === 'function' ? parseExifDate(dStr) : 0;
-       if (t) {
-          var dObj = new Date(t);
-          var wTs = typeof getWeekInputRange === 'function' ? getWeekInputRange(formatDt(dObj), false) : 0;
-          if (wTs) reportedWeeks[wTs] = true;
-       }
-    });
-
-    html += '<h3 style="margin-bottom:10px; font-size:14px; text-align:center; color:#333;">Riwayat Laporan Mingguan</h3>';
-    html += '<div style="max-height:300px; overflow-y:auto; padding-right:5px;">';
-    
-    for (var mOffset = 0; mOffset < 3; mOffset++) {
-       var renderMonth = currentMonth - mOffset;
-       var renderYear = currentYear;
-       if (renderMonth < 0) {
-          renderMonth += 12;
-          renderYear -= 1;
-       }
-       
-       var daysInMonth = new Date(renderYear, renderMonth + 1, 0).getDate();
-       var firstDayIndex = new Date(renderYear, renderMonth, 1).getDay();
-       var firstDayMondayIndex = firstDayIndex === 0 ? 6 : firstDayIndex - 1;
-       
-       html += '<div style="background:#f9f9f9; padding:8px; border-radius:6px; margin-bottom:10px; border:1px solid #eee;">';
-       html += '<h4 style="margin:0 0 8px 0; font-size:12px; color:#2e7d32; text-align:center;">' + mNames[renderMonth] + ' ' + renderYear + '</h4>';
-       html += '<div style="display:grid; grid-template-columns:repeat(7, 1fr); gap:4px; text-align:center; font-weight:bold; font-size:11px; margin-bottom:4px; color:#777;">';
-       ['Sn','Sl','Rb','Km','Jm','Sb','Mg'].forEach(function(d) { html += '<div>'+d+'</div>'; });
-       html += '</div>';
-       html += '<div style="display:grid; grid-template-columns:repeat(7, 1fr); gap:4px; text-align:center; font-size:11px;">';
-       
-       for (var i = 0; i < firstDayMondayIndex; i++) {
-         html += '<div style="padding:6px; background:transparent;"></div>';
-       }
-       
-       for (var d = 1; d <= daysInMonth; d++) {
-         var dateObj = new Date(renderYear, renderMonth, d);
-         var isoWeek = '';
-         try {
-           if (typeof getWeekInputRange === 'function') {
-             isoWeek = getWeekInputRange(formatDt(dateObj), false);
-           }
-         } catch(e) {}
-         
-         var reported = reportedWeeks[isoWeek] === true;
-         var isFuture = formatDt(dateObj) > formatDt(now);
-         var bg = '#eee';
-         var color = '#333';
-         
-         if (reported) {
-           bg = '#43a047';
-           color = '#fff';
-         } else if (!isFuture) {
-           bg = '#e53935';
-           color = '#fff';
-         }
-         html += '<div style="padding:6px; background:'+bg+'; color:'+color+'; border-radius:3px;">'+d+'</div>';
-       }
-       html += '</div></div>';
-    }
-    
-    html += '</div>';
-  } else {
-    // Monthly (3 Bulanan)
-    var datesArray = (typeof getRowDates === 'function') ? getRowDates(r, currentYear) : [];
-    var rawLinimasa = String(r['Data Linimasa'] || '').split('|');
-    var allMonthlyDateStrings = datesArray.concat(rawLinimasa);
-    
-    var uploadedMonthsInCurrentYear = {};
-    allMonthlyDateStrings.forEach(function(dStr) {
-       var ts = typeof parseExifDate === 'function' ? parseExifDate(dStr) : 0;
-       if (ts) {
-          var dObj = new Date(ts);
-          if (dObj.getFullYear() === currentYear) {
-             var m = dObj.getMonth();
-             if (!uploadedMonthsInCurrentYear[m]) uploadedMonthsInCurrentYear[m] = [];
-             uploadedMonthsInCurrentYear[m].push(dObj.getDate() + ' ' + mNames[m]);
-          }
-       }
-    });
-    
-    html += '<h3 style="margin-bottom:15px; font-size:14px; text-align:center; color:#333;">Laporan 3 Bulanan ('+currentYear+')</h3>';
-    html += '<div style="display:flex; flex-direction:column; gap:10px;">';
-    
-    var quarters = [
-       { name: 'Triwulan I', months: [0, 1, 2] },
-       { name: 'Triwulan II', months: [3, 4, 5] },
-       { name: 'Triwulan III', months: [6, 7, 8] },
-       { name: 'Triwulan IV', months: [9, 10, 11] }
-    ];
-    
-    quarters.forEach(function(q, qIndex) {
-       var isActive = Math.floor(currentMonth / 3) === qIndex;
-       var bgHead = isActive ? '#2e7d32' : '#546e7a';
-       
-       html += '<div style="border:1px solid #ddd; border-radius:6px; overflow:hidden;">';
-       html += '<div style="background:'+bgHead+'; color:#fff; padding:6px 10px; font-size:12px; font-weight:bold; display:flex; justify-content:space-between;">';
-       html += '<span>' + q.name + '</span>';
-       if (isActive) html += '<span style="background:#fff; color:#2e7d32; padding:2px 6px; border-radius:4px; font-size:10px;">Berjalan</span>';
-       html += '</div>';
-       
-       html += '<div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:1px; background:#ddd;">';
-       q.months.forEach(function(m) {
-          var isPastMonth = m < currentMonth;
-          var isCurrentMonth = m === currentMonth;
-          
-          var hasThisMonth = uploadedMonthsInCurrentYear[m] && uploadedMonthsInCurrentYear[m].length > 0;
-          var bg = '#fff';
-          var color = '#333';
-          
-          if (hasThisMonth) {
-            bg = '#e8f5e9';
-            color = '#2e7d32';
-          } else if (isPastMonth || isCurrentMonth) {
-            bg = '#ffebee';
-            color = '#c62828';
-          }
-          
-          var icon = hasThisMonth ? '&#10004;' : ((isPastMonth || isCurrentMonth) ? '&#10006;' : '-');
-          
-          html += '<div style="background:'+bg+'; color:'+color+'; padding:8px 4px; text-align:center; display:flex; flex-direction:column; justify-content:center; align-items:center;">';
-          html += '<span style="font-weight:bold; font-size:12px; margin-bottom:4px;">' + mNames[m] + '</span>';
-          html += '<span style="font-size:14px;">' + icon + '</span>';
-          if (hasThisMonth) {
-             var detailText = uploadedMonthsInCurrentYear[m].join('<br>');
-             html += '<span style="font-size:9px; margin-top:2px; font-weight:normal; line-height:1.1;">' + detailText + '</span>';
-          }
-          html += '</div>';
-       });
-       html += '</div></div>';
-    });
-    html += '</div>';
+    topKarbonLokasi.sort(function(a,b) { return b.karbon - a.karbon; });
   }
   
-  container.innerHTML = html;
+  aoa = aoa.concat([
+    [],
+    ['KPI', 'Nilai'],
+    ['Total Baris Export', rows.length],
+    ['Kategori Aktif', Object.keys(cats).length],
+    ['Akumulasi Luasan (Ha)', totalLuas ? totalLuas.toFixed(2) : '-'],
+    ['Mode', type === 'monthly' ? 'Bulanan' : 'Mingguan'],
+    ['Hutan Binaan Sudah Input', compliance.reported],
+    ['Hutan Binaan Belum Input', compliance.missing],
+    ['Pembina Terbanyak', pembinaStats.topName],
+    ['Jumlah Input Pembina Terbanyak', pembinaStats.topCount],
+    ['Pembina Terendah', pembinaStats.lowName],
+    ['Jumlah Input Pembina Terendah', pembinaStats.lowCount]
+  ]);
+  
+  if (type === 'weekly') {
+    aoa.push([]);
+    aoa.push(['=== STATISTIK KESIAPAN BIBIT ===', '']);
+    aoa.push(['Total Ketersediaan Bibit (Btg)', Math.round(totalBibitKpi)]);
+    aoa.push(['Total Kekurangan Bibit (Btg)', Math.round(totalKekuranganBibitKpi)]);
+    aoa.push(['Jumlah Lokasi Kebutuhan Bibit Cukup', kebutuhanCukupKpi]);
+    aoa.push(['Jumlah Lokasi Kebutuhan Bibit Tidak Cukup', kebutuhanTidakKpi]);
+    aoa.push([]);
+    aoa.push(['Daftar Lokasi Bibit Cukup', lokasiCukup.join('; ') || '-']);
+    aoa.push(['Daftar Lokasi Bibit Tidak Cukup', lokasiTidakCukup.join('; ') || '-']);
+    aoa.push([]);
+    aoa.push(['Jenis Bibit', 'Total (Btg)']);
+    Object.keys(bibitMapKpi).forEach(function(k) {
+      aoa.push([bibitMapKpi[k].display, Math.round(bibitMapKpi[k].total)]);
+    });
+  }
+  
+  if (type === 'monthly') {
+    aoa.push([]);
+    aoa.push(['=== STATISTIK KARBON (CO2e) ===', '']);
+    aoa.push(['Total Estimasi Simpanan Karbon (ton CO2e)', totalCarbonKpi.toFixed(3)]);
+    aoa.push(['Jumlah Titik Hutan dgn Data Karbon', carbonSourcesKpi]);
+    aoa.push(['Rata-rata Karbon per Titik (ton CO2e)', carbonSourcesKpi > 0 ? (totalCarbonKpi / carbonSourcesKpi).toFixed(3) : '0.000']);
+    
+    aoa.push([]);
+    aoa.push(['=== TOP LOKASI KARBON TERBESAR ===', '']);
+    aoa.push(['Nama Lokasi (Desa/Kec/Kab)', 'Estimasi Karbon (ton CO2e)', 'Pembina/Pengampu']);
+    topKarbonLokasi.slice(0, 15).forEach(function(loc) {
+       aoa.push([loc.nama, loc.karbon.toFixed(3), loc.pembina]);
+    });
+    
+    aoa.push([]);
+    aoa.push(['=== TOP PEMBINA DENGAN KARBON TERBESAR ===', '']);
+    aoa.push(['Nama Pembina', 'Total Estimasi Karbon (ton CO2e)']);
+    var sortedPembina = Object.keys(topKarbonPembinaMap).map(function(k) {
+       return { nama: k, karbon: topKarbonPembinaMap[k] };
+    }).sort(function(a,b) { return b.karbon - a.karbon; });
+    
+    sortedPembina.slice(0, 15).forEach(function(p) {
+       aoa.push([p.nama, p.karbon.toFixed(3)]);
+    });
+  }
+  
+  var ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [{ wch: 35 }, { wch: 48 }, { wch: 30 }];
+  XLSX.utils.book_append_sheet(wb, ws, 'Ringkasan KPI');
 }
 
+var MONTHLY_NOTIFICATION_RUN = 0;
 
-/* Notification function for monthly / weekly report reminders */
 function checkMonthlyReportedNotification() {
   var user = getStoredAuthUser();
   if (!user || !user.nama) return;
   var group = getRoleGroup(user.role);
   if (group <= 3) return; // Only for Group 4 (Pegawai)
+  var notificationRun = ++MONTHLY_NOTIFICATION_RUN;
   
   var getWeekStr = function(dStr) {
       var d = new Date(dStr);
@@ -8874,8 +9418,16 @@ function checkMonthlyReportedNotification() {
       return 'Minggu ke-' + weekNo + ', ' + copy.getUTCFullYear();
   };
 
-  setTimeout(function() {
-    var binaanUser = (window.DATA && window.DATA.pegawaiBinaan || []).filter(function(r) {
+  function runNotification(attempt) {
+    if (notificationRun !== MONTHLY_NOTIFICATION_RUN || getAuthToken() === '') return;
+    var sourceRows = window.DATA && window.DATA.pegawaiBinaan || [];
+    // Login can finish while CSV data is still parsing. Poll only during the
+    // initial load; once data arrives the reminder is built immediately.
+    if (!sourceRows.length && typeof LOADED !== 'undefined' && LOADED < TOTAL && attempt < 45) {
+      setTimeout(function() { runNotification(attempt + 1); }, 120);
+      return;
+    }
+    var binaanUser = sourceRows.filter(function(r) {
       return getReportRowPerson(r) === user.nama;
     });
     if (binaanUser.length === 0) return;
@@ -8934,6 +9486,7 @@ function checkMonthlyReportedNotification() {
     });
     
     Promise.all(fetchPromises).then(function(results) {
+       if (notificationRun !== MONTHLY_NOTIFICATION_RUN || getAuthToken() === '') return;
        results.forEach(function(item) {
           var reports = item.reports;
           var hasCurrentWeek = false;
@@ -9032,7 +9585,8 @@ function checkMonthlyReportedNotification() {
        }, 50);
        
     });
-  }, 2000);
+  }
+  setTimeout(function() { runNotification(0); }, 0);
 }
 
 
@@ -9040,20 +9594,29 @@ function checkMonthlyReportedNotification() {
 var POLYGON_FEATURES_CACHE = [];
 var POLYGON_AREA_LAYER = null;
 var POHON_MARKER_LAYER = null;
+var POLYGON_FEATURES_REQUEST = null;
 
 function fetchPolygonFeatures() {
-  if (typeof appendAuthParam === 'undefined' || typeof GAS_WEB_APP_URL === 'undefined') return;
-  fetch(appendAuthParam(GAS_WEB_APP_URL + '?action=getPolygonFeatures'))
+  if (typeof appendAuthParam === 'undefined' || typeof GAS_WEB_APP_URL === 'undefined') return Promise.resolve([]);
+  if (POLYGON_FEATURES_REQUEST) return POLYGON_FEATURES_REQUEST;
+  POLYGON_FEATURES_REQUEST = fetch(appendAuthParam(GAS_WEB_APP_URL + '?action=getPolygonFeatures'))
     .then(function(res) { return res.json(); })
     .then(function(data) {
       if (data.success) {
         POLYGON_FEATURES_CACHE = Array.isArray(data.features) ? data.features : [];
         if (typeof renderPolygonFeatures === 'function') renderPolygonFeatures(POLYGON_FEATURES_CACHE);
       }
+      return POLYGON_FEATURES_CACHE;
     })
     .catch(function(err) {
       console.warn('[GeoHutan] Gagal memuat polygon features:', err);
+      return [];
+    })
+    .then(function(features) {
+      POLYGON_FEATURES_REQUEST = null;
+      return features;
     });
+  return POLYGON_FEATURES_REQUEST;
 }
 
 function renderPolygonFeatures(features) {
