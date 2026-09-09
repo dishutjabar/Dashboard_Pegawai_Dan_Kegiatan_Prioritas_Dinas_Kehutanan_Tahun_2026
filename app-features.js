@@ -5707,8 +5707,18 @@ function openPhotoLightbox() {
 
 /** Close lightbox */
 function closePhotoLightbox() {
-  document.getElementById('photo-lightbox').classList.remove('open');
-  document.body.style.overflow = '';
+  var lightbox = document.getElementById('photo-lightbox');
+  if (lightbox) lightbox.classList.remove('open', 'above-modal');
+  var detailModal = document.getElementById('weekly-detail-modal');
+  var monitorModal = document.getElementById('report-monitor-modal');
+  var weeklyModal = document.getElementById('weekly-report-modal');
+  if ((detailModal && detailModal.classList.contains('open')) ||
+      (monitorModal && monitorModal.classList.contains('open')) ||
+      (weeklyModal && weeklyModal.classList.contains('open'))) {
+    document.body.style.overflow = 'hidden';
+  } else {
+    document.body.style.overflow = '';
+  }
   if (document.fullscreenElement) {
     document.exitFullscreen().catch(err => console.warn(err));
   }
@@ -7048,6 +7058,7 @@ function openWeeklyReportModal(report) {
   updateWeeklyGangguanVisibility();
   modal.classList.add('open');
   prefetchWeeklyGpsLocation();
+  fetchWeeklyReportsForCurrentMarker().catch(function() {});
   // Cek versi backend satu kali; tampilkan warning jika perlu
   checkBackendVersion(function(ok) {
     var submitBtn = document.getElementById('weekly-report-submit');
@@ -7249,7 +7260,11 @@ function submitWeeklyReport(event) {
   }
   if (btn) { btn.disabled = true; btn.textContent = 'Menyimpan...'; }
 
-  validateSingleImageFile(file).then(function(err) {
+  fetchWeeklyReportsForCurrentMarker().catch(function() {
+    return WEEKLY_REPORT_STATE.reports || [];
+  }).then(function() {
+    return validateSingleImageFile(file);
+  }).then(function(err) {
     if (err) throw new Error(err);
     if (!file) return { base64: '', mimeType: '', filename: '', date: '', exifDate: '', lat: '', lng: '' };
     return getWeeklyPhotoFinalMetadata(file).then(function(meta) {
@@ -7276,44 +7291,14 @@ function submitWeeklyReport(event) {
         meta.note = 'GPS live belum tersedia, sistem memakai metadata kamera/EXIF yang lengkap.';
       }
       
-      // Cek duplicate per minggu sebelum merender status
-      var mode = document.getElementById('weekly-report-mode').value || 'create';
+      var submitMode = document.getElementById('weekly-report-mode').value || 'create';
+      var submitReportId = document.getElementById('weekly-report-id').value || '';
       var dupErrorMsg = '';
-      if (mode !== 'edit' && meta.date) {
-        var mt = typeof parseExifDate === 'function' ? parseExifDate(meta.date) : Date.parse(meta.date);
-        if (mt) {
-          var dObj = new Date(mt);
-          var copy = new Date(Date.UTC(dObj.getFullYear(), dObj.getMonth(), dObj.getDate()));
-          copy.setUTCDate(copy.getUTCDate() + 4 - (copy.getUTCDay()||7));
-          var yearStart = new Date(Date.UTC(copy.getUTCFullYear(),0,1));
-          var weekNo = Math.ceil(( ( (copy - yearStart) / 86400000) + 1)/7);
-          var weekStr = 'Minggu ke-' + weekNo + ', ' + copy.getUTCFullYear();
-          
-          var hasDuplicate = false;
-          var existingReports = window.WEEKLY_REPORT_STATE ? (window.WEEKLY_REPORT_STATE.reports || []) : [];
-          for (var i = 0; i < existingReports.length; i++) {
-            var wr = existingReports[i];
-            var wdStr = wr.waktu || wr.timestamp || wr.waktu_kegiatan || '';
-            if (wdStr) {
-               var wt = typeof parseExifDate === 'function' ? parseExifDate(wdStr) : 0;
-               if (wt) {
-                  var wdObj = new Date(wt);
-                  var wcopy = new Date(Date.UTC(wdObj.getFullYear(), wdObj.getMonth(), wdObj.getDate()));
-                  wcopy.setUTCDate(wcopy.getUTCDate() + 4 - (wcopy.getUTCDay()||7));
-                  var wyearStart = new Date(Date.UTC(wcopy.getUTCFullYear(),0,1));
-                  var wweekNo = Math.ceil(( ( (wcopy - wyearStart) / 86400000) + 1)/7);
-                  var existWeekStr = 'Minggu ke-' + wweekNo + ', ' + wcopy.getUTCFullYear();
-                  if (existWeekStr === weekStr) {
-                     hasDuplicate = true;
-                     break;
-                  }
-               }
-            }
-          }
-          if (hasDuplicate) {
-             dupErrorMsg = 'Ditolak: Laporan untuk ' + weekStr + ' sudah pernah diisi. Maksimal 1 kali input per minggu.';
-             metaError = metaError ? metaError + '\n' + dupErrorMsg : dupErrorMsg;
-          }
+      if (submitMode !== 'edit' && meta.date) {
+        var duplicate = findWeeklyReportDuplicateForPhotoDate(meta.date, submitReportId);
+        if (duplicate) {
+          dupErrorMsg = buildWeeklyDuplicateError(duplicate.weekLabel);
+          metaError = metaError ? metaError + '\n' + dupErrorMsg : dupErrorMsg;
         }
       }
       
@@ -7365,20 +7350,10 @@ function submitWeeklyReport(event) {
 }
 
 function loadWeeklyReportsForMarker(showLoading) {
-  var r = WEEKLY_REPORT_STATE.row || PHOTO_GALLERY.row;
-  var context = WEEKLY_REPORT_STATE.context || PHOTO_GALLERY.context || 'juna';
   var list = document.getElementById('weekly-report-list');
-  if (!r || !list) return;
+  if (!list) return;
   if (showLoading) list.innerHTML = '<div class="weekly-empty">Memuat riwayat laporan...</div>';
-  var coords = getPhotoCoords(r);
-  var url = GAS_WEB_APP_URL + '?action=getWeeklyReports&category=' + encodeURIComponent(getBackendCategoryForContext(context)) +
-    '&lat=' + encodeURIComponent(coords.lat) + '&lng=' + encodeURIComponent(coords.lng) +
-    '&rowIndex=' + encodeURIComponent(r._row_idx || '') + '&sheetGid=' + encodeURIComponent(r._source_gid || '') +
-    '&featureId=' + encodeURIComponent(r['ID'] || r.featureId || '') +
-    '&_ts=' + Date.now();
-  fetch(appendAuthParam(url)).then(function(res) { return res.json(); }).then(function(data) {
-    if (!data.success) throw new Error(data.error || 'Gagal memuat laporan.');
-    WEEKLY_REPORT_STATE.reports = data.reports || [];
+  fetchWeeklyReportsForCurrentMarker().then(function() {
     WEEKLY_REPORT_STATE.listPage = 1;
     renderWeeklyReportList();
   }).catch(function(err) {
@@ -7432,107 +7407,119 @@ function viewWeeklyReportDetail(idx) {
 
 function closeWeeklyDetailModal() {
   var modal = document.getElementById('weekly-detail-modal');
-  if (modal) modal.classList.remove('open');
+  if (!modal) return;
+  modal.classList.remove('open', 'show');
+  modal.style.display = '';
+  document.body.style.overflow = '';
 }
 
 function buildDetailKV(label, value) {
   return '<div class="weekly-detail-kv"><span>' + escapeHtml(label) + '</span><strong>' + escapeHtml(value || '-') + '</strong></div>';
 }
 
-function openWeeklyDetailModal(rep) {
-    var modal = document.getElementById('weekly-detail-modal');
-    var body = document.getElementById('weekly-detail-body');
-    if (!modal || !body || !rep) return;
-    WEEKLY_REPORT_STATE.currentDetailReport = rep;
-    var coords = getPhotoCoords(WEEKLY_REPORT_STATE.row || PHOTO_GALLERY.row || {});
-    var coordLabel = rep.koordinat || ((coords.lat && coords.lng) ? coordText(coords.lat, coords.lng) : '-');
-    var photoHtml = rep.fotoUrl ? '<button type="button" class="weekly-detail-photo" onclick="previewCurrentWeeklyDetailPhoto()"><img src="' + normalizeImageUrl(rep.fotoUrl) + '" alt="Foto laporan mingguan" onerror="handleDriveImageError(this)"><span>Lihat Foto</span></button>' :
-      '<div class="weekly-detail-no-photo">Foto belum tersedia</div>';
-      
-    // Sumber Bibit Table Builder with Pagination
-    var sumberHtml = '-';
-    if (rep.sumberBibit && rep.sumberBibit.trim() !== '' && rep.sumberBibit.toLowerCase() !== 'tidak ada') {
-        var sbList = rep.sumberBibit.split(',').filter(function(x) { return x.trim() !== ''; });
-        
-        // Expose sbList globally for pagination logic
-        window.currentWeeklySumberList = sbList;
-        
-        // Container for dynamic pagination
-        sumberHtml = '<div id="weekly-sumber-table-container"></div>';
-        
-        // Define pagination renderer
-        window.renderWeeklySumberPage = function(page) {
-            var itemsPerPage = 5;
-            var totalPages = Math.ceil(window.currentWeeklySumberList.length / itemsPerPage);
-            if (page < 1) page = 1;
-            if (page > totalPages) page = totalPages;
-            
-            var startIdx = (page - 1) * itemsPerPage;
-            var endIdx = startIdx + itemsPerPage;
-            var pageItems = window.currentWeeklySumberList.slice(startIdx, endIdx);
-            
-            var html = '<div style="border:1px solid #ddd;border-radius:6px;margin-top:5px;">';
-            html += '<table style="width:100%;font-size:12px;border-collapse:collapse;">';
-            html += '<tr style="background:#f1f1f1;"><th style="padding:6px;text-align:left;border-bottom:1px solid #ddd;width:30px;">No</th><th style="padding:6px;text-align:left;border-bottom:1px solid #ddd;">Sumber Bibit</th></tr>';
-            
-            if (pageItems.length === 0) {
-               html += '<tr><td colspan="2" style="padding:6px;text-align:center;">Tidak ada data</td></tr>';
-            } else {
-               pageItems.forEach(function(item, i) {
-                   html += '<tr><td style="padding:6px;border-bottom:1px solid #ddd;">'+(startIdx + i + 1)+'</td><td style="padding:6px;border-bottom:1px solid #ddd;">'+escapeHtml(item.trim())+'</td></tr>';
-               });
-            }
-            html += '</table></div>';
-            
-            // Pagination controls
-            if (totalPages > 1) {
-                html += '<div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; font-size:11px;">';
-                html += '<button onclick="renderWeeklySumberPage(' + (page - 1) + ')" ' + (page === 1 ? 'disabled style="opacity:0.5;border:1px solid #ccc;background:#f9f9f9;padding:4px 8px;border-radius:4px;"' : 'style="cursor:pointer;background:#2e7d32;color:#fff;border:none;padding:4px 8px;border-radius:4px;"') + '>Sebelumnya</button>';
-                html += '<span>Hal ' + page + ' / ' + totalPages + '</span>';
-                html += '<button onclick="renderWeeklySumberPage(' + (page + 1) + ')" ' + (page === totalPages ? 'disabled style="opacity:0.5;border:1px solid #ccc;background:#f9f9f9;padding:4px 8px;border-radius:4px;"' : 'style="cursor:pointer;background:#2e7d32;color:#fff;border:none;padding:4px 8px;border-radius:4px;"') + '>Selanjutnya</button>';
-                html += '</div>';
-            }
-            
-            var container = document.getElementById('weekly-sumber-table-container');
-            if (container) container.innerHTML = html;
-        };
-        
-        // Auto-render first page after modal opens
-        setTimeout(function() { window.renderWeeklySumberPage(1); }, 50);
-    }
+function buildWeeklySumberBibitHtml(rep) {
+  if (!rep.sumberBibit || !String(rep.sumberBibit).trim() || String(rep.sumberBibit).toLowerCase() === 'tidak ada') {
+    return '-';
+  }
+  var sbList = String(rep.sumberBibit).split(',').filter(function(x) { return x.trim() !== ''; });
+  if (!sbList.length) return '-';
+  window.currentWeeklySumberList = sbList;
+  setTimeout(function() { if (typeof window.renderWeeklySumberPage === 'function') window.renderWeeklySumberPage(1); }, 50);
+  return '<div id="weekly-sumber-table-container" class="weekly-sumber-table-wrap"></div>';
+}
 
-    body.innerHTML = '<div class="weekly-detail-hero">' +
-        '<div><span>Detail Laporan</span><h3>' + escapeHtml(rep.kategoriLabel || rep.category || 'Kegiatan') + '</h3><p>' + escapeHtml(rep.lokasi || rep.nama || '-') + '</p></div>' +
-        '<div class="weekly-detail-date">' + escapeHtml(formatDateIndo(rep.waktu) || '-') + '</div>' +
-      '</div>' +
-      '<div class="weekly-detail-layout">' +
-        '<div class="weekly-detail-main">' +
-          '<div class="weekly-detail-grid">' +
-            '<div class="weekly-detail-item"><strong>Pelaksana/Kelompok</strong><span>' + escapeHtml(rep.pelaksana || rep.nama || '-') + '</span></div>' +
-            '<div class="weekly-detail-item"><strong>Unit Pelaksana</strong><span>' + escapeHtml(rep.unit || '-') + '</span></div>' +
-            '<div class="weekly-detail-item"><strong>Pembina/Pendamping</strong><span>' + escapeHtml(rep.pembina || rep.petugas || '-') + '</span></div>' +
-            '<div class="weekly-detail-item"><strong>Kabupaten/Kota</strong><span>' + escapeHtml(rep.kabupaten || '-') + '</span></div>' +
-            '<div class="weekly-detail-item"><strong>Kapan</strong><span>' + escapeHtml(rep.waktu || '-') + '</span></div>' +
-            '<div class="weekly-detail-item"><strong>Tingkat Gangguan</strong><span>' + escapeHtml(rep.gangguan || '-') + '</span></div>' +
-            '<div class="weekly-detail-item"><strong>Koordinat Lokasi</strong><span>' + escapeHtml(coordLabel) + '</span></div>' +
-            '<div class="weekly-detail-item"><strong>Catatan Kegiatan</strong><span>' + escapeHtml(rep.ringkasan || rep.kendala || '-') + '</span></div>' +
-            '<div class="weekly-detail-item"><strong>Jenis & Jumlah Bibit</strong><span>' + escapeHtml(rep.jenisJumlahBibit || '-') + '</span></div>' +
-            '<div class="weekly-detail-item"><strong>Kekurangan Bibit (Btg)</strong><span>' + escapeHtml(rep.kekuranganTotalBibit || '-') + '</span></div>' +
-            '<div class="weekly-detail-item"><strong>Kebutuhan Bibit Tercukupi?</strong><span>' + escapeHtml(rep.kebutuhanBibitCukup || '-') + '</span></div>' +
-            '<div class="weekly-detail-item"><strong>Sumber Bibit</strong><span>' + sumberHtml + '</span></div>' +
-          '</div>' +
-        '</div>' +
-        '<div class="weekly-detail-side">' +
-          photoHtml +
-          '<div class="weekly-detail-stats">' +
-            '<div class="stat-box"><strong>Luasan (Ha)</strong><span>' + escapeHtml(rep.luasan || rep.luas || '-') + '</span></div>' +
-            '<div class="stat-box"><strong>Persentase Tutupan</strong><span>' + escapeHtml(rep.tutupan || '-') + '%</span></div>' +
-          '</div>' +
-        '</div>' +
+function renderWeeklySumberPage(page) {
+  var sbList = window.currentWeeklySumberList || [];
+  var itemsPerPage = 5;
+  var totalPages = Math.max(1, Math.ceil(sbList.length / itemsPerPage));
+  if (page < 1) page = 1;
+  if (page > totalPages) page = totalPages;
+  var startIdx = (page - 1) * itemsPerPage;
+  var pageItems = sbList.slice(startIdx, startIdx + itemsPerPage);
+  var html = '<table class="weekly-sumber-table"><thead><tr><th>No</th><th>Sumber Bibit</th></tr></thead><tbody>';
+  if (!pageItems.length) {
+    html += '<tr><td colspan="2">Tidak ada data</td></tr>';
+  } else {
+    pageItems.forEach(function(item, i) {
+      html += '<tr><td>' + (startIdx + i + 1) + '</td><td>' + escapeHtml(item.trim()) + '</td></tr>';
+    });
+  }
+  html += '</tbody></table>';
+  if (totalPages > 1) {
+    html += '<div class="weekly-sumber-pager">' +
+      '<button type="button" onclick="renderWeeklySumberPage(' + (page - 1) + ')" ' + (page === 1 ? 'disabled' : '') + '>Sebelumnya</button>' +
+      '<span>Hal ' + page + ' / ' + totalPages + '</span>' +
+      '<button type="button" onclick="renderWeeklySumberPage(' + (page + 1) + ')" ' + (page === totalPages ? 'disabled' : '') + '>Selanjutnya</button>' +
       '</div>';
-    modal.style.display = 'flex';
-    void modal.offsetWidth;
-    modal.classList.add('show');
+  }
+  var container = document.getElementById('weekly-sumber-table-container');
+  if (container) container.innerHTML = html;
+}
+window.renderWeeklySumberPage = renderWeeklySumberPage;
+
+function formatWeeklyTutupanLabel(value) {
+  var text = String(value || '-').trim();
+  if (!text || text === '-') return '-';
+  return /%/.test(text) ? text : text + '%';
+}
+
+function openWeeklyDetailModal(rep) {
+  var modal = document.getElementById('weekly-detail-modal');
+  var body = document.getElementById('weekly-detail-body');
+  if (!modal || !body || !rep) return;
+  WEEKLY_REPORT_STATE.currentDetailReport = rep;
+  var coords = getPhotoCoords(WEEKLY_REPORT_STATE.row || PHOTO_GALLERY.row || rep || {});
+  var coordLabel = rep.koordinat || ((coords.lat != null && coords.lng != null) ? coordText(coords.lat, coords.lng) : '-');
+  var kebutuhanTidak = String(rep.kebutuhanBibitCukup || '').toLowerCase() === 'tidak';
+  var adaGangguanYa = String(rep.adaGangguan || '').toLowerCase() === 'ya';
+  var sumberHtml = buildWeeklySumberBibitHtml(rep);
+  var photoHtml = rep.fotoUrl ?
+    '<button type="button" class="weekly-detail-photo" onclick="previewCurrentWeeklyDetailPhoto()"><img src="' + normalizeImageUrl(rep.fotoUrl) + '" alt="Foto laporan mingguan" onerror="handleDriveImageError(this)"><span>Lihat Foto</span></button>' :
+    '<div class="weekly-detail-no-photo">Foto belum tersedia</div>';
+
+  body.innerHTML = '<div class="weekly-detail-hero">' +
+      '<div><span>Laporan Mingguan</span><h3>' + escapeHtml(rep.kategoriLabel || rep.category || 'Kegiatan') + '</h3><p>' + escapeHtml(rep.lokasi || rep.nama || '-') + '</p></div>' +
+      '<div class="weekly-detail-date">' + escapeHtml(formatDateIndo(rep.fotoTanggal || rep.waktu) || '-') + '</div>' +
+    '</div>' +
+    '<div class="weekly-detail-layout">' +
+      '<div class="weekly-detail-main">' +
+        '<div class="weekly-detail-grid">' +
+          buildDetailKV('Pelaksana/Kelompok', rep.pelaksana || rep.nama || '-') +
+          buildDetailKV('Pembina/Pendamping', rep.pembina || rep.petugas || '-') +
+          buildDetailKV('Unit Pelaksana', rep.unit || '-') +
+          buildDetailKV('Kabupaten/Kota', rep.kabupaten || '-') +
+          buildDetailKV('Kapan', formatDateIndo(rep.waktu) || rep.waktu || '-') +
+          buildDetailKV('Waktu Foto', formatDateIndo(rep.fotoTanggal) || rep.fotoTanggal || '-') +
+          buildDetailKV('Koordinat Lokasi', coordLabel) +
+          buildDetailKV('Luasan (Ha)', rep.luasan || rep.luas || '-') +
+          buildDetailKV('Persentase Tutupan', formatWeeklyTutupanLabel(rep.tutupan)) +
+        '</div>' +
+        '<h4>Isi Laporan</h4>' +
+        '<div class="weekly-detail-grid">' +
+          buildDetailKV('Kegiatan Vegetatif', rep.kegiatanVegetatif || '-') +
+          buildDetailKV('Kondisi Tanaman', rep.kondisiTanaman || '-') +
+          buildDetailKV('Kegiatan Monitoring', rep.kegiatanMonitoring || '-') +
+          buildDetailKV('Jenis & Jumlah Bibit', rep.jenisJumlahBibit || '-') +
+          buildDetailKV('Total Bibit', rep.totalBibit || '0') +
+          buildDetailKV('Tinggi Tanaman (cm)', rep.tinggiTanaman || '-') +
+          buildDetailKV('Kebutuhan Bibit Tercukupi?', rep.kebutuhanBibitCukup || '-') +
+          buildDetailKV('Kekurangan Jenis/Jumlah Bibit', kebutuhanTidak ? (rep.kekuranganJenisJumlahBibit || '-') : '-') +
+          buildDetailKV('Kekurangan Bibit (Btg)', kebutuhanTidak ? (rep.kekuranganTotalBibit || '0') : '-') +
+          buildDetailKV('Kekurangan Tinggi Tanaman (cm)', kebutuhanTidak ? (rep.kekuranganTinggiTanaman || '-') : '-') +
+          buildDetailKV('Kekurangan Sumber Bibit', kebutuhanTidak ? (rep.kekuranganSumberBibit || '-') : '-') +
+          buildDetailKV('Ada Gangguan', rep.adaGangguan || '-') +
+          buildDetailKV('Jenis Gangguan', adaGangguanYa ? (rep.jenisGangguan || '-') : '-') +
+        '</div>' +
+        '<div class="weekly-detail-text"><span>Sumber Bibit</span><div class="weekly-sumber-table-wrap">' + sumberHtml + '</div></div>' +
+        '<div class="weekly-detail-text"><span>Catatan/Uraian Kegiatan</span><p>' + escapeHtml(rep.uraian || rep.ringkasan || rep.kendala || '-') + '</p></div>' +
+        '<div class="weekly-detail-text"><span>Tindak Lanjut</span><p>' + escapeHtml(adaGangguanYa ? (rep.tindakLanjut || '-') : '-') + '</p></div>' +
+      '</div>' +
+      '<aside class="weekly-detail-side">' + photoHtml +
+        '<button type="button" class="weekly-detail-map" onclick="focusCurrentWeeklyDetailMap()">Buka Titik di Peta</button>' +
+      '</aside>' +
+    '</div>';
+  modal.classList.add('open');
+  document.body.style.overflow = 'hidden';
 }
 
 function previewCurrentWeeklyDetailPhoto() {
@@ -7546,8 +7533,7 @@ function previewCurrentWeeklyDetailPhoto() {
   LB_STATE.year = '';
   LB_STATE.context = 'weekly';
   LB_STATE.locName = '<strong style="color:#fff;">Laporan Mingguan</strong><br/>' + escapeHtml(rep.lokasi || '');
-  document.getElementById('photo-lightbox').classList.add('open');
-  document.body.style.overflow = 'hidden';
+  openPhotoLightboxAboveModal();
   refreshLightbox();
 }
 
@@ -7571,8 +7557,7 @@ function previewWeeklyPhoto(idx) {
   LB_STATE.year = '';
   LB_STATE.context = 'weekly';
   LB_STATE.locName = '<strong style="color:#fff;">Laporan Mingguan</strong><br/>' + escapeHtml(rep.lokasi || '');
-  document.getElementById('photo-lightbox').classList.add('open');
-  document.body.style.overflow = 'hidden';
+  openPhotoLightboxAboveModal();
   refreshLightbox();
 }
 
@@ -7686,51 +7671,28 @@ if (wrFotoEl) {
          }
       }
       
-      var mode = document.getElementById('weekly-report-mode').value || 'create';
-      if (!metaError && mode === 'create' && r && meta.date) {
-         var mt = typeof parseExifDate === 'function' ? parseExifDate(meta.date) : Date.parse(meta.date);
-         if (mt) {
-            var dObj = new Date(mt);
-            var copy = new Date(Date.UTC(dObj.getFullYear(), dObj.getMonth(), dObj.getDate()));
-            copy.setUTCDate(copy.getUTCDate() + 4 - (copy.getUTCDay()||7));
-            var yearStart = new Date(Date.UTC(copy.getUTCFullYear(),0,1));
-            var weekNo = Math.ceil(( ( (copy - yearStart) / 86400000) + 1)/7);
-            var weekStr = 'Minggu ke-' + weekNo + ', ' + copy.getUTCFullYear();
-            
-            var existingReports = WEEKLY_REPORT_STATE.reports || [];
-            var hasThisWeek = false;
-            
-            for (var i = 0; i < existingReports.length; i++) {
-               var rep = existingReports[i];
-               var repT = typeof parseExifDate === 'function' ? parseExifDate(rep.waktu || rep.waktu_kegiatan) : 0;
-               if (repT) {
-                  var wdObj = new Date(repT);
-                  var wcopy = new Date(Date.UTC(wdObj.getFullYear(), wdObj.getMonth(), wdObj.getDate()));
-                  wcopy.setUTCDate(wcopy.getUTCDate() + 4 - (wcopy.getUTCDay()||7));
-                  var wyearStart = new Date(Date.UTC(wcopy.getUTCFullYear(),0,1));
-                  var wweekNo = Math.ceil(( ( (wcopy - wyearStart) / 86400000) + 1)/7);
-                  var existWeekStr = 'Minggu ke-' + wweekNo + ', ' + wcopy.getUTCFullYear();
-                  if (existWeekStr === weekStr) {
-                     hasThisWeek = true;
-                     break;
-                  }
-               }
-            }
-            
-            if (hasThisWeek) {
-               metaError = 'Anda sudah menginput laporan mingguan untuk titik ini pada minggu berjalan.';
-            }
-         }
+      var createMode = document.getElementById('weekly-report-mode').value || 'create';
+      var currentReportId = document.getElementById('weekly-report-id').value || '';
+      function renderPhotoValidation(metaError) {
+        if (metaError === '' && meta.gpsError && meta.source !== 'GPS lokasi perangkat' && missing.length) {
+          metaError = meta.gpsError;
+        } else if (meta.gpsError && meta.source !== 'GPS lokasi perangkat') {
+          meta.note = 'GPS live belum tersedia, memakai metadata kamera/EXIF.';
+        }
+        renderWeeklyPhotoMetaStatus(meta, f, metaError);
+        saveWeeklyFormDraft();
       }
-      
-      if (metaError === '' && meta.gpsError && meta.source !== 'GPS lokasi perangkat' && missing.length) {
-        metaError = meta.gpsError;
-      } else if (meta.gpsError && meta.source !== 'GPS lokasi perangkat') {
-        meta.note = 'GPS live belum tersedia, memakai metadata kamera/EXIF.';
+      if (!metaError && createMode === 'create' && meta.date) {
+        fetchWeeklyReportsForCurrentMarker().catch(function() {
+          return WEEKLY_REPORT_STATE.reports || [];
+        }).then(function() {
+          var duplicate = findWeeklyReportDuplicateForPhotoDate(meta.date, currentReportId);
+          if (duplicate) metaError = buildWeeklyDuplicateError(duplicate.weekLabel);
+          renderPhotoValidation(metaError);
+        });
+        return;
       }
-      
-      renderWeeklyPhotoMetaStatus(meta, f, metaError);
-      saveWeeklyFormDraft();
+      renderPhotoValidation(metaError);
     }).catch(function(err) {
        if (err !== 'validation_failed') console.error(err);
     });
@@ -7831,6 +7793,89 @@ function getReportRowLuas(row) {
 
 function getReportDateTs(row) {
   return parseExifDate((row && (row.waktu || row.fotoTanggal || row.updatedAt)) || '');
+}
+
+function getWeeklyReportPhotoTimestamp(rep) {
+  if (!rep) return 0;
+  return parseExifDate(rep.fotoTanggal || rep.waktu || rep.waktu_kegiatan || rep.updatedAt || '') || 0;
+}
+
+function getIsoWeekKeyFromTimestamp(ts) {
+  if (!ts) return '';
+  var d = new Date(ts);
+  if (isNaN(d.getTime())) return '';
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7));
+  var week1 = new Date(d.getFullYear(), 0, 4);
+  var week = 1 + Math.round(((d.getTime() - week1.getTime()) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7);
+  return d.getFullYear() + '-W' + String(week).padStart(2, '0');
+}
+
+function getIsoWeekLabelFromTimestamp(ts) {
+  var key = getIsoWeekKeyFromTimestamp(ts);
+  if (!key) return '';
+  var parts = key.match(/^(\d{4})-W(\d{2})$/);
+  if (!parts) return key;
+  return 'Minggu ke-' + parseInt(parts[2], 10) + ', ' + parts[1];
+}
+
+function buildWeeklyDuplicateError(weekLabel) {
+  return 'Ditolak: Laporan untuk ' + weekLabel + ' sudah pernah diisi. Maksimal 1 kali input per minggu berdasarkan metadata tanggal/waktu foto.';
+}
+
+function findWeeklyReportDuplicateForPhotoDate(photoDateStr, excludeReportId) {
+  var ts = parseExifDate(photoDateStr || '');
+  if (!ts) return null;
+  var weekKey = getIsoWeekKeyFromTimestamp(ts);
+  if (!weekKey) return null;
+  var weekLabel = getIsoWeekLabelFromTimestamp(ts);
+  var reports = WEEKLY_REPORT_STATE.reports || [];
+  var i;
+  for (i = 0; i < reports.length; i++) {
+    var rep = reports[i];
+    if (excludeReportId && String(rep.id || '') === String(excludeReportId)) continue;
+    var repTs = getWeeklyReportPhotoTimestamp(rep);
+    if (repTs && getIsoWeekKeyFromTimestamp(repTs) === weekKey) {
+      return { report: rep, weekKey: weekKey, weekLabel: weekLabel };
+    }
+  }
+  var queue = getWeeklyPendingQueue();
+  for (i = 0; i < queue.length; i++) {
+    var payload = queue[i];
+    if (!payload || String(payload.mode || 'create') === 'edit') continue;
+    if (excludeReportId && String(payload.reportId || '') === String(excludeReportId)) continue;
+    var pendingDate = payload.report && (payload.report.fotoTanggal || payload.report.waktu);
+    var pendingTs = parseExifDate(pendingDate || '');
+    if (pendingTs && getIsoWeekKeyFromTimestamp(pendingTs) === weekKey) {
+      return { report: payload.report || {}, weekKey: weekKey, weekLabel: weekLabel, pending: true };
+    }
+  }
+  return null;
+}
+
+function fetchWeeklyReportsForCurrentMarker() {
+  var r = WEEKLY_REPORT_STATE.row || PHOTO_GALLERY.row;
+  var context = WEEKLY_REPORT_STATE.context || PHOTO_GALLERY.context || 'juna';
+  if (!r) return Promise.resolve([]);
+  var coords = getPhotoCoords(r);
+  var url = GAS_WEB_APP_URL + '?action=getWeeklyReports&category=' + encodeURIComponent(getBackendCategoryForContext(context)) +
+    '&lat=' + encodeURIComponent(coords.lat) + '&lng=' + encodeURIComponent(coords.lng) +
+    '&rowIndex=' + encodeURIComponent(r._row_idx || '') + '&sheetGid=' + encodeURIComponent(r._source_gid || '') +
+    '&featureId=' + encodeURIComponent(r['ID'] || r.featureId || '') +
+    '&_ts=' + Date.now();
+  return fetch(appendAuthParam(url)).then(function(res) { return res.json(); }).then(function(data) {
+    if (!data.success) throw new Error(data.error || 'Gagal memuat laporan.');
+    WEEKLY_REPORT_STATE.reports = data.reports || [];
+    return WEEKLY_REPORT_STATE.reports;
+  });
+}
+
+function openPhotoLightboxAboveModal() {
+  var lightbox = document.getElementById('photo-lightbox');
+  if (lightbox) {
+    lightbox.classList.add('open', 'above-modal');
+  }
+  document.body.style.overflow = 'hidden';
 }
 
 function parseReportWeekValue(value) {
@@ -9019,6 +9064,24 @@ function renderReportMonitorTable() {
   }
   WEEKLY_REPORT_STATE.detailRows = rows;
   renderReportPagination(rows.length, totalPages);
+}
+
+function previewMonthlyMonitorPhoto(idx) {
+  var row = (WEEKLY_REPORT_STATE.detailRows || [])[idx];
+  if (!row || !row.fotoUrl) {
+    showToast('Foto laporan 3 bulanan tidak tersedia.', 'warning');
+    return;
+  }
+  LB_STATE.photos = [normalizeImageUrl(row.fotoUrl)];
+  LB_STATE.dates = [row.waktu || ''];
+  LB_STATE.years = [row.fotoTahun || row.tahun || ''];
+  LB_STATE.angles = [row.sudut || displayPhotoAngle(row.sudut) || 'Foto Utama'];
+  LB_STATE.idx = 0;
+  LB_STATE.year = row.fotoTahun || row.tahun || '';
+  LB_STATE.context = 'single';
+  LB_STATE.locName = '<strong style="color:#fff;">' + escapeHtml(row.nama || row.kategoriLabel || 'Laporan 3 Bulanan') + '</strong><br/>' + escapeHtml(row.unit || row.lokasi || '');
+  openPhotoLightboxAboveModal();
+  refreshLightbox();
 }
 
 function getFilteredReportMonitorRows() {
