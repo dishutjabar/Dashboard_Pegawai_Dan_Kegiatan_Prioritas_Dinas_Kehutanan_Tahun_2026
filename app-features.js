@@ -6370,30 +6370,34 @@ function exifDmsToDecimal(dms, ref) {
 
 function getFileExifMetadata(file) {
   return new Promise(function(resolve) {
-    var result = { date: getFileLastModifiedDateString(file), lat: null, lng: null };
+    var emptyResult = { date: '', lat: null, lng: null, hasExifDate: false, hasExifCoords: false };
     var settled = false;
     function finish(value) {
       if (settled) return;
       settled = true;
-      resolve(value || result);
+      var out = value || emptyResult;
+      out.hasExifDate = !!out.date;
+      out.hasExifCoords = out.lat != null && out.lng != null;
+      resolve(out);
     }
-    var fallbackTimer = setTimeout(function() { finish(result); }, 2000);
+    var fallbackTimer = setTimeout(function() { finish(emptyResult); }, 2500);
     try {
       if (typeof EXIF === 'undefined' || !EXIF.getData) {
         clearTimeout(fallbackTimer);
-        finish(result);
+        finish(emptyResult);
         return;
       }
       EXIF.getData(file, function() {
         var rawDate = EXIF.getTag(this, "DateTimeOriginal") || EXIF.getTag(this, "DateTime") || EXIF.getTag(this, "DateTimeDigitized");
         var lat = exifDmsToDecimal(EXIF.getTag(this, "GPSLatitude"), EXIF.getTag(this, "GPSLatitudeRef"));
         var lng = exifDmsToDecimal(EXIF.getTag(this, "GPSLongitude"), EXIF.getTag(this, "GPSLongitudeRef"));
+        var parsedDate = parseExifDateString(rawDate) || '';
         clearTimeout(fallbackTimer);
-        finish({ date: parseExifDateString(rawDate) || getFileLastModifiedDateString(file), lat: lat, lng: lng });
+        finish({ date: parsedDate, lat: lat, lng: lng, hasExifDate: !!parsedDate, hasExifCoords: lat != null && lng != null });
       });
     } catch (e) {
       clearTimeout(fallbackTimer);
-      finish(result);
+      finish(emptyResult);
     }
   });
 }
@@ -6467,67 +6471,11 @@ function saveLocalPhoto() {
         return getWeeklyPhotoFinalMetadata(file); // Audit Fix: Utilize robust GPS/EXIF handler for 3 Bulanan too
       })
       .then(function(meta) {
-        var reportCoords = coords;
-        if (reportCoords && reportCoords.lat != null && reportCoords.lng != null && meta.lat != null && meta.lng != null) {
-          if (typeof calculateHaversineDistance === 'function') {
-            var dist = calculateHaversineDistance(reportCoords.lat, reportCoords.lng, meta.lat, meta.lng);
-            if (dist !== null && dist > 1) {
-              throw new Error('Jarak foto (' + dist.toFixed(2) + ' KM) melebihi batas 1 KM dari titik koordinat Hutan Binaan!');
-            }
-          }
-        }
-        // Wajib metadata untuk Laporan 3 Bulanan Hutan Binaan
-        if (context === 'pegawaiBinaan') {
-          var missing = [];
-          if (!meta.date) missing.push('tanggal waktu');
-          if (meta.lat == null || meta.lng == null) missing.push('koordinat latitude/longitude');
-          if (missing.length) {
-            throw new Error('Ditolak: Foto Laporan 3 Bulanan Wajib memiliki metadata Koordinat Latitude Longitude dan Tanggal Waktu.');
-          }
-        }
-        
-        // Removed: Overwriting lat/lng with EXIF coords breaks backend row lookup
-        
-        if (context === 'pegawaiBinaan' && meta.date) {
-          var metaTs = typeof parseExifDate === 'function' ? parseExifDate(meta.date) : 0;
-          if (metaTs) {
-             var metaD = new Date(metaTs);
-             var pYear = metaD.getFullYear();
-             var pMonth = metaD.getMonth();
-             
-             var nowObj = new Date();
-             var currentQuarter = Math.floor(nowObj.getMonth() / 3);
-             var pQuarter = Math.floor(pMonth / 3);
-             if (pYear !== nowObj.getFullYear() || pQuarter !== currentQuarter) {
-                var mNames = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
-                var quarters = ['I (Jan-Mar)', 'II (Apr-Jun)', 'III (Jul-Sep)', 'IV (Okt-Des)'];
-                throw new Error('Ditolak: Foto dari bulan ' + mNames[pMonth] + ' ' + pYear + '. Laporan 3 Bulanan wajib menggunakan foto dalam rentang Triwulan saat ini (' + quarters[currentQuarter] + ').');
-             }
-              
-              // Cek duplicate per bulan
-              var rowData = window.PHOTO_GALLERY ? window.PHOTO_GALLERY.row : null;
-              if (rowData) {
-                 var datesArr = typeof getRowDates === 'function' ? getRowDates(rowData, pYear) : [];
-                 var rawLinimasa = String(rowData['Data Linimasa'] || '').split('|');
-                 var allMonthlyDateStrings = datesArr.concat(rawLinimasa);
-                 var isAlreadyUploadedForThisMonth = false;
-                 for (var _i = 0; _i < allMonthlyDateStrings.length; _i++) {
-                    var _ts = typeof parseExifDate === 'function' ? parseExifDate(allMonthlyDateStrings[_i]) : 0;
-                    if (_ts) {
-                       var _dObj = new Date(_ts);
-                       if (_dObj.getFullYear() === pYear && _dObj.getMonth() === pMonth) {
-                          isAlreadyUploadedForThisMonth = true;
-                          break;
-                       }
-                    }
-                 }
-                 if (isAlreadyUploadedForThisMonth) {
-                    var mNames = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
-                    throw new Error('Ditolak: Anda sudah pernah menginput laporan 3 Bulanan untuk bulan ' + mNames[pMonth] + ' ' + pYear + '. Maksimal 1 kali input per bulan dalam Triwulan.');
-                 }
-              }
-          }
-        }
+        var rowData = window.PHOTO_GALLERY ? window.PHOTO_GALLERY.row : null;
+        var businessError = validateMonthlyPhotoBusinessRules(meta, rowData, context);
+        if (businessError) throw new Error(businessError);
+        var distError = validatePhotoDistanceToPoint(meta, coords, 1);
+        if (distError) throw new Error(distError);
         
         var manualDateVal = document.getElementById('upload-datetime') ? document.getElementById('upload-datetime').value : '';
         var finalDateStr = manualDateVal ? formatUploadDate(new Date(manualDateVal)) : (meta.date || formatUploadDate(new Date()));
@@ -6909,22 +6857,46 @@ function mergeWeeklyPhotoMetadata(exifMeta, gpsMeta) {
   exifMeta = exifMeta || {};
   var isMobile = shouldRequireWeeklyGpsBeforeCamera();
   var gpsOk = gpsMeta && gpsMeta.lat != null && gpsMeta.lng != null;
-  var exifHasCoords = exifMeta && exifMeta.lat != null && exifMeta.lng != null;
-  
+  var exifHasCoords = exifMeta.lat != null && exifMeta.lng != null;
+  var exifHasDate = !!exifMeta.date;
+
+  if (isMobile) {
+    return {
+      date: exifHasDate ? exifMeta.date : (gpsOk && gpsMeta.date ? gpsMeta.date : ''),
+      lat: gpsOk ? gpsMeta.lat : exifMeta.lat,
+      lng: gpsOk ? gpsMeta.lng : exifMeta.lng,
+      source: gpsOk ? 'GPS lokasi perangkat' : 'Metadata kamera/EXIF',
+      accuracy: gpsOk ? gpsMeta.accuracy : '',
+      exifDate: exifMeta.date || '',
+      exifLat: exifMeta.lat,
+      exifLng: exifMeta.lng,
+      hasExifDate: exifHasDate,
+      hasExifCoords: exifHasCoords,
+      isMobileCapture: true
+    };
+  }
+
+  // Desktop/PC/Laptop: hanya metadata EXIF foto yang sah; jangan fallback ke GPS browser
   return {
-    date: exifMeta.date || (gpsOk && gpsMeta.date ? gpsMeta.date : ''),
-    lat: isMobile ? (gpsOk ? gpsMeta.lat : exifMeta.lat) : (exifHasCoords ? exifMeta.lat : (gpsOk ? gpsMeta.lat : null)),
-    lng: isMobile ? (gpsOk ? gpsMeta.lng : exifMeta.lng) : (exifHasCoords ? exifMeta.lng : (gpsOk ? gpsMeta.lng : null)),
-    source: isMobile ? (gpsOk ? 'GPS lokasi perangkat' : 'Metadata kamera/EXIF') : (exifHasCoords ? 'Metadata foto/EXIF' : 'GPS lokasi perangkat'),
-    accuracy: gpsOk ? gpsMeta.accuracy : '',
+    date: exifHasDate ? exifMeta.date : '',
+    lat: exifHasCoords ? exifMeta.lat : null,
+    lng: exifHasCoords ? exifMeta.lng : null,
+    source: exifHasCoords ? 'Metadata foto/EXIF' : (exifHasDate ? 'Metadata foto/EXIF (koordinat tidak ditemukan)' : 'Metadata foto tidak ditemukan'),
+    accuracy: '',
     exifDate: exifMeta.date || '',
     exifLat: exifMeta.lat,
-    exifLng: exifMeta.lng
+    exifLng: exifMeta.lng,
+    hasExifDate: exifHasDate,
+    hasExifCoords: exifHasCoords,
+    isMobileCapture: false
   };
 }
 
 function getWeeklyPhotoFinalMetadata(file) {
   return getFileExifMetadata(file).then(function(exifMeta) {
+    if (!shouldRequireWeeklyGpsBeforeCamera()) {
+      return mergeWeeklyPhotoMetadata(exifMeta, null);
+    }
     return requestWeeklyGpsLocation(false).then(function(gpsMeta) {
       return mergeWeeklyPhotoMetadata(exifMeta, gpsMeta);
     }).catch(function(gpsErr) {
@@ -6933,6 +6905,67 @@ function getWeeklyPhotoFinalMetadata(file) {
       return meta;
     });
   });
+}
+
+function getMonthlyMonthNames() {
+  return ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+}
+
+function monthAlreadyHasMonthlyReport(row, year, month) {
+  if (!row) return false;
+  var datesArr = typeof getRowDates === 'function' ? getRowDates(row, year) : [];
+  var rawLinimasa = String(row['Data Linimasa'] || '').split('|');
+  var allMonthlyDateStrings = datesArr.concat(rawLinimasa);
+  var i;
+  for (i = 0; i < allMonthlyDateStrings.length; i++) {
+    var ts = typeof parseExifDate === 'function' ? parseExifDate(allMonthlyDateStrings[i]) : 0;
+    if (!ts) continue;
+    var dObj = new Date(ts);
+    if (dObj.getFullYear() === year && dObj.getMonth() === month) return true;
+  }
+  return false;
+}
+
+function validateMonthlyPhotoBusinessRules(meta, row, context) {
+  if (context !== 'pegawaiBinaan') return '';
+  var missing = [];
+  if (!meta || !meta.date) missing.push('tanggal waktu');
+  if (!meta || meta.lat == null || meta.lng == null) missing.push('koordinat latitude/longitude');
+  if (missing.length) {
+    return 'Ditolak: Foto Laporan 3 Bulanan Wajib memiliki metadata Koordinat Latitude Longitude dan Tanggal Waktu.';
+  }
+  var metaTs = typeof parseExifDate === 'function' ? parseExifDate(meta.date) : 0;
+  if (!metaTs) return 'Metadata tanggal waktu foto tidak dapat dibaca.';
+  var metaD = new Date(metaTs);
+  var pYear = metaD.getFullYear();
+  var pMonth = metaD.getMonth();
+  var nowObj = new Date();
+  var galleryYear = (window.PHOTO_GALLERY && PHOTO_GALLERY.year) ? Number(PHOTO_GALLERY.year) : nowObj.getFullYear();
+  var mNames = getMonthlyMonthNames();
+  if (pYear !== galleryYear) {
+    return 'Ditolak: Foto harus bertanggal tahun linimasa ' + galleryYear + '.';
+  }
+  if (pYear === nowObj.getFullYear() && pMonth > nowObj.getMonth()) {
+    return 'Ditolak: Foto dari bulan ' + mNames[pMonth] + ' ' + pYear + ' belum dapat diinput (bulan mendatang).';
+  }
+  if (monthAlreadyHasMonthlyReport(row, pYear, pMonth)) {
+    return 'Ditolak: Anda sudah pernah menginput laporan 3 Bulanan untuk bulan ' + mNames[pMonth] + ' ' + pYear + '. Maksimal 1 kali input per bulan.';
+  }
+  return '';
+}
+
+function validatePhotoDistanceToPoint(meta, reportCoords, maxKm) {
+  maxKm = maxKm == null ? 1 : maxKm;
+  if (!reportCoords || reportCoords.lat == null || reportCoords.lng == null || !meta || meta.lat == null || meta.lng == null) {
+    return '';
+  }
+  if (typeof calculateHaversineDistance !== 'function') return '';
+  var dist = calculateHaversineDistance(reportCoords.lat, reportCoords.lng, meta.lat, meta.lng);
+  if (dist !== null) meta.distText = dist.toFixed(2) + ' KM';
+  if (dist !== null && dist > maxKm) {
+    return 'Jarak foto (' + dist.toFixed(2) + ' KM) melebihi batas ' + maxKm + ' KM dari titik koordinat Hutan Binaan!';
+  }
+  return '';
 }
 
 function renderWeeklyPhotoMetaStatus(meta, file, errorText) {
@@ -6951,6 +6984,9 @@ function renderWeeklyPhotoMetaStatus(meta, file, errorText) {
   var title = 'Foto Tidak memiliki metadata Koordinat Latitude Longitude atau Tanggal Waktu';
   if (ok) title = 'Foto Ini memiliki metadata Lengkap';
   else if (hasMeta && errorText) title = 'Peringatan: Ada ketidaksesuaian laporan!';
+  else if (meta && meta.isMobileCapture === false && (!meta.hasExifCoords || !meta.hasExifDate)) {
+    title = 'Foto Tidak memiliki metadata Koordinat Latitude Longitude atau Tanggal Waktu';
+  }
   
   wrap.className = 'weekly-photo-meta-status ' + (ok ? 'ok' : 'bad');
   wrap.innerHTML = '<div class="weekly-meta-card">' + thumb +
@@ -7273,16 +7309,9 @@ function submitWeeklyReport(event) {
       if (!meta.date) missing.push('tanggal waktu');
       if (meta.lat == null || meta.lng == null) missing.push('koordinat latitude/longitude');
       var metaError = missing.length ? 'Metadata tidak lengkap: ' + missing.join(', ') : '';
-      
-      // 2 KM Validation
-      var reportCoords = getPhotoCoords(r);
-      if (reportCoords && reportCoords.lat != null && reportCoords.lng != null && meta.lat != null && meta.lng != null) {
-        var dist = calculateHaversineDistance(reportCoords.lat, reportCoords.lng, meta.lat, meta.lng);
-        if (dist !== null && dist > 1) {
-          showToast('Jarak foto (' + dist.toFixed(2) + ' KM) melebihi batas 1 KM dari titik koordinat hutan binaan!', 'error');
-          if (btn) { btn.disabled = false; btn.textContent = old; }
-          return;
-        }
+      if (!missing.length) {
+        var distMsg = validatePhotoDistanceToPoint(meta, getPhotoCoords(r), 1);
+        if (distMsg) metaError = distMsg;
       }
       
       if (meta.gpsError && meta.source !== 'GPS lokasi perangkat' && missing.length) {
@@ -7660,15 +7689,9 @@ if (wrFotoEl) {
       var metaError = missing.length ? 'Metadata tidak lengkap: ' + missing.join(', ') : '';
       
       var r = WEEKLY_REPORT_STATE.row || PHOTO_GALLERY.row;
-      if (!metaError && r && meta.lat != null && meta.lng != null) {
-         var reportCoords = typeof getPhotoCoords === 'function' ? getPhotoCoords(r) : {lat: r._lat, lng: r._lng};
-         if (reportCoords && reportCoords.lat != null && reportCoords.lng != null) {
-            var dist = typeof calculateHaversineDistance === 'function' ? calculateHaversineDistance(reportCoords.lat, reportCoords.lng, meta.lat, meta.lng) : 0;
-            meta.distText = dist.toFixed(2) + ' KM';
-            if (dist > 1) {
-               metaError = 'Jarak foto (' + dist.toFixed(2) + ' KM) melebihi batas 1 KM dari titik koordinat Hutan Binaan!';
-            }
-         }
+      if (!metaError && r) {
+        var distPreviewError = validatePhotoDistanceToPoint(meta, typeof getPhotoCoords === 'function' ? getPhotoCoords(r) : { lat: r._lat, lng: r._lng }, 1);
+        if (distPreviewError) metaError = distPreviewError;
       }
       
       var createMode = document.getElementById('weekly-report-mode').value || 'create';
@@ -10074,49 +10097,12 @@ function handleMonthlyFileChange(files) {
     if (err) throw new Error(err);
     return getWeeklyPhotoFinalMetadata(file);
   }).then(function(meta) {
-    var errorText = '';
-    
-    // Cek Wajib
-    if (!meta.date || meta.lat == null || meta.lng == null) {
-       errorText = 'Foto Laporan 3 Bulanan Wajib memiliki metadata Koordinat Latitude Longitude dan Tanggal Waktu yang valid.';
-    }
-    
-    // Hitung jarak jika koordinat lengkap
     var r = window.PHOTO_GALLERY ? window.PHOTO_GALLERY.row : null;
     var context = window.PHOTO_GALLERY ? window.PHOTO_GALLERY.context : 'juna';
-    if (!errorText && r && context === 'pegawaiBinaan') {
-       var coords = getPhotoCoords(r);
-       if (coords && coords.lat != null && coords.lng != null && meta.lat != null && meta.lng != null) {
-          if (typeof calculateHaversineDistance === 'function') {
-            var dist = calculateHaversineDistance(coords.lat, coords.lng, meta.lat, meta.lng);
-            meta.distText = dist.toFixed(2) + ' KM';
-            if (dist > 1) {
-              errorText = 'Jarak foto (' + dist.toFixed(2) + ' KM) melebihi batas 1 KM dari titik koordinat Hutan Binaan!';
-            }
-          }
-       }
-       
-       // Cek Tanggal Triwulan
-       if (!errorText && meta.date) {
-          var metaTs = typeof parseExifDate === 'function' ? parseExifDate(meta.date) : 0;
-          if (metaTs) {
-             var metaD = new Date(metaTs);
-             var pYear = metaD.getFullYear();
-             var pMonth = metaD.getMonth();
-             
-             var nowObj = new Date();
-             var currentQuarter = Math.floor(nowObj.getMonth() / 3);
-             var pQuarter = Math.floor(pMonth / 3);
-             
-             if (pYear !== nowObj.getFullYear() || pQuarter !== currentQuarter) {
-                var mNames = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
-                var quarters = ['I (Jan-Mar)', 'II (Apr-Jun)', 'III (Jul-Sep)', 'IV (Okt-Des)'];
-                errorText = 'Foto dari bulan ' + mNames[pMonth] + ' ' + pYear + '. Wajib menggunakan foto dalam rentang Triwulan saat ini (' + quarters[currentQuarter] + ').';
-             }
-          }
-       }
+    var errorText = validateMonthlyPhotoBusinessRules(meta, r, context);
+    if (!errorText && r) {
+      errorText = validatePhotoDistanceToPoint(meta, getPhotoCoords(r), 1);
     }
-    
     renderMonthlyPhotoMetaStatus(meta, file, errorText);
   }).catch(function(err) {
     renderMonthlyPhotoMetaStatus(null, file, String(err.message || err));
