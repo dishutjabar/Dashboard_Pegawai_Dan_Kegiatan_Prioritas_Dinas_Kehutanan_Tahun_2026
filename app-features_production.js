@@ -4624,7 +4624,16 @@ var PER_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS5Zmpk0bJdGg7tyv
 ['1149553688','1364517698','144675684','1843729244','1981250821','1159710704','1142124495','420074128','1536834083'].forEach(function(g) { loadCSV(PER_URL.replace('{G}', g), 'persemaian'); });
 
 loadCSV('https://docs.google.com/spreadsheets/d/e/2PACX-1vSEHhDs2n0UKFjZlPcM4TrWQD9alaw1esFLVxjnKAD9isJ5vbKEQwhXFGYtyp8D2g/pub?gid=738073883&single=true&output=csv', 'pegawai');
-loadCSV('https://docs.google.com/spreadsheets/d/1xrl3W7DZs8SsYZIWiLgHYvi_89V7NismK-G9YDu9NdM/export?format=csv&gid=1475147460', 'pegawaiBinaan');
+// Hutan Binaan: muat 17 sheet per Unit Kerja (CDK 1-9, UPTD, Bidang).
+// Sheet gabungan legacy (GID 1475147460) TIDAK dimuat untuk menghindari duplikasi data.
+var BINAAN_URL = 'https://docs.google.com/spreadsheets/d/1xrl3W7DZs8SsYZIWiLgHYvi_89V7NismK-G9YDu9NdM/export?format=csv&gid={G}';
+// CDK Wilayah 1-9
+['2145834153','626268946','875481405','2007217939','828444869','958214963','657840972','1690968198','334899926',
+// UPTD PPPH, UPTD SPTH, UPTD TAHURA
+ '1010190717','1349929752','745093726',
+// Sekretariat, Bidang PDAS, Bidang PKSDAE, Bidang BUPM, Bidang PPKH
+ '157603106','741523134','157246697','2015271274','991199452'
+].forEach(function(g) { loadCSV(BINAAN_URL.replace('{G}', g), 'pegawaiBinaan'); });
 loadCSV('https://docs.google.com/spreadsheets/d/e/2PACX-1vSPtxo38ft9es4Mt0xn1oqPJQCVmYZcmyYN1GKTUBYz8b4wRX34jbQa5odSjVLwvB-yxuUnDGAV9Pou/pub?gid=2039375183&single=true&output=csv', 'jumat');
 
 /* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ LEAFLET DRAW & POLYGON ANALYSIS ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */

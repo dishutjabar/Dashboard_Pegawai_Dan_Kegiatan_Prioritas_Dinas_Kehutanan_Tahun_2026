@@ -1,7 +1,7 @@
-﻿/* ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â GeoHutan Jabar ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“ Core ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â */
+/* ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â GeoHutan Jabar ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“ Core ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â */
 
 /* 0. Globals */
-var mapObj, GEO = null, GEO_LAYER = null, GEO_LOAD_PROMISE = null, GEO_RETRY_TIMER = null, GEO_FEATURE_BOUNDS = null, LOADED = 0, TOTAL = 21, CHARTS = {}, RTIMER = null;
+var mapObj, GEO = null, GEO_LAYER = null, GEO_LOAD_PROMISE = null, GEO_RETRY_TIMER = null, GEO_FEATURE_BOUNDS = null, LOADED = 0, TOTAL = 37, CHARTS = {}, RTIMER = null;
 var _LOAD_SAFETY_TIMER = null;
 var DATA = { pjl: [], persemaian: [], pegawai: [], jumat: [], pegawaiBinaan: [] };
 var FILTER = { cdk: [], pegawaiUnit: [], kab: [], status: [], kawasan: [], jabatan: [], nama_pegawai: [], penyuluh: [], kategori_lojuna: [], binaan_unit: [], binaan_kab: [], binaan_kegiatan: [], binaan_jabatan: [], binaan_pembina: [] };
