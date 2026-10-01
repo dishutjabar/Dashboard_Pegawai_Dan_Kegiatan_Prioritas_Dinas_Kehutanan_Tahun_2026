@@ -1,1120 +1,175 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<meta name="referrer" content="no-referrer">
-<title>GeoHutan Jabar - Peta Sebaran Data Kehutanan</title>
-<meta name="description" content="Dashboard WebGIS Dinas Kehutanan Provinsi Jawa Barat">
-<link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#2e7d32">
-<!-- PWA iOS Meta Tags -->
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="GeoHutan">
-<link rel="apple-touch-icon" href="img/pwa-icon-192.png">
-<link rel="apple-touch-icon" sizes="192x192" href="img/pwa-icon-192.png">
-<link rel="apple-touch-icon" sizes="512x512" href="img/pwa-icon-512.png">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
-<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
-<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js" defer></script>
-<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js" defer></script>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js" defer></script>
-<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js" defer></script>
-<script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js" defer></script>
-<script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js" defer></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" defer></script>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
-<script src="https://code.jquery.com/jquery-3.7.1.min.js" defer></script>
-<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
-<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js" defer></script>
-<script src="https://unpkg.com/jszip@3.10.1/dist/jszip.min.js" defer></script>
-<script src="https://unpkg.com/leaflet-kmz@1.0.9/dist/leaflet-kmz.js" defer></script>
-<script src="https://cdn.jsdelivr.net/npm/exif-js" defer></script>
-<script src="https://unpkg.com/shpjs@4.0.4/dist/shp.js" defer></script>
-<script src="https://unpkg.com/@tmcw/togeojson@5.8.1/dist/togeojson.umd.js" defer></script>
-<script src="https://unpkg.com/leaflet.vectorgrid@latest/dist/Leaflet.VectorGrid.bundled.js" defer></script>
-<link rel="stylesheet" href="styles.css?v=20260909-weekly-report-fix-v72"/>
-<link rel="stylesheet" href="css/ai.css"/>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Informasi pembaruan Website GeoHutan Dinas Kehutanan Provinsi Jawa Barat." />
+  <title>Website Update - GeoHutan Jabar</title>
+  <style>
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      color: #fff;
+      background:
+        radial-gradient(circle at 80% 25%, rgba(68, 160, 72, .28), transparent 32%),
+        radial-gradient(circle at 15% 80%, rgba(35, 110, 75, .22), transparent 30%),
+        linear-gradient(135deg, #10291f 0%, #173d2a 48%, #1f552d 100%);
+    }
+
+    .card {
+      width: min(560px, 100%);
+      padding: 46px 38px;
+      text-align: center;
+      border: 1px solid rgba(255,255,255,.20);
+      border-radius: 24px;
+      background: rgba(255,255,255,.10);
+      box-shadow: 0 24px 70px rgba(0,0,0,.25);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+    }
+
+    .logo {
+      width: 88px;
+      height: 88px;
+      margin: 0 auto 22px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 24px;
+      background: linear-gradient(145deg, #4caf50, #31863b);
+      box-shadow: 0 12px 30px rgba(0,0,0,.22);
+      font-size: 42px;
+    }
+
+    .badge {
+      display: inline-block;
+      margin-bottom: 14px;
+      padding: 7px 14px;
+      border-radius: 999px;
+      color: #d8f5dc;
+      background: rgba(76,175,80,.18);
+      border: 1px solid rgba(129,199,132,.30);
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: .3px;
+    }
+
+    h1 {
+      margin: 0 0 12px;
+      font-size: clamp(28px, 5vw, 40px);
+      line-height: 1.15;
+    }
+
+    .subtitle {
+      margin: 0 auto 28px;
+      max-width: 450px;
+      color: rgba(255,255,255,.78);
+      font-size: 16px;
+      line-height: 1.7;
+    }
+
+    .notice {
+      margin-bottom: 28px;
+      padding: 16px 18px;
+      border-radius: 14px;
+      text-align: left;
+      background: rgba(0,0,0,.14);
+      border: 1px solid rgba(255,255,255,.10);
+      color: rgba(255,255,255,.86);
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      min-width: 250px;
+      padding: 14px 24px;
+      border-radius: 12px;
+      background: #55ad5b;
+      color: #fff;
+      text-decoration: none;
+      font-size: 16px;
+      font-weight: 700;
+      box-shadow: 0 10px 24px rgba(0,0,0,.18);
+      transition: transform .2s ease, background .2s ease, box-shadow .2s ease;
+    }
+
+    .button:hover {
+      background: #64bd6a;
+      transform: translateY(-2px);
+      box-shadow: 0 14px 30px rgba(0,0,0,.24);
+    }
+
+    .url {
+      margin-top: 16px;
+      color: rgba(255,255,255,.52);
+      font-size: 12px;
+      word-break: break-all;
+    }
+
+    footer {
+      margin-top: 30px;
+      padding-top: 20px;
+      border-top: 1px solid rgba(255,255,255,.10);
+      color: rgba(255,255,255,.48);
+      font-size: 12px;
+    }
+
+    @media (max-width: 480px) {
+      .card { padding: 34px 22px; border-radius: 20px; }
+      .logo { width: 76px; height: 76px; font-size: 36px; }
+      .button { width: 100%; min-width: 0; }
+    }
+  </style>
 </head>
 <body>
+  <main class="card">
+    <div class="logo" aria-hidden="true">🌳</div>
 
-<section id="auth-portal" class="auth-portal hidden" aria-label="Portal login GeoHutan">
-  <div class="auth-shell">
-    <div class="auth-brand">
-      <div class="auth-mark">
-        <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <circle cx="16" cy="16" r="15" fill="rgba(46,125,50,0.12)" stroke="#2e7d32" stroke-width="1.5"/>
-          <polygon points="16,4 24,16 20,16 23,26 9,26 12,16 8,16" fill="#2e7d32" stroke="#fff" stroke-width="1"/>
-          <rect x="14" y="26" width="4" height="2" rx="1" fill="#5d4037"/>
-        </svg>
-      </div>
-      <div>
-        <h1>GeoHutan Jabar</h1>
-        <p>Portal akses dashboard WebGIS Dinas Kehutanan Provinsi Jawa Barat</p>
-      </div>
+    <div class="badge">WEBSITE UPDATE</div>
+
+    <h1>Website Telah Diperbarui</h1>
+
+    <p class="subtitle">
+      Website GeoHutan telah beralih ke aplikasi GeoHutan terbaru
+      dengan tampilan dan sistem yang diperbarui.
+    </p>
+
+    <div class="notice">
+      Silakan gunakan aplikasi GeoHutan terbaru melalui tautan di bawah ini
+      untuk mengakses layanan dan informasi GeoHutan Dinas Kehutanan Provinsi Jawa Barat.
     </div>
 
-    <form id="login-form" class="auth-form" onsubmit="submitLogin(event)">
-      <label for="login-username">Username</label>
-      <input id="login-username" type="text" autocomplete="username" placeholder="Masukkan username" required>
+    <a
+      class="button"
+      href="https://geohutanjabarprov.vercel.app/"
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      Buka Aplikasi GeoHutan Terbaru →
+    </a>
 
-      <label for="login-password">Password</label>
-      <div class="auth-password-field">
-        <input id="login-password" type="password" autocomplete="current-password" placeholder="Masukkan password" required>
-        <button type="button" onclick="togglePasswordVisibility('login-password', this)">Tampilkan</button>
-      </div>
-
-      <label class="auth-check">
-        <input id="login-captcha" type="checkbox">
-        <span>Saya memverifikasi akses resmi ke dashboard GeoHutan.</span>
-      </label>
-
-      <button id="login-submit" class="auth-primary" type="submit">Masuk Dashboard</button>
-      <button id="btn-install-pwa" class="auth-primary secondary" type="button" style="display: block; margin-top: 10px; background: transparent; color: var(--primary); border: 1px solid var(--primary);" aria-label="Unduh dan instal aplikasi GeoHutan ke perangkat">📲 Unduh Aplikasi GeoHutan</button>
-    </form>
-
-    <div id="auth-status" class="auth-status" aria-live="polite"></div>
-  </div>
-</section>
-
-<!-- Loader -->
-<div id="loader-overlay">
-  <div class="loader-spinner"></div>
-  <div id="loader-text">Memuat Data GeoHutan... 0%</div>
-</div>
-
-<div id="map"></div>
-<div id="map-dpl-readout" aria-live="polite">Memuat DPL...</div>
-
-<!-- Topbar -->
-<header id="topbar" class="glass-panel">
-  <!-- Mobile Sidebar Filter Button -->
-  <button class="mobile-sidebar-toggle" id="mobile-sidebar-toggle" type="button" onclick="openSidebarPanel(event)" aria-label="Buka panel filter, statistik, dan legenda" title="Filter, statistik, legenda">
-    <svg class="sidebar-filter-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <path d="M4 7h10"></path><path d="M18 7h2"></path><circle cx="16" cy="7" r="2"></circle>
-      <path d="M4 12h3"></path><path d="M11 12h9"></path><circle cx="9" cy="12" r="2"></circle>
-      <path d="M4 17h12"></path><path d="M20 17h0"></path><circle cx="18" cy="17" r="2"></circle>
-    </svg>
-  </button>
-
-  <!-- Mobile Hamburger Menu Button -->
-  <button class="mobile-menu-toggle" id="mobile-menu-toggle" type="button" onclick="toggleMobileMenu(event)" aria-label="Buka menu utama" aria-expanded="false" title="Menu utama">
-    <span></span>
-    <span></span>
-    <span></span>
-  </button>
-  <div class="topbar-left">
-    <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="16" cy="16" r="15" fill="rgba(46,125,50,0.1)" stroke="var(--primary)" stroke-width="1.5"/>
-      <polygon points="16,4 24,16 20,16 23,26 9,26 12,16 8,16" fill="var(--primary)" stroke="#fff" stroke-width="1"/>
-      <rect x="14" y="26" width="4" height="2" rx="1" fill="#5d4037"/>
-    </svg>
-    <div>
-      <div class="logo-text">GeoHutan Jabar</div>
-      <div class="logo-sub">Dinas Kehutanan Prov. Jawa Barat</div>
+    <div class="url">
+      https://geohutanjabarprov.vercel.app/
     </div>
-  </div>
-  <div class="topbar-center">
-    <div class="global-search-container">
-      <div class="global-search-box">
-        <span class="search-icon">&#128269;</span>
-        <input type="text" id="global-search-input" placeholder="Cari lokasi (Gedung Sate), koordinat, atau nama data..." autocomplete="off">
-        <button id="global-search-clear" class="search-clear">&times;</button>
-      </div>
-      <div class="global-search-results" id="global-search-results"></div>
-    </div>
-  </div>
-  <div class="topbar-right">
-    <div id="clock">00:00:00</div>
-    <button id="btn-spatial" class="btn-icon btn-spatial-upload" onclick="openSpatialModal()" title="Upload File Spasial (SHP, KML, GeoJSON, ZIP, Folder)">&#128205; <span class="d-none-mobile">Upload Spasial</span></button>
-    <button id="btn-table" class="btn-icon" type="button" onclick="openPimpinanDashboard()" title="Dashboard Pimpinan">&#128200; <span class="d-none-mobile">Dashboard</span></button>
-    <div id="report-menu" class="report-menu">
-      <button id="btn-report" class="btn-icon" type="button" onclick="toggleReportMenu(event)">&#128202; <span class="d-none-mobile">Laporan</span></button>
-      <div id="report-dropdown" class="report-dropdown">
-        <button id="btn-report-weekly" type="button" onclick="openReportMonitor('weekly')">Laporan Mingguan</button>
-        <button id="btn-report-monthly" type="button" onclick="openReportMonitor('monthly')">Laporan 3 Bulanan</button>
-        <button id="btn-kalender-reminder" type="button" onclick="openCalendarReminderModal()">Kalender Pengingat</button>
-      </div>
-    </div>
-    <button id="btn-export" class="btn-icon" onclick="openExportModal()">&#128196; <span class="d-none-mobile">Export</span></button>
-    <button class="btn-icon" onclick="goFullscreen()">&#9974; <span class="d-none-mobile">Fullscreen</span></button>
-    <div class="profile-menu" id="profile-menu">
-      <button class="profile-trigger" type="button" onclick="toggleProfileMenu(event)" aria-haspopup="true" aria-expanded="false">
-        <span class="profile-avatar">GH</span>
-        <span class="profile-label" id="auth-user-pill"></span>
-        <span class="profile-caret">&#9662;</span>
-      </button>
-      <div class="profile-dropdown" id="profile-dropdown">
-        <div class="profile-name" id="profile-name">GeoHutan</div>
-        <div class="profile-role" id="profile-role">Pengguna Dashboard</div>
-        <button class="profile-logout" type="button" onclick="openCredentialModal()" style="margin-bottom: 6px; background: transparent; color: var(--primary); border: 1px solid var(--primary);">Ganti Password</button>
-        <button class="profile-logout" type="button" onclick="openForgotPasswordModal()" style="margin-bottom: 6px; background: transparent; color: #1565c0; border: 1px solid #1565c0;">Lupa Password</button>
-        <button class="profile-logout" type="button" onclick="logoutGeoHutan()">Keluar</button>
-      </div>
-    </div>
-  </div>
-</header>
 
-<!-- Sidebar Kiri -->
-<aside id="sidebar" class="glass-panel">
-  <!-- Sidebar Header for Mobile -->
-  <div class="sidebar-mobile-header" style="display:none; justify-content:space-between; align-items:center; padding:10px 15px; border-bottom:1px solid rgba(0,0,0,0.1);">
-    <h3 style="margin:0; font-size:16px;">Panel Peta</h3>
-    <div>
-      <button class="sidebar-min-btn" onclick="toggleSidebarCollapse()" style="background:transparent; border:none; font-size:18px; font-weight:bold; cursor:pointer; margin-right:10px;" title="Minimize">&minus;</button>
-      <button class="sidebar-close-btn" onclick="closeSidebarPanel()" style="background:transparent; border:none; font-size:20px; font-weight:bold; cursor:pointer;" title="Close">&times;</button>
-    </div>
-  </div>
-  <button id="sidebar-collapse-btn" class="sidebar-collapse-btn" type="button" onclick="toggleSidebarCollapse()" title="Sembunyikan/Tampilkan Sidebar">&lsaquo;</button>
-  <div class="sidebar-tabs">
-    <button class="tab-btn active" onclick="switchTab('tab-filter')">&#9881; Filter</button>
-    <button class="tab-btn" onclick="switchTab('tab-stat')">&#128202; Statistik</button>
-    <button class="tab-btn" onclick="switchTab('tab-legend')">&#128205; Legenda</button>
-  </div>
-  
-  <div id="tab-filter" class="tab-content active fade-in">
-    <div class="filter-group"><label>CDK Wilayah</label><select id="f_cdk" multiple="multiple"></select></div>
-    <div class="filter-group"><label>Unit Pegawai</label><select id="f_pegawai" multiple="multiple"></select></div>
-    <div class="filter-group"><label>Kabupaten / Kota</label><select id="f_kab" multiple="multiple"></select></div>
-    <div class="filter-group"><label>Status Persemaian</label><select id="f_status" multiple="multiple"></select></div>
-    <div class="filter-group"><label>Kawasan Leuweung</label><select id="f_kawasan" multiple="multiple"></select></div>
-    <div class="filter-group"><label>Jabatan Pegawai</label><select id="f_jabatan" multiple="multiple"></select></div>
-    <div class="filter-group"><label>Nama Pegawai</label><select id="f_nama_pegawai" multiple="multiple"></select></div>
-    <div class="filter-group"><label>Petugas Lapangan (Pendamping Jaga Leuweung)</label><select id="f_penyuluh" multiple="multiple"></select></div>
-    <div class="filter-group"><label>Kategori Lojuna</label><select id="f_kategori_lojuna" multiple="multiple"></select></div>
-
-    <div id="binaan-filter-title" style="margin-top:15px; padding-top:10px; border-top:1px solid rgba(0,0,0,0.1); font-size:11px; font-weight:bold; color:var(--primary); margin-bottom:5px;">Filter Wilayah Hutan Binaan</div>
-    <div class="filter-group"><label>Kegiatan Binaan</label><select id="f_binaan_kegiatan" multiple="multiple"></select></div>
-    <div class="filter-group"><label>Jabatan Binaan</label><select id="f_binaan_jabatan" multiple="multiple"></select></div>
-    <div class="filter-group"><label>Pembina/Pengampu</label><select id="f_binaan_pembina" multiple="multiple"></select></div>
-    <div class="filter-group" id="f_luas_container">
-      <label>Luas (Ha)</label>
-      <div style="display:flex; gap:6px;">
-        <select id="f_luas_op" style="width:50px; padding:6px; border-radius:6px; border:1px solid #ddd; font-size:12px; background:rgba(255,255,255,0.8);">
-          <option value=">=">&ge;</option>
-          <option value=">">&gt;</option>
-          <option value="<=">&le;</option>
-          <option value="<">&lt;</option>
-          <option value="=">=</option>
-        </select>
-        <input type="number" step="0.01" id="f_luas_val" placeholder="Nilai (Ha)" style="flex:1; padding:6px; border-radius:6px; border:1px solid #ddd; font-size:12px; background:rgba(255,255,255,0.8);">
-      </div>
-    </div>
-    <div class="btn-row">
-      <button class="btn-apply" onclick="applyFilter()">Terapkan</button>
-      <button class="btn-reset" onclick="resetFilter()">Reset</button>
-    </div>
-    <div class="map-controls">
-      <label>Basemap: 
-        <select id="map-style" onchange="changeBasemap(this.value)">
-          <option value="satellite">Esri World Imagery</option>
-          <option value="gHybrid">Google Hybrid (Satelit + Label)</option>
-          <option value="gLight">Google Maps (Mode Terang)</option>
-          <option value="gDark">Google Maps (Mode Gelap)</option>
-          <option value="street">OSM Street</option>
-          <option value="topo">OpenTopoMap</option>
-        </select>
-      </label>
-      <label><input type="checkbox" id="toggle-cluster" onchange="toggleClustering()"> Aktifkan Clustering</label>
-      <label><input type="checkbox" id="toggle-heatmap" onchange="toggleHeatmap()"> Tampilkan Heatmap</label>
-      <label><input type="checkbox" id="toggle-pjl-polygon" onchange="togglePjlPolygons()"> Tampilkan Area Tanam 2 Ha (Petugas Jaga Leuweung)</label>
-      <label><input type="checkbox" id="toggle-spatial" onchange="toggleSpatialPolygons()"> Tampilkan Polygon Spasial (Upload)</label>
-      <label class="staff-hidden-map-control"><input type="checkbox" id="toggle-polygon-kegiatan" checked onchange="togglePolygonKegiatanLayer()"> Tampilkan Area Polygon Kegiatan</label>
-      <label class="staff-hidden-map-control"><input type="checkbox" id="toggle-pohon-marker" checked onchange="togglePohonMarkerLayer()"> Tampilkan Marker Titik Kegiatan (Pohon)</label>
-      <label class="staff-hidden-map-control"><input type="checkbox" id="toggle-buffer" onchange="toggleBuffer()"> Buffer Zone Saat Diklik (10/20/30km)</label>
-      
-    </div>
-  </div>
-
-  <div id="tab-stat" class="tab-content fade-in">
-    <div class="stat-card">
-      <div class="stat-info"><div class="stat-lbl" style="font-size:10px;">Petugas Jaga Leuweung</div><div class="stat-val cg" id="cnt-pjl">0</div></div>
-      <div class="stat-icon">&#127794;</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-info"><div class="stat-lbl" style="font-size:10px;">Lokasi Persemaian Jaga Leuweung</div><div class="stat-val cb" id="cnt-per">0</div></div>
-      <div class="stat-icon">&#127807;</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-info"><div class="stat-lbl" style="font-size:10px;">Pegawai Dinas Kehutanan</div><div class="stat-val co" id="cnt-peg" style="color:#7cb342;">0</div></div>
-      <div class="stat-icon">&#128100;</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-info"><div class="stat-lbl" style="font-size:10px;">Lokasi Permanen Jum'at Menanam</div><div class="stat-val cp" id="cnt-jum">0</div></div>
-      <div class="stat-icon">&#127793;</div>
-    </div>
-    
-    <div class="stat-card">
-      <div class="stat-info"><div class="stat-lbl" style="font-size:10px;">Data hutan binaan</div><div class="stat-val" style="color:#fb8c00;" id="cnt-pegb">0</div></div>
-      <div class="stat-icon">&#127966;</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-info"><div class="stat-lbl" style="font-size:10px;">Total Luasan Binaan (Ha)</div><div class="stat-val" style="color:#00897b;" id="cnt-pegb-luas">0</div></div>
-      <div class="stat-icon">&#128207;</div>
-    </div>
-    <div class="stat-card" style="background:linear-gradient(135deg,#e3f2fd,#bbdefb);">
-      <div class="stat-info"><div class="stat-lbl" style="font-size:10px;color:#1565c0;font-weight:700;">Total Estimasi Serapan Karbon (CO&#8322;e)</div><div class="stat-val" style="color:#1565c0;font-size:14px;font-weight:800;" id="cnt-total-carbon">0.000</div><div style="font-size:9px;color:#1976d2;margin-top:2px;font-weight:600;">ton CO&#8322;e</div></div>
-      <div class="stat-icon" style="font-size:24px;">&#127961;&#127807;</div>
-    </div>
-    
-    <div class="chart-title mt-3">Sebaran Data per Kategori</div>
-    <div class="chart-container"><canvas id="c-layer"></canvas></div>
-    <div class="chart-title">Status Persemaian</div>
-    <div class="chart-container"><canvas id="c-status"></canvas></div>
-    <div class="chart-title">Jaga Leuweung per CDK</div>
-    <div class="chart-container"><canvas id="c-cdk"></canvas></div>
-    <div class="chart-title mt-3">Luasan Binaan per CDK/Unit Kerja (Ha)</div>
-    <div class="chart-container"><canvas id="c-binaan-unit"></canvas></div>
-    <div class="chart-title">Luasan Binaan per Kabupaten (Ha)</div>
-    <div class="chart-container"><canvas id="c-binaan-kab"></canvas></div>
-    <div class="chart-title">Luasan Hutan Binaan per Kegiatan (Ha)</div>
-    <div class="chart-container"><canvas id="c-binaan-luas-kegiatan"></canvas></div>
-    <div class="chart-title">Sebaran Kegiatan Hutan Binaan</div>
-    <div class="chart-container"><canvas id="c-binaan-kegiatan"></canvas></div>
-  </div>
-
-  <div id="tab-legend" class="tab-content fade-in">
-    <div class="leg-item" id="leg-pjl" onclick="toggleLayer('pjl')">
-      <svg class="leg-icon-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7" fill="#FFFF00" stroke="#fff" stroke-width="1.5"/></svg>
-      <span class="leg-text">Petugas Jaga Leuweung</span>
-    </div>
-    <div class="leg-item" id="leg-jum" onclick="toggleLayer('jum')" style="flex-direction:column; align-items:flex-start;">
-      <div style="display:flex; align-items:center;">
-        <span class="leg-text" style="font-weight:bold;">Lokasi Jum'at Menanam</span>
-      </div>
-      <div style="display:flex; flex-direction:column; gap:8px; margin-top: 8px; margin-left: 6px;">
-        <div style="display:flex; align-items:center; gap:10px;">
-          <svg width="24" height="24" viewBox="0 0 24 24"><polygon points="12,2 15,9 22,9 16,14 18,21 12,17 6,21 8,14 2,9 9,9" fill="#8e24aa" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/></svg>
-          <span style="font-size:11px;">Lokasi Juna Permanen</span>
-        </div>
-      </div>
-    </div>
-    <div class="leg-item" id="leg-peg" onclick="toggleLayer('peg')">
-  <svg class="leg-icon-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
-    <circle cx="12" cy="12" r="6.5" fill="#8bc34a"/>
-  </svg>
-  <span class="leg-text">Pegawai Dinas Kehutanan</span>
-</div>
-    <div class="leg-item" id="leg-pegb" onclick="toggleLayer('pegb')">
-      <svg class="leg-icon-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
-        <polygon points="12,4 20,12 12,20 4,12" fill="#fb8c00"/>
-      </svg>
-      <span class="leg-text">Data hutan binaan</span>
-    </div>
-    <div class="leg-item leg-hidden" id="leg-autopoly" onclick="toggleAutoPoly()">
-      <svg class="leg-icon-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><polygon points="12,2 22,12 12,22 2,12" fill="rgba(0,172,193,0.2)" stroke="#00acc1" stroke-width="2" stroke-dasharray="4,4"/></svg>
-      <span class="leg-text">Poligon Auto (Area Filter)</span>
-    </div>
-    <div class="leg-item" id="leg-per" onclick="toggleLayer('per')">
-      <svg class="leg-icon-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><polygon points="12,2 22,10 18,22 6,22 2,10" fill="#03a9f4" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/></svg>
-      <span class="leg-text">Lokasi Persemaian Jaga Leuweung</span>
-    </div>
-    <div style="margin-top:10px; padding-top:10px; border-top:1px solid rgba(255,255,255,0.08);">
-      <div class="leg-text" style="font-weight:bold; margin-bottom:8px; font-size:11px; opacity:0.85;">Area Kegiatan Tanam &amp; Pelihara</div>
-      <div style="display:flex; flex-direction:column; gap:8px;">
-        <div class="leg-item" id="leg-polygon-kegiatan" onclick="togglePolygonKegiatanLayer()" style="padding:4px 0; border:none; background:none; gap:10px;">
-          <svg width="18" height="14" viewBox="0 0 18 14"><rect x="1" y="1" width="16" height="12" rx="2" fill="rgba(76,175,80,0.25)" stroke="#388e3c" stroke-width="1.8" stroke-dasharray="3,2"/></svg>
-          <span style="font-size:11px;">Area Polygon Kegiatan</span>
-        </div>
-        <div class="leg-item" id="leg-pohon-marker" onclick="togglePohonMarkerLayer()" style="padding:4px 0; border:none; background:none; gap:10px;">
-          <svg width="16" height="20" viewBox="0 0 20 24"><ellipse cx="10" cy="8" rx="6" ry="7" fill="#388e3c" stroke="#fff" stroke-width="1"/><ellipse cx="10" cy="13" rx="4.5" ry="5" fill="#43a047" stroke="#fff" stroke-width="0.8"/><rect x="8.5" y="18" width="3" height="5" rx="1" fill="#5d4037"/></svg>
-          <span style="font-size:11px;">Titik Kegiatan (Pohon)</span>
-        </div>
-      </div>
-    </div>
-    <div style="margin-top:10px; padding-top:10px; border-top:1px solid rgba(255,255,255,0.08);">
-      <div class="leg-text" style="font-weight:bold; margin-bottom:8px; font-size:11px; opacity:0.85;">Polygon Spasial (Upload)</div>
-      <div style="display:flex; flex-direction:column; gap:8px;">
-        
-        <div style="display:flex; align-items:center; gap:10px;">
-          <svg width="18" height="14" viewBox="0 0 18 14"><rect x="1" y="1" width="16" height="12" rx="2" fill="#ef5350" fill-opacity="0.3" stroke="#c62828" stroke-width="1.5"/></svg>
-          <span style="font-size:11px;">Jaga Leuweung</span>
-        </div>
-        
-        <div style="display:flex; align-items:center; gap:10px;">
-          <svg width="18" height="14" viewBox="0 0 18 14"><line x1="1" y1="7" x2="17" y2="7" stroke="#A4C639" stroke-width="4" stroke-linecap="round"/></svg>
-          <span style="font-size:11px;">Greenbelt / Sabuk Leuweung (Garis)</span>
-        </div>
-
-        <div style="display:flex; align-items:center; gap:10px;">
-          <svg width="18" height="14" viewBox="0 0 18 14"><rect x="1" y="1" width="16" height="12" rx="2" fill="#38A800" fill-opacity="0.2" stroke="#FFD700" stroke-width="2"/></svg>
-          <span style="font-size:11px;">Kawasan Hutan</span>
-        </div>
-        
-        <div style="display:flex; align-items:center; gap:10px;">
-          <svg width="18" height="14" viewBox="0 0 18 14"><rect x="1" y="1" width="16" height="12" rx="2" fill="#E69800" fill-opacity="0.5" stroke="#E69800" stroke-width="1.5"/></svg>
-          <span style="font-size:11px;">Lahan Kritis, Bambu, Bencana, CSR, RHL</span>
-        </div>
-        
-        <div style="display:flex; align-items:center; gap:10px;">
-          <svg width="18" height="14" viewBox="0 0 18 14"><rect x="1" y="1" width="16" height="12" rx="2" fill="#737300" fill-opacity="0.5" stroke="#737300" stroke-width="1.5"/></svg>
-          <span style="font-size:11px;">Luasan Agroforestry</span>
-        </div>
-
-        <div style="display:flex; align-items:center; gap:10px;">
-          <svg width="18" height="14" viewBox="0 0 18 14"><rect x="1" y="1" width="16" height="12" rx="2" fill="#228B22" fill-opacity="0.5" stroke="#228B22" stroke-width="1.5"/></svg>
-          <span style="font-size:11px;">Luasan Jalur Permanen, KH Lindung</span>
-        </div>
-
-        <div style="display:flex; align-items:center; gap:10px;">
-          <svg width="18" height="14" viewBox="0 0 18 14"><rect x="1" y="1" width="16" height="12" rx="2" fill="#CCCCCC" fill-opacity="0.5" stroke="#CCCCCC" stroke-width="1.5"/></svg>
-          <span style="font-size:11px;">Luasan Aset, APL</span>
-        </div>
-
-        <div style="display:flex; align-items:center; gap:10px;">
-          <svg width="18" height="14" viewBox="0 0 18 14"><rect x="1" y="1" width="16" height="12" rx="2" fill="#FFD966" fill-opacity="0.5" stroke="#FFD966" stroke-width="1.5"/></svg>
-          <span style="font-size:11px;">Luasan KH Produksi</span>
-        </div>
-
-        <div style="display:flex; align-items:center; gap:10px;">
-          <svg width="18" height="14" viewBox="0 0 18 14"><rect x="1" y="1" width="16" height="12" rx="2" fill="#FFBEBE" fill-opacity="0.5" stroke="#FFBEBE" stroke-width="1.5"/></svg>
-          <span style="font-size:11px;">Luasan Konversi</span>
-        </div>
-
-      </div>
-    </div>
-  </div>
-</aside>
-
-<!-- Detail Drawer Kanan -->
-<aside id="detail-drawer" class="glass-panel">
-  <div class="drawer-head">
-    <h3 id="drawer-title">Detail Informasi</h3>
-    <div>
-      <button class="drawer-btn" id="drawer-min-btn" onclick="toggleMinimizeDrawer()" style="background:transparent; border:none; color:#fff; cursor:pointer; font-weight:bold; margin-right:8px;">&minus;</button>
-      <button class="close-drawer" onclick="closeDrawer()">&times;</button>
-    </div>
-  </div>
-  <div class="drawer-body" id="drawer-content">
-    <!-- Konten diisi dinamis via JS -->
-  </div>
-</aside>
-
-<!-- Modals -->
-
-<!-- 2. Data Table Modal -->
-<div id="table-modal" class="modal-overlay" onclick="if(event.target==this) closeTableModal()">
-  <div class="modal-content">
-    <div class="modal-head">
-      <h2>Tabel Data Keseluruhan</h2>
-      <button class="close-modal" onclick="closeTableModal()">&times;</button>
-    </div>
-    <div class="modal-body" style="display: flex; flex-direction: column; height: 100%;">
-      <div class="table-toolbar">
-        <select id="table-layer-select" style="padding: 8px; border-radius: 6px;" onchange="renderTable()">
-          <option value="all">Semua Kategori</option>
-          <option value="pjl">Petugas Jaga Leuweung</option>
-          <option value="persemaian">Lokasi Persemaian Jaga Leuweung</option>
-          <option value="pegawai">Pegawai Dinas Kehutanan</option>
-          <option value="pegawaiBinaan">Data hutan binaan</option>
-          <option value="jumat">Lokasi Permanen Jum'at Menanam</option>
-        </select>
-        <input type="text" id="table-search" placeholder="Cari dalam tabel..." onkeyup="filterTable()">
-      </div>
-      <div class="data-table-wrapper">
-        <table class="data-table" id="data-table">
-          <thead><tr><th>Kategori</th><th>Nama / Lokasi</th><th>Unit Kerja</th><th>Kab/Kota</th><th>Aksi</th></tr></thead>
-          <tbody id="data-table-body"></tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- 3. Manage Sources Modal -->
-<div id="source-modal" class="modal-overlay" onclick="if(event.target==this) closeSourceModal()">
-  <div class="modal-content" style="max-width: 600px;">
-    <div class="modal-head">
-      <h2>Kelola Sumber Data (CSV / KMZ / URL)</h2>
-      <button class="close-modal" onclick="closeSourceModal()">&times;</button>
-    </div>
-    <div class="modal-body">
-      <p style="font-size: 12px; margin-bottom: 15px; color: #666;">Anda dapat menambahkan data baru dari URL CSV (Google Sheets) atau unggah file CSV / KMZ lokal ke kategori tertentu.</p>
-      <div id="source-list" class="source-list">
-        <!-- List diisi dinamis -->
-      </div>
-      <div class="add-source-form">
-        <select id="new-source-type">
-          <option value="pjl">Petugas Jaga Leuweung</option>
-          <option value="jum">Lokasi Permanen Jum'at Menanam</option>
-          <option value="peg">Pegawai Dinas Kehutanan</option>
-          <option value="per">Lokasi Persemaian Jaga Leuweung</option>
-        </select>
-        <input type="text" id="new-source-url" placeholder="URL CSV Publik..." style="flex:1;">
-        <button class="btn-apply" style="padding: 8px 15px; border-radius: 4px;" onclick="addSource()">Tambah URL</button>
-      </div>
-      <div class="add-source-form" style="margin-top:10px; padding-top:10px; border-top:1px dashed #ccc;">
-        <input type="file" id="local-file-import" accept=".csv,.kmz,.kml" style="font-size:12px; flex:1;">
-        <button class="btn-apply" style="padding: 8px 15px; border-radius: 4px; background:#1e88e5;" onclick="importLocalFile()">Impor File</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- 4. Export Modal -->
-<div id="export-modal" class="modal-overlay" onclick="if(event.target==this) closeExportModal()">
-  <div class="modal-content" style="max-width: 400px;">
-    <div class="modal-body" style="display:flex; flex-direction:column; gap:10px;">
-      <div style="font-size: 12px; margin-bottom: 5px; font-weight: 600;">Format File:</div>
-      <div style="display:flex; gap:15px; margin-bottom:10px;">
-        <label style="font-size:12px; cursor:pointer;"><input type="radio" name="export-fmt" value="csv" checked> CSV</label>
-        <label style="font-size:12px; cursor:pointer;"><input type="radio" name="export-fmt" value="xlsx"> XLSX (Excel)</label>
-      </div>
-      <button class="btn-icon" style="justify-content:center; padding:12px; background:#e8f5e9; border-color:#43a047;" onclick="exportCSV('pjl')">&#128196; Unduh Petugas Jaga Leuweung</button>
-      <button class="btn-icon" style="justify-content:center; padding:12px; background:#f3e5f5; border-color:#8e24aa;" onclick="exportCSV('jum')">&#128196; Download Lokasi Jum'at Menanam</button>
-      <button class="btn-icon" style="justify-content:center; padding:12px; background:#fff3e0; border-color:#fb8c00;" onclick="exportCSV('peg')">&#128196; Download Pegawai Dinas Kehutanan</button>
-      <button class="btn-icon" style="justify-content:center; padding:12px; background:#e0f2f1; border-color:#00897b; color:#00695c;" onclick="exportCSV('pegb')">&#128196; Download Data hutan binaan</button>
-      <button class="btn-icon" style="justify-content:center; padding:12px; background:#e3f2fd; border-color:#1e88e5;" onclick="exportCSV('per')">&#128196; Download Persemaian Jaga Leuweung</button>
-      <button class="btn-icon" style="justify-content:center; padding:12px; background:var(--primary); color:white; border-color:var(--primary);" onclick="exportAllFiltered()">&#128196; Unduh Semua Data Hasil Filter (CSV)</button>
-    </div>
-  </div>
-</div>
-
-<!-- 5. Analysis Modal -->
-<div id="analysis-modal" class="modal-overlay" onclick="if(event.target==this) closeAnalysisModal()">
-  <div class="modal-content" style="max-width: 700px;">
-    <div class="modal-head">
-      <h2>Hasil Analisis Area Polygon</h2>
-      <button class="close-modal" onclick="closeAnalysisModal()">&times;</button>
-    </div>
-    <div class="modal-body" style="display: flex; flex-direction: column; height: 100%;">
-      <div id="analysis-summary" style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;">
-        <!-- Filled via JS -->
-      </div>
-      <div class="data-table-wrapper" style="max-height: 400px;">
-        <table class="data-table" id="analysis-table">
-          <thead><tr><th>Kategori</th><th>Nama</th><th>Jabatan</th><th>Unit Kerja</th><th>Kab/Kota</th><th>Luas (Ha)</th></tr></thead>
-          <tbody id="analysis-table-body"></tbody>
-        </table>
-      </div>
-      <div style="margin-top: 15px; text-align: right;">
-        <button class="btn-apply" onclick="clearDrawnPolygons()" style="padding: 10px 20px; border-radius: 6px; cursor: pointer; border: none;">Hapus Polygon & Tutup</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- 8. Modal Form Polygon / Marker Pohon Kegiatan -->
-<div id="polygon-kegiatan-modal" class="modal-overlay" onclick="if(event.target===this) cancelPolygonForm()">
-  <div class="modal-content" style="max-width:680px; max-height:90vh;">
-    <div class="modal-head" style="background:linear-gradient(135deg,#2e7d32,#43a047); color:#fff;">
-      <h2 id="polygon-modal-title" style="color:#fff;">&#127807; Tambah Area / Titik Kegiatan</h2>
-      <button class="close-modal" style="color:#fff;" onclick="cancelPolygonForm()">&#215;</button>
-    </div>
-    <div class="modal-body" style="max-height:75vh; overflow-y:auto; padding:20px;">
-      <input type="hidden" id="pg-feature-id" value="">
-      <input type="hidden" id="pg-type" value="polygon">
-      <input type="hidden" id="pg-geojson" value="">
-
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
-        <div class="filter-group" style="grid-column:1/-1;">
-          <label style="font-weight:600; color:#2e7d32;">CDK Wilayah</label>
-          <select id="pg-cdk" style="width:100%; padding:8px; border-radius:6px; border:1px solid #ccc;">
-            <option value="">-- Pilih CDK --</option>
-            <option>CDK Wilayah 1</option>
-            <option>CDK Wilayah 2</option>
-            <option>CDK Wilayah 3</option>
-            <option>CDK Wilayah 4</option>
-            <option>CDK Wilayah 5</option>
-            <option>CDK Wilayah 6</option>
-            <option>CDK Wilayah 7</option>
-            <option>CDK Wilayah 8</option>
-            <option>CDK Wilayah 9</option>
-            <option>PPPH</option>
-            <option value="__custom__">Lainnya (Isi Manual)</option>
-          </select>
-          <input type="text" id="pg-cdk-custom" placeholder="Nama UPTD / Instansi / PT lain..." style="display:none; width:100%; padding:8px; border-radius:6px; border:1px solid #ccc; margin-top:6px;">
-        </div>
-        <div class="filter-group">
-          <label>Nama</label>
-          <input type="text" id="pg-nama" placeholder="Nama kegiatan / petugas" style="width:100%; padding:8px; border-radius:6px; border:1px solid #ccc;">
-        </div>
-        <div class="filter-group">
-          <label>Kabupaten</label>
-          <input type="text" id="pg-kabupaten" placeholder="Nama Kabupaten" style="width:100%; padding:8px; border-radius:6px; border:1px solid #ccc;">
-        </div>
-        <div class="filter-group">
-          <label>Kecamatan</label>
-          <input type="text" id="pg-kecamatan" placeholder="Nama Kecamatan" style="width:100%; padding:8px; border-radius:6px; border:1px solid #ccc;">
-        </div>
-        <div class="filter-group">
-          <label>Desa / Blok</label>
-          <input type="text" id="pg-desa" placeholder="Nama Desa atau Blok" style="width:100%; padding:8px; border-radius:6px; border:1px solid #ccc;">
-        </div>
-        <div class="filter-group" style="grid-column:1/-1;">
-          <label>Lokasi</label>
-          <input type="text" id="pg-lokasi" placeholder="Deskripsi lokasi" style="width:100%; padding:8px; border-radius:6px; border:1px solid #ccc;">
-        </div>
-        <div class="filter-group">
-          <label>Kegiatan</label>
-          <select id="pg-kegiatan" onchange="checkKegiatanCustom()" style="width:100%; padding:8px; border-radius:6px; border:1px solid #ccc;">
-            <option value="Penanaman">Penanaman</option>
-            <option value="Pemeliharaan">Pemeliharaan</option>
-            <option value="__custom__">Lainnya...</option>
-          </select>
-          <input type="text" id="pg-kegiatan-custom" placeholder="Tulis kegiatan lainnya..." style="display:none; width:100%; padding:8px; border-radius:6px; border:1px solid #ccc; margin-top:6px;">
-        </div>
-        <div class="filter-group">
-          <label>Luas (Ha)</label>
-          <input type="number" id="pg-luas" placeholder="0.00" step="0.01" style="width:100%; padding:8px; border-radius:6px; border:1px solid #ccc;">
-        </div>
-        <div class="filter-group" style="grid-column: 1 / -1;">
-          <label>Data Bibit (Bisa lebih dari 1 jenis)</label>
-          <div id="bibit-container">
-            <!-- Dynamic rows will be inserted here -->
-          </div>
-          <button type="button" class="btn-icon" onclick="addBibitRow()" style="background:#e8f5e9; color:#2e7d32; border:1px solid #43a047; margin-top:8px; padding:6px 12px; font-size:12px; border-radius:4px;">
-            + Tambah Jenis Bibit
-          </button>
-          <input type="hidden" id="pg-jenis-bibit">
-          <input type="hidden" id="pg-jumlah-bibit">
-        </div>
-        <div class="filter-group">
-          <label>&#128205; Latitude (otomatis dari marker/polygon)</label>
-          <input type="text" id="pg-lat" placeholder="-6.xxxxx" style="width:100%; padding:8px; border-radius:6px; border:1px solid #ddd; background:#f5f5f5;" readonly>
-        </div>
-        <div class="filter-group">
-          <label>&#128205; Longitude (otomatis dari marker/polygon)</label>
-          <input type="text" id="pg-lng" placeholder="107.xxxxx" style="width:100%; padding:8px; border-radius:6px; border:1px solid #ddd; background:#f5f5f5;" readonly>
-        </div>
-        <div class="filter-group" style="grid-column:1/-1;">
-          <label>Keterangan</label>
-          <textarea id="pg-keterangan" rows="3" placeholder="Keterangan tambahan..." style="width:100%; padding:8px; border-radius:6px; border:1px solid #ccc; resize:vertical;"></textarea>
-        </div>
-      </div>
-    </div>
-    <div style="padding:15px 20px; border-top:1px solid #eee; display:flex; justify-content:flex-end; gap:10px; background:#fafafa;">
-      <button class="btn-reset" onclick="cancelPolygonForm()">Batal</button>
-      <button class="btn-apply" onclick="savePolygonFeature()" style="background:linear-gradient(135deg,#2e7d32,#43a047); border-color:#2e7d32;">&#128190; Simpan Data</button>
-    </div>
-  </div>
-</div>
-
-
-<!-- Calendar Reminder Modal -->
-<div id="calendar-reminder-modal" class="modal-overlay" onclick="if(event.target==this) closeCalendarReminderModal()">
-  <div class="modal-content" style="max-width: 500px;">
-    <div class="modal-head">
-      <h2>Kalender Reminder Laporan</h2>
-      <button class="close-modal" onclick="closeCalendarReminderModal()">&times;</button>
-    </div>
-    <div class="modal-body">
-      <div class="filter-group">
-        <label>Pilih Jenis Kalender:</label>
-        <select id="calendar-type-select" onchange="renderCalendarReminder()" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; margin-bottom: 10px;">
-          <option value="weekly">Kalender Laporan Mingguan</option>
-          <option value="monthly">Kalender Laporan 3 Bulanan</option>
-        </select>
-      </div>
-      
-      
-      <div id="calendar-reminder-container" style="margin-top: 15px;"></div>
-    </div>
-  </div>
-</div>
-
-<!-- 7. Upload Photo Modal -->
-<div id="upload-modal" class="modal-overlay" onclick="if(event.target==this) closeUploadModal()">
-  <div class="modal-content" style="max-width: 600px;">
-    <div class="modal-head">
-      <h2>Upload Foto Dokumentasi</h2>
-      <button class="close-modal" onclick="closeUploadModal()">&times;</button>
-    </div>
-    <div class="modal-body">
-      <div id="upload-loc-info" style="font-size: 13px; font-weight: 600; margin-bottom: 15px; color: var(--primary);"></div>
-      
-      <div class="filter-group">
-        <label>Foto Linimasa:</label>
-        <div class="angle-segment">
-          <label><input type="radio" name="upload-angle" value="Sudut Foto #1" checked> Foto Utama</label>
-          <label><input type="radio" name="upload-angle" value="Sudut Foto #2"> Foto Tambahan</label>
-        </div>
-      </div>
-
-      <div id="upload-last-photo-preview" class="upload-last-photo-preview"></div>
-
-      <div class="filter-group">
-        <label>Pilih Tahun Linimasa:</label>
-        <div class="year-timeline" id="upload-year-pills" style="margin-top:5px; margin-bottom:15px; justify-content: flex-start;">
-          <!-- Diisi JS dari PHOTO_YEARS -->
-        </div>
-        <input type="hidden" id="upload-year" value="2026">
-        
-        <div style="margin-top:15px; margin-bottom:15px;">
-          <label style="display:block; font-size:12px; font-weight:600; margin-bottom:5px;">Tanggal Foto (Manual):</label>
-          <input type="datetime-local" id="upload-datetime" required style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px;">
-          <div style="font-size:10px; color:#666; margin-top:4px;">* Isi jika tanggal dari foto tidak valid atau kamera tidak menyimpan metadata tanggal.</div>
-        </div>
-      </div>
-
-      <div class="filter-group">
-        <label>Pilih File Foto (Bisa dari Kamera HP):</label>
-        <input type="file" id="upload-files" accept="image/*, .heic, .heif" onchange="typeof handleMonthlyFileChange === 'function' && handleMonthlyFileChange(this.files)" style="font-size:12px; flex:1; width: 100%; border: 1px solid #ddd; padding: 10px; border-radius: 6px; background: #fafafa;">
-        <div id="monthly-photo-meta-status" style="margin-top: 10px;"></div>
-        <div style="font-size:10px; color:#666; margin-top:4px; line-height:1.45;">Minimal upload: 1 foto. Maksimal upload: 1 foto tiap 1 sesi upload. Ukuran tiap file: &le; 10 MB. Hanya menerima seluruh format gambar termasuk HEIC/HEIF dari Apple. File rusak atau tidak dapat dibaca akan ditolak.</div>
-      </div>
-
-      <div id="upload-monitoring-fields" class="monitoring-form" style="display:none;">
-        <div class="monitoring-title">Hasil Kegiatan dan Monitoring Lapangan</div>
-        <div class="monitoring-grid">
-          <fieldset class="monitoring-field">
-            <legend>Keragaman Jenis Tanaman</legend>
-            <label><input type="radio" name="mon-tutupan" value="Homogen"> Homogen</label>
-            <label><input type="radio" name="mon-tutupan" value="Heterogen"> Heterogen</label>
-          </fieldset>
-          <fieldset class="monitoring-field">
-            <legend>Jenis Tanaman/Pohon</legend>
-            <label><input type="checkbox" name="mon-jenis" value="Kayu-kayuan"> Kayu-kayuan</label>
-            <label><input type="checkbox" name="mon-jenis" value="MPTS"> MPTS</label>
-            <label><input type="checkbox" name="mon-jenis" value="Bambu"> Bambu</label>
-            <label><input type="checkbox" name="mon-jenis" value="Lainnya"> Lainnya</label>
-          </fieldset>
-          <fieldset class="monitoring-field">
-            <legend>Kerapatan Tanaman</legend>
-            <label><input type="checkbox" name="mon-kerapatan" value="Sangat rapat"> Sangat rapat</label>
-            <label><input type="checkbox" name="mon-kerapatan" value="Rapat"> Rapat</label>
-            <label><input type="checkbox" name="mon-kerapatan" value="Sedang"> Sedang</label>
-            <label><input type="checkbox" name="mon-kerapatan" value="Terbuka"> Terbuka</label>
-          </fieldset>
-          <fieldset class="monitoring-field">
-            <legend>Kelas Lereng</legend>
-            <label><input type="radio" name="mon-lereng" value="Datar (0 - 8%)"> Datar (0 - 8%)</label>
-            <label><input type="radio" name="mon-lereng" value="Landai (>8 - 15%)"> Landai (&gt;8 - 15%)</label>
-            <label><input type="radio" name="mon-lereng" value="Agak Curam (>15 - 25%)"> Agak Curam (&gt;15 - 25%)</label>
-            <label><input type="radio" name="mon-lereng" value="Curam (>25 - 40%)"> Curam (&gt;25 - 40%)</label>
-            <label><input type="radio" name="mon-lereng" value="Sangat Curam (>40%)"> Sangat Curam (&gt;40%)</label>
-          </fieldset>
-          <fieldset class="monitoring-field" style="grid-column: 1 / -1; display: flex; flex-direction: column; gap: 10px;">
-  <legend style="font-weight: bold; margin-bottom: 5px;">Kelas Diameter Pohon &amp; Karbon (Otomatis)</legend>
-  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
-    <label style="display:flex; flex-direction:column; font-size:12px; font-weight:bold;">&lt; 10 cm (h)<input type="number" id="mon-pohon-h" placeholder="Isi jumlah pohon ditanam" min="0" oninput="hitungKarbon()" style="width:100%; box-sizing:border-box; padding:10px; margin-top:6px; border:1px solid #aaa; border-radius:4px; font-size:14px;"></label>
-    <label style="display:flex; flex-direction:column; font-size:12px; font-weight:bold;">11-20 cm (i)<input type="number" id="mon-pohon-i" placeholder="Isi jumlah pohon ditanam" min="0" oninput="hitungKarbon()" style="width:100%; box-sizing:border-box; padding:10px; margin-top:6px; border:1px solid #aaa; border-radius:4px; font-size:14px;"></label>
-    <label style="display:flex; flex-direction:column; font-size:12px; font-weight:bold;">21-30 cm (j)<input type="number" id="mon-pohon-j" placeholder="Isi jumlah pohon ditanam" min="0" oninput="hitungKarbon()" style="width:100%; box-sizing:border-box; padding:10px; margin-top:6px; border:1px solid #aaa; border-radius:4px; font-size:14px;"></label>
-    <label style="display:flex; flex-direction:column; font-size:12px; font-weight:bold;">31-40 cm (k)<input type="number" id="mon-pohon-k" placeholder="Isi jumlah pohon ditanam" min="0" oninput="hitungKarbon()" style="width:100%; box-sizing:border-box; padding:10px; margin-top:6px; border:1px solid #aaa; border-radius:4px; font-size:14px;"></label>
-    <label style="display:flex; flex-direction:column; font-size:12px; font-weight:bold;">41-50 cm (l)<input type="number" id="mon-pohon-l" placeholder="Isi jumlah pohon ditanam" min="0" oninput="hitungKarbon()" style="width:100%; box-sizing:border-box; padding:10px; margin-top:6px; border:1px solid #aaa; border-radius:4px; font-size:14px;"></label>
-    <label style="display:flex; flex-direction:column; font-size:12px; font-weight:bold;">&gt; 50 cm (m)<input type="number" id="mon-pohon-m" placeholder="Isi jumlah pohon ditanam" min="0" oninput="hitungKarbon()" style="width:100%; box-sizing:border-box; padding:10px; margin-top:6px; border:1px solid #aaa; border-radius:4px; font-size:14px;"></label>
-  </div>
-  <div style="background: #e8f5e9; padding: 16px; border-radius: 6px; display: flex; align-items: center; justify-content: space-between; border: 1px solid #c8e6c9; margin-top: 5px;">
-    <span style="font-weight: bold; font-size: 14px; color: #2e7d32; flex:1;">Total Estimasi Simpanan Karbon (CO₂e)</span>
-    <input type="text" id="mon-total-karbon" readonly style="background: transparent; border: none; font-weight: bold; color: #1b5e20; font-size: 18px; text-align: right; width: 120px; padding:0;" value="0">
-  </div>
-</fieldset>
-          <fieldset class="monitoring-field">
-            <legend>Kondisi Hutan</legend>
-            <label><input type="radio" name="mon-pengelolaan" value="Baik"> Baik</label>
-            <label><input type="radio" name="mon-pengelolaan" value="Cukup"> Cukup</label>
-            <label><input type="radio" name="mon-pengelolaan" value="Kurang"> Kurang</label>
-          </fieldset>
-          <fieldset class="monitoring-field">
-            <legend>Sumber Air</legend>
-            <label><input type="checkbox" name="mon-ekosistem" value="Sungai"> Sungai</label>
-            <label><input type="checkbox" name="mon-ekosistem" value="Danau"> Danau</label>
-            <label><input type="checkbox" name="mon-ekosistem" value="Irigasi"> Irigasi</label>
-            <label><input type="checkbox" name="mon-ekosistem" value="Laut"> Laut</label>
-            <label><input type="checkbox" name="mon-ekosistem" value="Tadah Hujan"> Tadah Hujan</label>
-          </fieldset>
-          <fieldset class="monitoring-field">
-            <legend>Usulan Kegiatan Lanjutan</legend>
-            <label><input type="checkbox" name="mon-usulan" value="Penyulaman"> Penyulaman</label>
-            <label><input type="checkbox" name="mon-usulan" value="Pemupukan"> Pemupukan</label>
-            <label><input type="checkbox" name="mon-usulan" value="Penyiraman"> Penyiraman</label>
-            <label><input type="checkbox" name="mon-usulan" value="Pembersihan Gulma"> Pembersihan Gulma</label>
-            <label><input type="checkbox" name="mon-usulan" value="Penambahan Sumber Air"> Penambahan Sumber Air</label>
-            <label><input type="checkbox" name="mon-usulan" value="Sipil Teknis"> Sipil Teknis</label>
-          </fieldset>
-        </div>
-      </div>
-
-      <div style="margin-top: 20px; display: flex; justify-content: flex-end; gap: 10px;">
-        <button class="btn-reset" onclick="closeUploadModal()">Batal</button>
-        <button class="btn-apply" onclick="saveLocalPhoto()">Simpan & Upload Foto</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- 7b. Weekly Report Modal -->
-<div id="weekly-report-modal" class="modal-overlay" onclick="if(event.target==this) closeWeeklyReportModal()">
-  <div class="modal-content weekly-report-modal">
-    <div class="modal-head">
-      <h2>FORM LAPORAN MINGGUAN HUTAN BINAAN</h2>
-      <button class="close-modal" onclick="closeWeeklyReportModal()">&times;</button>
-    </div>
-    <form id="weekly-report-form" class="modal-body" onsubmit="submitWeeklyReport(event)">
-      <input type="hidden" id="weekly-report-id">
-      <input type="hidden" id="weekly-report-mode" value="create">
-      <div id="weekly-report-loc-info" class="weekly-loc-info"></div>
-
-      <div class="weekly-section">
-        <h3>A. Informasi Dasar</h3>
-        <div class="weekly-grid">
-          <label>Pelaksana<input type="text" id="wr-pelaksana" required></label>
-          <label>Lokasi Pelaksanaan<input type="text" id="wr-lokasi" required></label>
-          <label>Waktu Pelaksanaan<input type="datetime-local" id="wr-waktu" required></label>
-          <label>Kondisi Tutupan Lahan
-            <select id="wr-tutupan" required>
-              <option value="">Pilih kondisi</option>
-              <option>Baik</option>
-              <option>Perlu Perhatian</option>
-              <option>Gangguan</option>
-            </select>
-          </label>
-        </div>
-      </div>
-
-      <div class="weekly-section">
-        <h3>B. Kegiatan Minggu Ini</h3>
-        <div class="weekly-subtitle">Kegiatan Vegetatif</div>
-        <div class="weekly-checks">
-          <label><input type="checkbox" name="wr-vegetatif" value="Penanaman"> Penanaman</label>
-          <label><input type="checkbox" name="wr-vegetatif" value="Pemeliharaan"> Pemeliharaan</label>
-          <label><input type="checkbox" name="wr-vegetatif" value="Pendataan"> Pendataan</label>
-          <label><input type="checkbox" name="wr-vegetatif" value="Tidak ada kegiatan"> Tidak ada kegiatan</label>
-        </div>
-        <div class="weekly-subtitle">Kondisi Tanaman</div>
-        <div class="weekly-checks">
-          <label><input type="checkbox" name="wr-kondisi-tanaman" value="Sehat"> Sehat</label>
-          <label><input type="checkbox" name="wr-kondisi-tanaman" value="Merana"> Merana</label>
-          <label><input type="checkbox" name="wr-kondisi-tanaman" value="Mati"> Mati</label>
-        </div>
-        <div class="weekly-subtitle">Kegiatan Monitoring</div>
-        <div class="weekly-checks">
-          <label><input type="checkbox" name="wr-monitoring" value="Koordinasi"> Koordinasi</label>
-          <label><input type="checkbox" name="wr-monitoring" value="Pembinaan"> Pembinaan</label>
-          <label><input type="checkbox" name="wr-monitoring" value="Perlindungan"> Perlindungan</label>
-          <label><input type="checkbox" name="wr-monitoring" value="Tidak ada kegiatan"> Tidak ada kegiatan</label>
-        </div>
-      </div>
-
-      <div class="weekly-section">
-        <h3>C. Progress Kesiapan Bibit</h3>
-        <div class="weekly-grid">
-          <label>Ketersediaan Jenis dan Jumlah Bibit<textarea id="wr-bibit" rows="3" placeholder="Contoh: Mahoni (100), Alpukat 50"></textarea></label>
-          <label>Total Bibit Tersedia<input type="number" id="wr-total-bibit" readonly></label>
-          <label>Tinggi Tanaman Tersedia (cm)<input type="text" id="wr-tinggi-tanaman" placeholder="Contoh: 30-50 cm"></label>
-          <label>Sumber Bibit Tersedia<input type="text" id="wr-sumber-bibit" placeholder="Contoh: Persemaian CDK / swadaya"></label>
-          <label>Apakah Kebutuhan Bibit Sudah Mencukupi?
-            <select id="wr-kebutuhan-bibit" required>
-              <option value="">Pilih</option>
-              <option>Ya</option>
-              <option>Tidak</option>
-            </select>
-          </label>
-        </div>
-        <div id="wr-kebutuhan-kurang-fields" class="weekly-conditional">
-          <div class="weekly-subtitle">Rincian Tambahan Bibit yang Masih Dibutuhkan</div>
-          <div class="weekly-grid">
-            <label>Jenis dan Jumlah Bibit yang Dibutuhkan<textarea id="wr-bibit-kurang" rows="3" placeholder="Contoh: Durian (75), Kopi 120"></textarea></label>
-            <label>Total Kekurangan Bibit<input type="number" id="wr-total-bibit-kurang" readonly></label>
-            <label>Tinggi Tanaman yang Dibutuhkan (cm)<input type="text" id="wr-tinggi-tanaman-kurang" placeholder="Contoh: 25-40 cm"></label>
-            <label>Sumber Bibit yang Dibutuhkan<input type="text" id="wr-sumber-bibit-kurang" placeholder="Contoh: kebutuhan bantuan / calon sumber"></label>
-          </div>
-        </div>
-        <label class="weekly-full">Uraian Hasil Kegiatan<textarea id="wr-uraian" rows="4" required></textarea></label>
-      </div>
-
-      <div class="weekly-section">
-        <h3>D. Gangguan Ekosistem</h3>
-        <div class="weekly-grid">
-          <label>Ada Gangguan
-            <select id="wr-ada-gangguan" required>
-              <option value="">Pilih</option>
-              <option>Ya</option>
-              <option>Tidak</option>
-            </select>
-          </label>
-        </div>
-        <div class="weekly-checks" id="wr-gangguan-fields">
-          <label><input type="checkbox" name="wr-jenis-gangguan" value="Perambahan"> Perambahan</label>
-          <label><input type="checkbox" name="wr-jenis-gangguan" value="Penebangan Liar"> Penebangan Liar</label>
-          <label><input type="checkbox" name="wr-jenis-gangguan" value="Kebakaran"> Kebakaran</label>
-          <label><input type="checkbox" name="wr-jenis-gangguan" value="Perburuan"> Perburuan</label>
-          <label><input type="checkbox" name="wr-jenis-gangguan" value="Pencemaran"> Pencemaran</label>
-          <label><input type="checkbox" name="wr-jenis-gangguan" value="Lainnya"> Lainnya</label>
-        </div>
-        <label class="weekly-full" id="wr-tindak-lanjut-wrap">Tindak Lanjut<textarea id="wr-tindak-lanjut" rows="3"></textarea></label>
-      </div>
-
-      <div class="weekly-section">
-        <h3>E. Lampiran Efiden Foto Kegiatan</h3>
-        <div id="wr-existing-photo" class="weekly-existing-photo"></div>
-        <input type="file" id="wr-foto" accept="image/*" capture="environment">
-        <div id="wr-photo-meta-status" class="weekly-photo-meta-status"></div>
-        <div class="weekly-help">Wajib ambil foto langsung dari kamera HP. Sistem akan meminta izin lokasi dan memprioritaskan GPS perangkat untuk latitude, longitude, dan tanggal waktu foto; metadata kamera/EXIF tetap dibaca sebagai pembanding. Maksimal 1 foto, ukuran file &le; 10 MB.</div>
-      </div>
-
-      <div class="weekly-actions">
-        <span id="weekly-draft-status" class="weekly-draft-status"></span>
-        <button type="button" class="btn-reset" onclick="syncPendingWeeklyReports()">Kirim Draft Tersimpan</button>
-        <button type="button" class="btn-reset" onclick="closeWeeklyReportModal()">Batal</button>
-        <button id="weekly-report-submit" class="btn-apply" type="submit">Simpan Laporan</button>
-      </div>
-    </form>
-  </div>
-</div>
-
-<!-- 7c. Report Monitoring Modal -->
-<div id="report-monitor-modal" class="modal-overlay" onclick="if(event.target==this) closeReportMonitor()">
-  <div class="modal-content report-monitor-modal">
-    <div class="modal-head">
-      <h2 id="report-monitor-title">Monitoring Laporan</h2>
-      <button class="close-modal" onclick="closeReportMonitor()">&times;</button>
-    </div>
-    <div class="modal-body">
-      <div class="report-monitor-toolbar">
-        <input type="search" id="report-search" placeholder="Cari kegiatan, pelaksana, pembina, lokasi, unit..." oninput="onReportFilterChanged()">
-        <select id="report-category-filter" multiple data-placeholder="Semua Kegiatan" onchange="onReportFilterChanged()">
-          <option value="pjl">Petugas Jaga Leuweung</option>
-          <option value="persemaian">Lokasi Persemaian</option>
-          <option value="pegawai">Pegawai Dinas Kehutanan</option>
-          <option value="pegawaibinaanformatsistem">Data Hutan Binaan</option>
-          <option value="juna">Lokasi Juna Permanen</option>
-          <option value="polygon">Titik Kegiatan</option>
-        </select>
-        <select id="report-status-filter" multiple data-placeholder="Semua Status Input" onchange="onReportFilterChanged()">
-          <option value="reported">Sudah Input</option>
-          <option value="missing">Belum Input</option>
-        </select>
-        <select id="report-unit-filter" multiple data-placeholder="Semua Unit" onchange="onReportFilterChanged()"></select>
-        <select id="report-person-filter" multiple data-placeholder="Semua Pembina/Pegawai" onchange="onReportFilterChanged()"></select>
-        <select id="report-kab-filter" multiple data-placeholder="Semua Kabupaten" onchange="onReportFilterChanged()"></select>
-        <select id="report-kegiatan-filter" multiple data-placeholder="Semua Kegiatan" onchange="onReportFilterChanged()"></select>
-        <select id="report-year-filter" multiple data-placeholder="Semua Tahun" onchange="onReportFilterChanged()"></select>
-        <div class="report-date-range-wrap" id="wrap-report-date" style="display:flex;align-items:center;gap:5px;">
-          <span style="font-size:11px;font-weight:600;color:#555;">Rentang Tgl:</span>
-          <input type="date" id="report-start-filter" onchange="onReportFilterChanged()" title="Tanggal mulai">
-          <span style="font-size:11px;font-weight:600;color:#555;">s.d</span>
-          <input type="date" id="report-end-filter" onchange="onReportFilterChanged()" title="Tanggal sampai">
-        </div>
-        <div class="report-week-range-wrap" id="wrap-report-week" style="display:flex;align-items:center;gap:5px;">
-          <span style="font-size:11px;font-weight:600;color:#555;">Rentang Mg:</span>
-          <input type="week" id="report-week-start-filter" class="report-week-input" onchange="normalizeReportWeekInput(this)" title="Minggu mulai">
-          <span style="font-size:11px;font-weight:600;color:#555;">s.d</span>
-          <input type="week" id="report-week-end-filter" class="report-week-input" onchange="normalizeReportWeekInput(this)" title="Minggu sampai">
-        </div>
-        <button type="button" id="report-weekly-export-btn" class="btn-reset report-export-btn" onclick="exportWeeklyBinaanReports()">Export Mingguan XLSX</button>
-        <button type="button" id="report-monthly-export-btn" class="btn-reset report-export-btn" onclick="exportMonthlyBinaanReports()">Export 3 Bulanan XLSX</button>
-        
-      </div>
-      <div class="report-kpi-row" id="report-kpi-row"></div>
-      <div class="report-table-wrap">
-        <table class="report-table">
-          <thead id="report-monitor-head"></thead>
-          <tbody id="report-monitor-body"></tbody>
-        </table>
-      </div>
-      <div id="report-pagination" class="report-pagination"></div>
-    </div>
-  </div>
-</div>
-
-<div id="weekly-detail-modal" class="modal-overlay" onclick="if(event.target==this) closeWeeklyDetailModal()">
-  <div class="modal-content weekly-detail-modal">
-    <div class="modal-head">
-      <h2>Detail Laporan Mingguan</h2>
-      <button class="close-modal" onclick="closeWeeklyDetailModal()">&times;</button>
-    </div>
-    <div class="modal-body" id="weekly-detail-body"></div>
-  </div>
-</div>
-
-<!-- Toast Container -->
-<div id="toast-container"></div>
-
-<!-- 6. Photo Lightbox Modal -->
-<div id="photo-lightbox" class="lightbox-overlay" onclick="handleLightboxBackdropClick(event)">
-  <div class="lightbox-container">
-    <div class="lightbox-header">
-      <div class="lightbox-meta">
-        <span class="lightbox-badge" id="lightbox-year-badge">2026</span>
-        <span class="lightbox-counter" id="lightbox-counter">1 / 1</span>
-        <span class="lightbox-timestamp" id="lightbox-timestamp"></span>
-      </div>
-      <div>
-        <button class="lightbox-close" onclick="toggleLightboxFullscreen()" style="margin-right:8px;" title="Layar Penuh">&#9974;</button>
-        <button class="lightbox-close" onclick="closePhotoLightbox()" title="Tutup">&#10005;</button>
-      </div>
-    </div>
-    <div class="lightbox-img-wrap">
-      <div class="lightbox-angle-filter" id="lightbox-angle-filter">
-        <button type="button" class="active" data-angle="all" onclick="setGalleryAngleFilter('all')">Semua</button>
-        <button type="button" data-angle="Sudut Foto #1" onclick="setGalleryAngleFilter('Sudut Foto #1')">Foto Utama</button>
-        <button type="button" data-angle="Sudut Foto #2" onclick="setGalleryAngleFilter('Sudut Foto #2')">Foto Tambahan</button>
-      </div>
-      <button class="lightbox-nav lb-prev" onclick="lightboxNav(-1)">&#8249;</button>
-      <div class="lightbox-img-container">
-        <img id="lightbox-img" src="" alt="Foto Lokasi" />
-        <div class="lightbox-loading" id="lightbox-loading">
-          <div class="lb-spinner"></div>
-          <span>Memuat foto...</span>
-        </div>
-      </div>
-      <button class="lightbox-nav lb-next" onclick="lightboxNav(1)">&#8250;</button>
-    </div>
-    <div class="lightbox-dots" id="lightbox-dots"></div>
-    <div class="lightbox-loc-info" id="lightbox-loc-info"></div>
-    <div id="lightbox-monitoring" style="display:none; color:white; padding: 10px 15px; background: rgba(0,0,0,0.7); margin-top:10px; border-radius:8px; font-size:12px; width: 100%; max-width: 800px; overflow-y: auto; max-height: 25vh;">
-      <h4 style="margin:0 0 5px 0; color:#43a047;">Hasil Monitoring Lapangan</h4>
-      <div id="lightbox-monitoring-content" style="display:grid; grid-template-columns: repeat(4, 1fr); gap: 8px;"></div>
-    </div>
-  </div>
-</div>
-
-<!-- Credential Modal -->
-<div id="credential-modal" class="modal-overlay" style="display: none; z-index: 10001;">
-  <div class="modal-content" style="max-width: 400px; padding: 24px;">
-    <div class="modal-header">
-      <h3>Ganti Password</h3>
-      <button type="button" class="btn-close" onclick="closeCredentialModal()">&times;</button>
-    </div>
-    <form id="credential-form" class="auth-form compact" onsubmit="submitCredentialChange(event)">
-      <input id="old-username" type="hidden" autocomplete="username">
-      
-      <label for="old-password">Password lama</label>
-      <div class="auth-password-field" style="display: flex; gap: 8px; margin-bottom: 12px;">
-        <input id="old-password" type="password" autocomplete="current-password" placeholder="Password lama" required style="flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 6px;">
-        <button type="button" onclick="togglePasswordVisibility('old-password', this)" style="padding: 0 10px; border-radius: 6px; border: 1px solid #ccc; background: #eee;">Show</button>
-      </div>
-      
-      <label for="new-password">Password baru</label>
-      <div class="auth-password-field" style="display: flex; gap: 8px; margin-bottom: 12px;">
-        <input id="new-password" type="password" autocomplete="new-password" placeholder="Password baru" required style="flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 6px;">
-        <button type="button" onclick="togglePasswordVisibility('new-password', this)" style="padding: 0 10px; border-radius: 6px; border: 1px solid #ccc; background: #eee;">Show</button>
-      </div>
-
-      <label for="confirm-new-password">Konfirmasi password baru</label>
-      <input id="confirm-new-password" type="password" autocomplete="new-password" placeholder="Ulangi password baru" required style="width: 100%; box-sizing: border-box; padding: 10px; margin-bottom: 16px; border: 1px solid #ccc; border-radius: 6px;">
-      
-      <label class="auth-check" style="display: flex; gap: 8px; align-items: center; margin-bottom: 20px; font-size: 13px;">
-        <input id="change-captcha" type="checkbox" required>
-        <span>Saya mengonfirmasi perubahan kredensial akun ini.</span>
-      </label>
-      <button id="change-submit" class="btn-primary" type="submit" style="width: 100%;">Simpan Perubahan</button>
-    </form>
-  </div>
-</div>
-
-<div id="forgot-password-modal" class="modal-overlay">
-  <div class="modal-content" style="max-width: 380px; padding: 24px;">
-    <div class="modal-header">
-      <h3>Lupa Password</h3>
-      <button type="button" class="btn-close" onclick="closeForgotPasswordModal()">&times;</button>
-    </div>
-    <div class="forgot-password-box">
-      <div class="forgot-password-label">Password terakhir</div>
-      <div class="forgot-password-row">
-        <input id="forgot-password-value" type="password" readonly value="*****">
-        <button id="forgot-password-eye" type="button" onclick="toggleForgotPasswordVisibility()" title="Tampilkan/Sembunyikan password">&#128065;</button>
-      </div>
-      <div id="forgot-password-status" class="forgot-password-status"></div>
-    </div>
-  </div>
-</div>
-
-<script src="app-core.js?v=20260909-login-priority-v71" defer></script>
-<script src="app-features.js?v=20260911-metadata-triwulan-v73" defer></script>
-<script src="js/ai.js" defer></script>
-
-<!-- ===== MODAL UPLOAD SPASIAL ===== -->
-<div id="spatial-modal" class="spatial-modal-overlay" style="display:none;">
-  <div class="spatial-modal-box">
-    <div class="spatial-modal-header">
-      <span>&#128205; Upload Polygon Spasial</span>
-      <button class="spatial-modal-close" onclick="closeSpatialModal()">&#215;</button>
-    </div>
-    <div class="spatial-modal-body">
-      <!-- UPLOAD AREA -->
-      <div class="spatial-dropzone" id="spatial-dropzone"
-           ondragover="event.preventDefault(); this.classList.add('active')"
-           ondragleave="this.classList.remove('active')"
-           ondrop="handleSpatialDrop(event)">
-        <div class="spatial-dropzone-icon">&#128228;</div>
-        <div class="spatial-dropzone-text">Seret & Lepas file di sini</div>
-        <div class="spatial-dropzone-sub">Mendukung: .shp saja, paket shapefile (sebagian/lengkap), .geojson, .json, .zip, folder, .kml, .kmz â€” atau pilih multi-file sekaligus</div>
-        <div class="spatial-upload-btns">
-          <label class="btn-sp-upload" for="sp-file-input">&#128196; Pilih File / Multi-File</label>
-          <input type="file" id="sp-file-input" style="display:none" multiple
-                 accept=".shp,.shx,.dbf,.prj,.cpg,.sbn,.sbx,.qix,.zip,.rar,.kmz,.kml,.geojson,.json"
-                 onchange="handleSpatialFiles(this.files)">
-          <label class="btn-sp-upload btn-sp-folder" for="sp-folder-input">&#128193; Upload Folder</label>
-          <input type="file" id="sp-folder-input" style="display:none" multiple webkitdirectory
-                 onchange="handleSpatialFiles(this.files)">
-        </div>
-      </div>
-
-      <!-- STATUS PROGRESS -->
-      <div id="spatial-progress-wrap" style="display:none; margin:12px 0;">
-        <div class="sp-progress-bar-bg"><div class="sp-progress-bar" id="sp-progress-bar"></div></div>
-        <div id="sp-progress-text" class="sp-progress-text"></div>
-      </div>
-
-      <!-- DAFTAR FILE TERUPLOAD -->
-      <div class="sp-file-list-header">
-        <span>&#128266; File Polygon Tersimpan</span>
-        <span id="sp-file-count" class="sp-file-count"></span>
-      </div>
-      <div class="sp-file-search-wrap">
-        <span class="sp-file-search-icon">&#128269;</span>
-        <input type="search" id="sp-file-search" class="sp-file-search-input"
-               placeholder="Cari nama file polygon..." autocomplete="off"
-               oninput="spatialFileListSearch(this.value)">
-      </div>
-      
-      <div class="sp-file-tabs">
-        <button class="sp-tab active" id="sptab-jl" onclick="switchSpatialTab('Jaga Leuweung')">Jaga Leuweung</button>
-        <button class="sp-tab" id="sptab-kh" onclick="switchSpatialTab('Kawasan Hutan')">Kawasan Hutan</button>
-        <button class="sp-tab" id="sptab-lk" onclick="switchSpatialTab('Lahan Kritis')">Lahan Kritis</button>
-        <button class="sp-tab" id="sptab-af" onclick="switchSpatialTab('Luasan Agroforestry')">Luasan Agroforestry</button>
-        <button class="sp-tab" id="sptab-bm" onclick="switchSpatialTab('Luasan Bambu')">Luasan Bambu</button>
-        <button class="sp-tab" id="sptab-bn" onclick="switchSpatialTab('Luasan Bencana (BTT)')">Luasan Bencana (BTT)</button>
-        <button class="sp-tab" id="sptab-cr" onclick="switchSpatialTab('Luasan CSR')">Luasan CSR</button>
-        <button class="sp-tab" id="sptab-rhl" onclick="switchSpatialTab('Luasan RHL')">Luasan RHL</button>
-        <button class="sp-tab" id="sptab-jp" onclick="switchSpatialTab('Luasan Jalur Permanen')">Luasan Jalur Permanen</button>
-        <button class="sp-tab" id="sptab-as" onclick="switchSpatialTab('Luasan Aset')">Luasan Aset</button>
-        <button class="sp-tab" id="sptab-kp" onclick="switchSpatialTab('Luasan KH Produksi')">Luasan KH Produksi</button>
-        <button class="sp-tab" id="sptab-kl" onclick="switchSpatialTab('Luasan KH Lindung')">Luasan KH Lindung</button>
-        <button class="sp-tab" id="sptab-kv" onclick="switchSpatialTab('Luasan Konversi')">Luasan Konversi</button>
-        <button class="sp-tab" id="sptab-ap" onclick="switchSpatialTab('Luasan APL')">Luasan APL</button>
-      </div>
-
-      <div id="spatial-file-list" class="sp-file-list">
-        <div class="sp-file-list-empty">Memuat daftar file...</div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<div id="pimpinan-dashboard-overlay" class="pimpinan-dashboard-overlay" aria-hidden="true">
-  <section class="pimpinan-dashboard-shell" role="dialog" aria-modal="true" aria-label="Dashboard Pimpinan">
-    <iframe id="pimpinan-dashboard-frame" title="Dashboard Pimpinan" src="about:blank"></iframe>
-  </section>
-</div>
-
-<script>
-  function hitungKarbon() {
-    var h = parseFloat(document.getElementById('mon-pohon-h').value) || 0;
-    var i = parseFloat(document.getElementById('mon-pohon-i').value) || 0;
-    var j = parseFloat(document.getElementById('mon-pohon-j').value) || 0;
-    var k = parseFloat(document.getElementById('mon-pohon-k').value) || 0;
-    var l = parseFloat(document.getElementById('mon-pohon-l').value) || 0;
-    var m = parseFloat(document.getElementById('mon-pohon-m').value) || 0;
-    var total = (h * 0.055) + (i * 0.165) + (j * 0.43) + (k * 0.91) + (l * 1.64) + (m * 2.07);
-    var el = document.getElementById('mon-total-karbon');
-    if (el) el.value = total.toFixed(3).replace('.', ',');
-  }
-</script>
+    <footer>
+      © 2026 Dinas Kehutanan Provinsi Jawa Barat
+    </footer>
+  </main>
 </body>
 </html>
-
-
-
-
-
-
-
